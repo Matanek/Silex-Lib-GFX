@@ -1,8 +1,11 @@
+use Interop.C
+use Interop.Boundary
+
 public static class Session {
     private static var leases:int = 0
 
     public static func open() {
-        if Session.leases == 0 && !Platform.initialize() {
+        if Session.leases == 0 && !initialize() {
             panic("GFX could not initialize the platform runtime")
         }
         Session.leases++
@@ -12,7 +15,26 @@ public static class Session {
         assert(Session.leases > 0)
         Session.leases--
         if Session.leases == 0 {
-            Platform.shutdown()
+            shutdown()
         }
     }
 }
+
+func initialize() bool {
+    let video_and_events:uint32 = 0x0000_4020
+    return sdl_init(video_and_events) != 0
+}
+
+func shutdown() {
+    sdl_quit()
+}
+
+let sdl_init = C.function<func(uint32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_Init"
+)
+
+let sdl_quit = C.function<func() void>(
+    library:Boundary.SDL3,
+    name:"SDL_Quit"
+)

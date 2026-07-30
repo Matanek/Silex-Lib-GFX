@@ -1,10 +1,10 @@
 use Interop.C
-use Interop.MacOS
+use Interop.Boundary
 use GFX.Window
 use GFX.Input
 
 let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
-    library:MacOS.SDL3,
+    library:Boundary.SDL3,
     name:"SDL_PushEvent"
 )
 

@@ -1,3 +1,5 @@
+use Interop.C
+use Interop.Boundary
 use GFX.Bootstrap.Plugin
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Controller
@@ -61,7 +63,7 @@ func start_window(application:Application) {
 }
 
 func pump_window_events() {
-    Platform.pump_events()
+    sdl_pump_events()
 }
 
 func handle_close_request(
@@ -91,3 +93,8 @@ func stop_window(application:Application) {
     var removed = resources.remove<Window>()
     assert(removed != null)
 }
+
+let sdl_pump_events = C.function<func() void>(
+    library:Boundary.SDL3,
+    name:"SDL_PumpEvents"
+)

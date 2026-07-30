@@ -1,3 +1,5 @@
+use Interop.C
+use Interop.Boundary
 use GFX.Session
 use GFX.Window
 
@@ -127,7 +129,7 @@ public class State {
         return has_mouse_button(self.released_mouse_buttons, button)
     }
 
-    internal func handle(raw:Platform.RawEvent) {
+    internal func handle(raw:RawEvent) {
         if raw.kind == 1 {
             self.quit_requested = true
             self.append(Event.quit)
@@ -241,7 +243,7 @@ public class Input {
     public func update() {
         self.current_state.begin_frame()
         while true {
-            let pending = Platform.poll()
+            let pending = poll_event()
             if let raw = pending {
                 self.current_state.handle(raw)
             } else {
@@ -429,4 +431,53 @@ func key_index(key:Key) int {
         f1 => 47; f2 => 48; f3 => 49; f4 => 50; f5 => 51; f6 => 52; f7 => 53; f8 => 54; f9 => 55; f10 => 56; f11 => 57; f12 => 58
         up => 59; down => 60; left => 61; right => 62; page_up => 63; page_down => 64
     }
+}
+
+struct RawEvent {
+    let kind:int
+    let timestamp:uint
+    let window:uint32
+    let first:int32
+    let second:int32
+    let scancode:int32
+    let mouse_button:uint8
+    let modifiers:uint16
+    let repeated:bool
+}
+
+let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PollEvent"
+)
+
+func poll_event() RawEvent? {
+    var storage:uint[16]
+    if sdl_poll_event(C.mutable_pointer(storage)) == 0 { return null }
+
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let event_type = C.load<uint32>(address, 0 as uint)
+    var kind = 0
+
+    if event_type == 0x100 { kind = 1 }
+    if event_type == 0x210 { kind = 2 }
+    if event_type == 0x206 { kind = 3 }
+    if event_type == 0x207 { kind = 4 }
+    if event_type == 0x20e { kind = 5 }
+    if event_type == 0x20f { kind = 6 }
+    if event_type == 0x300 { kind = 7 }
+    if event_type == 0x301 { kind = 8 }
+    if event_type == 0x401 { kind = 9 }
+    if event_type == 0x402 { kind = 10 }
+
+    return RawEvent(
+        kind:kind,
+        timestamp:C.load<uint>(address, 8 as uint),
+        window:C.load<uint32>(address, 16 as uint),
+        first:C.load<int32>(address, 20 as uint),
+        second:C.load<int32>(address, 24 as uint),
+        scancode:C.load<int32>(address, 24 as uint),
+        mouse_button:C.load<uint8>(address, 24 as uint),
+        modifiers:C.load<uint16>(address, 32 as uint),
+        repeated:C.load<uint8>(address, 37 as uint) != 0
+    )
 }

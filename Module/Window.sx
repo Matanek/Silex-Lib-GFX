@@ -1,3 +1,5 @@
+use Interop.C
+use Interop.Boundary
 use GFX.Session
 
 public struct Settings {
@@ -27,7 +29,7 @@ public class Window {
     public init(settings:Settings = Settings()) {
         validate_size(settings.width, settings.height)
         Session.open()
-        let handle = Platform.create(
+        let handle = create(
             settings.title,
             settings.width,
             settings.height,
@@ -45,12 +47,12 @@ public class Window {
     }
 
     drop {
-        Platform.destroy(self.handle)
+        destroy(self.handle)
         Session.close()
     }
 
     public func id() Id {
-        return Id(value:Platform.id(self.handle))
+        return Id(value:id(self.handle))
     }
 
     public func title() str {
@@ -58,63 +60,63 @@ public class Window {
     }
 
     public func set_title(title:str) {
-        require_action(Platform.set_title(self.handle, title), "set its title")
+        require_action(set_title(self.handle, title), "set its title")
         self.current_title = title
     }
 
     public func size() Size {
         return Size(
-            width:Platform.width(self.handle, false),
-            height:Platform.height(self.handle, false)
+            width:width(self.handle, false),
+            height:height(self.handle, false)
         )
     }
 
     public func pixel_size() Size {
         return Size(
-            width:Platform.width(self.handle, true),
-            height:Platform.height(self.handle, true)
+            width:width(self.handle, true),
+            height:height(self.handle, true)
         )
     }
 
     public func set_size(width:int, height:int) {
         validate_size(width, height)
-        require_action(Platform.set_size(self.handle, width, height), "change its size")
+        require_action(set_size(self.handle, width, height), "change its size")
     }
 
     public func show() {
-        require_action(Platform.show(self.handle), "show")
+        require_action(show(self.handle), "show")
     }
 
     public func hide() {
-        require_action(Platform.hide(self.handle), "hide")
+        require_action(hide(self.handle), "hide")
     }
 
     public func raise() {
-        require_action(Platform.raise(self.handle), "raise")
+        require_action(raise(self.handle), "raise")
     }
 
     public func sync() {
-        require_action(Platform.sync(self.handle), "synchronize")
+        require_action(sync(self.handle), "synchronize")
     }
 
     public func maximize() {
-        require_action(Platform.maximize(self.handle), "maximize")
+        require_action(maximize(self.handle), "maximize")
     }
 
     public func minimize() {
-        require_action(Platform.minimize(self.handle), "minimize")
+        require_action(minimize(self.handle), "minimize")
     }
 
     public func restore() {
-        require_action(Platform.restore(self.handle), "restore")
+        require_action(restore(self.handle), "restore")
     }
 
     public func set_fullscreen(enabled:bool) {
-        require_action(Platform.set_fullscreen(self.handle, enabled), "change fullscreen state")
+        require_action(set_fullscreen(self.handle, enabled), "change fullscreen state")
     }
 
     public func is_fullscreen() bool {
-        return Platform.is_fullscreen(self.handle)
+        return is_fullscreen(self.handle)
     }
 }
 
@@ -129,3 +131,137 @@ func require_action(success:bool, action:str) {
         panic("GFX.Window could not " + action)
     }
 }
+
+func create(
+    title:str,
+    width:int,
+    height:int,
+    resizable:bool,
+    fullscreen:bool,
+    borderless:bool,
+    high_pixel_density:bool,
+    hidden:bool
+) uint {
+    var flags:uint = 0
+    if fullscreen { flags += 0x0001 }
+    if hidden { flags += 0x0008 }
+    if borderless { flags += 0x0010 }
+    if resizable { flags += 0x0020 }
+    if high_pixel_density { flags += 0x2000 }
+    return C.address_bits(sdl_create_window(
+        C.terminated_pointer(title),
+        width as int32,
+        height as int32,
+        flags
+    ))
+}
+
+func destroy(handle:uint) {
+    sdl_destroy_window(C.pointer_bits(handle))
+}
+
+func id(handle:uint) uint32 {
+    return sdl_get_window_id(C.pointer_bits(handle))
+}
+
+func set_title(handle:uint, title:str) bool {
+    return sdl_set_window_title(C.pointer_bits(handle), C.terminated_pointer(title)) != 0
+}
+
+func width(handle:uint, pixels:bool) int {
+    return dimension(handle, pixels, true)
+}
+
+func height(handle:uint, pixels:bool) int {
+    return dimension(handle, pixels, false)
+}
+
+func dimension(handle:uint, pixels:bool, select_width:bool) int {
+    var width:int32 = 0
+    var height:int32 = 0
+    var success:int32 = 0
+    if pixels {
+        success = sdl_get_window_pixel_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height))
+    } else {
+        success = sdl_get_window_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height))
+    }
+    if success == 0 {
+        panic("GFX.Window could not query its size")
+    }
+    if select_width { return width as int }
+    return height as int
+}
+
+func set_size(handle:uint, width:int, height:int) bool {
+    return sdl_set_window_size(C.pointer_bits(handle), width as int32, height as int32) != 0
+}
+
+func show(handle:uint) bool { return sdl_show_window(C.pointer_bits(handle)) != 0 }
+func hide(handle:uint) bool { return sdl_hide_window(C.pointer_bits(handle)) != 0 }
+func raise(handle:uint) bool { return sdl_raise_window(C.pointer_bits(handle)) != 0 }
+func sync(handle:uint) bool { return sdl_sync_window(C.pointer_bits(handle)) != 0 }
+func maximize(handle:uint) bool { return sdl_maximize_window(C.pointer_bits(handle)) != 0 }
+func minimize(handle:uint) bool { return sdl_minimize_window(C.pointer_bits(handle)) != 0 }
+func restore(handle:uint) bool { return sdl_restore_window(C.pointer_bits(handle)) != 0 }
+
+func set_fullscreen(handle:uint, enabled:bool) bool {
+    var requested:int32 = 0
+    if enabled { requested = 1 }
+    return sdl_set_window_fullscreen(C.pointer_bits(handle), requested) != 0
+}
+
+func is_fullscreen(handle:uint) bool {
+    return (sdl_get_window_flags(C.pointer_bits(handle)) & 0x0001) != 0
+}
+
+let sdl_create_window = C.function<
+    func(C.Pointer<uint8>, int32, int32, uint) C.Pointer<uint8>
+>(library:Boundary.SDL3, name:"SDL_CreateWindow")
+
+let sdl_destroy_window = C.function<func(C.Pointer<uint8>) void>(
+    library:Boundary.SDL3,
+    name:"SDL_DestroyWindow"
+)
+
+let sdl_get_window_id = C.function<func(C.Pointer<uint8>) uint32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowID"
+)
+
+let sdl_set_window_title = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowTitle"
+)
+
+let sdl_get_window_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowSize"
+)
+
+let sdl_get_window_pixel_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowSizeInPixels"
+)
+
+let sdl_set_window_size = C.function<func(C.Pointer<uint8>, int32, int32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowSize"
+)
+
+let sdl_show_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_ShowWindow")
+let sdl_hide_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_HideWindow")
+let sdl_raise_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_RaiseWindow")
+let sdl_sync_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SyncWindow")
+let sdl_maximize_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_MaximizeWindow")
+let sdl_minimize_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_MinimizeWindow")
+let sdl_restore_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_RestoreWindow")
+
+let sdl_set_window_fullscreen = C.function<func(C.Pointer<uint8>, int32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowFullscreen"
+)
+
+let sdl_get_window_flags = C.function<func(C.Pointer<uint8>) uint>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowFlags"
+)
