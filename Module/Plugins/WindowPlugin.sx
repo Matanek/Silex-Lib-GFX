@@ -8,21 +8,23 @@ use GFX.Input
 use GFX.Input.State as InputState
 use GFX.Plugins.InputPlugin
 
+public use GFX.Window.Settings as Settings
+
 public enum CloseBehavior {
     automatic
     manual
 }
 
 struct Configuration {
-    let settings:Window.Settings
+    let settings:Settings
 }
 
 public struct WindowPlugin:Plugin {
-    private let settings:Window.Settings
+    private let settings:Settings
     private let automatic_close:bool
 
     public init(
-        settings:Window.Settings = Window.Settings(),
+        settings:Settings = Settings(),
         close_behavior:CloseBehavior = CloseBehavior.automatic
     ) {
         self.settings = settings

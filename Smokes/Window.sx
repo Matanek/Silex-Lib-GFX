@@ -2,7 +2,7 @@ use GFX.Session
 use GFX.Window
 
 func main() {
-    let defaults = Window.Settings()
+    var defaults = Window.Settings()
     assert(defaults.title == "Window")
     assert(defaults.width == 1280)
     assert(defaults.height == 720)
@@ -11,6 +11,12 @@ func main() {
     assert(!defaults.borderless)
     assert(defaults.high_pixel_density)
     assert(!defaults.hidden)
+    defaults.title = "Configured"
+    defaults.width = 640
+    defaults.height = 360
+    assert(defaults.title == "Configured")
+    assert(defaults.width == 640)
+    assert(defaults.height == 360)
 
     if true {
         var session = Session()

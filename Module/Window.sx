@@ -1,14 +1,14 @@
 use GFX.Session
 
 public struct Settings {
-    let title:str = "Window"
-    let width:int = 1280
-    let height:int = 720
-    let resizable:bool = true
-    let fullscreen:bool = false
-    let borderless:bool = false
-    let high_pixel_density:bool = true
-    let hidden:bool = false
+    var title:str = "Window"
+    var width:int = 1280
+    var height:int = 720
+    var resizable:bool = true
+    var fullscreen:bool = false
+    var borderless:bool = false
+    var high_pixel_density:bool = true
+    var hidden:bool = false
 }
 
 public struct Id {

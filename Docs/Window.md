@@ -9,16 +9,25 @@ use GFX.Window
 
 func main() {
     var session = Session()
-    var window = Window(
-        session,
-        Window.Settings(
-            title:"Silex",
-            width:1280,
-            height:720
-        )
-    )
+    var settings = Window.Settings()
+    settings.title = "Silex"
+    settings.width = 1280
+    settings.height = 720
+    var window = Window(session, settings)
     window.show()
 }
+```
+
+`Window.Settings` is deliberately mutable: completing after `settings.` exposes
+all available options before the window is created. A cascade offers the same
+discoverable configuration inline:
+
+```sx
+var window = Window(session, Window.Settings()
+    ..title = "Silex"
+    ..width = 1280
+    ..height = 720
+)
 ```
 
 Create and use windows on the main thread. Invalid dimensions and platform
@@ -37,12 +46,13 @@ same direct `Window` at startup and removes it before the session at shutdown:
 
 ```sx
 use GFX.Bootstrap.Application
-use GFX.Window
 use GFX.Plugins.WindowPlugin
 
 func main() {
     var application = Application()
-        ..install(WindowPlugin(Window.Settings(title:"Silex")))
+        ..install(WindowPlugin(WindowPlugin.Settings()
+            ..title = "Silex"
+        ))
         ..run()
 }
 ```
@@ -56,15 +66,18 @@ Choose manual handling when the application needs to confirm the request or
 apply a different lifecycle policy:
 
 ```sx
+var settings = WindowPlugin.Settings()
+    ..title = "Editor"
+
 var application = Application()
     ..install(WindowPlugin(
-        Window.Settings(title:"Editor"),
+        settings,
         WindowPlugin.CloseBehavior.manual
     ))
     ..run()
 ```
 
 Manual handling leaves every event observable through `GFX.Input.State` and
-does not stop the application. Unless `Window.Settings.hidden` is true, the
+does not stop the application. Unless `WindowPlugin.Settings.hidden` is true, the
 plugin explicitly shows, raises and synchronizes the window at startup instead
 of relying on the platform's implicit creation behavior.

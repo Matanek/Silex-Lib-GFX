@@ -56,17 +56,19 @@ func stop_manually(
 
 func main() {
     Application()
-        ..install(WindowPlugin(Window.Settings(
-            title:"Automatic close",
-            hidden:true
-        )))
+        ..install(WindowPlugin(WindowPlugin.Settings()
+            ..title = "Automatic close"
+            ..hidden = true
+        ))
         ..install(CloseProbePlugin(id_value:"AutomaticProbe", manual:false))
         ..run()
     print("automatic close")
 
     Application()
         ..install(WindowPlugin(
-            Window.Settings(title:"Manual close", hidden:true),
+            WindowPlugin.Settings()
+                ..title = "Manual close"
+                ..hidden = true,
             WindowPlugin.CloseBehavior.manual
         ))
         ..install(CloseProbePlugin(id_value:"ManualProbe", manual:true))
