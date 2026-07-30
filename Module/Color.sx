@@ -1,0 +1,332 @@
+public struct Color {
+    var r:float = 1.0
+    var g:float = 1.0
+    var b:float = 1.0
+    var a:float = 1.0
+
+    static func rgb(r:float, g:float, b:float) Color {
+        return Color(r:r, g:g, b:b)
+    }
+
+    static func rgba(r:float, g:float, b:float, a:float) Color {
+        return Color(r:r, g:g, b:b, a:a)
+    }
+
+    static func bytes(r:uint8, g:uint8, b:uint8, a:uint8 = 255) Color {
+        return Color.rgba(
+            r as float / 255.0,
+            g as float / 255.0,
+            b as float / 255.0,
+            a as float / 255.0
+        )
+    }
+
+    func with_alpha(alpha:float) Color {
+        return Color.rgba(self.r, self.g, self.b, alpha)
+    }
+
+    func lerp(other:Color, amount:float) Color {
+        return Color.rgba(
+            self.r + (other.r - self.r) * amount,
+            self.g + (other.g - self.g) * amount,
+            self.b + (other.b - self.b) * amount,
+            self.a + (other.a - self.a) * amount
+        )
+    }
+
+    func mix(other:Color, amount:float) Color {
+        return self.lerp(other, amount)
+    }
+
+    static func white() Color { return Color.bytes(255, 255, 255) }
+    static func black() Color { return Color.bytes(0, 0, 0) }
+    static func gray() Color { return Color.bytes(127, 127, 127) }
+    static func transparent() Color { return Color.bytes(0, 0, 0, 0) }
+    static func gizmos() Color { return Color.bytes(255, 214, 64) }
+    static func red_50() Color { return Color.bytes(254, 242, 242) }
+    static func red_100() Color { return Color.bytes(255, 226, 226) }
+    static func red_200() Color { return Color.bytes(255, 201, 201) }
+    static func red_300() Color { return Color.bytes(255, 162, 162) }
+    static func red_400() Color { return Color.bytes(255, 100, 103) }
+    static func red_500() Color { return Color.bytes(251, 44, 54) }
+    static func red_600() Color { return Color.bytes(231, 0, 11) }
+    static func red_700() Color { return Color.bytes(193, 0, 7) }
+    static func red_800() Color { return Color.bytes(159, 7, 18) }
+    static func red_900() Color { return Color.bytes(130, 24, 26) }
+    static func red_950() Color { return Color.bytes(70, 8, 9) }
+    static func orange_50() Color { return Color.bytes(255, 247, 237) }
+    static func orange_100() Color { return Color.bytes(255, 237, 212) }
+    static func orange_200() Color { return Color.bytes(255, 214, 167) }
+    static func orange_300() Color { return Color.bytes(255, 184, 106) }
+    static func orange_400() Color { return Color.bytes(255, 137, 4) }
+    static func orange_500() Color { return Color.bytes(255, 105, 0) }
+    static func orange_600() Color { return Color.bytes(245, 73, 0) }
+    static func orange_700() Color { return Color.bytes(202, 53, 0) }
+    static func orange_800() Color { return Color.bytes(159, 45, 0) }
+    static func orange_900() Color { return Color.bytes(126, 42, 12) }
+    static func orange_950() Color { return Color.bytes(68, 19, 6) }
+    static func amber_50() Color { return Color.bytes(255, 251, 235) }
+    static func amber_100() Color { return Color.bytes(254, 243, 198) }
+    static func amber_200() Color { return Color.bytes(254, 230, 133) }
+    static func amber_300() Color { return Color.bytes(255, 210, 48) }
+    static func amber_400() Color { return Color.bytes(255, 185, 0) }
+    static func amber_500() Color { return Color.bytes(254, 154, 0) }
+    static func amber_600() Color { return Color.bytes(225, 113, 0) }
+    static func amber_700() Color { return Color.bytes(187, 77, 0) }
+    static func amber_800() Color { return Color.bytes(151, 60, 0) }
+    static func amber_900() Color { return Color.bytes(123, 51, 6) }
+    static func amber_950() Color { return Color.bytes(70, 25, 1) }
+    static func yellow_50() Color { return Color.bytes(254, 252, 232) }
+    static func yellow_100() Color { return Color.bytes(254, 249, 194) }
+    static func yellow_200() Color { return Color.bytes(255, 240, 133) }
+    static func yellow_300() Color { return Color.bytes(255, 223, 32) }
+    static func yellow_400() Color { return Color.bytes(253, 199, 0) }
+    static func yellow_500() Color { return Color.bytes(240, 177, 0) }
+    static func yellow_600() Color { return Color.bytes(208, 135, 0) }
+    static func yellow_700() Color { return Color.bytes(166, 95, 0) }
+    static func yellow_800() Color { return Color.bytes(137, 75, 0) }
+    static func yellow_900() Color { return Color.bytes(115, 62, 10) }
+    static func yellow_950() Color { return Color.bytes(67, 32, 4) }
+    static func lime_50() Color { return Color.bytes(247, 254, 231) }
+    static func lime_100() Color { return Color.bytes(236, 252, 202) }
+    static func lime_200() Color { return Color.bytes(216, 249, 153) }
+    static func lime_300() Color { return Color.bytes(187, 244, 81) }
+    static func lime_400() Color { return Color.bytes(154, 230, 0) }
+    static func lime_500() Color { return Color.bytes(124, 207, 0) }
+    static func lime_600() Color { return Color.bytes(94, 165, 0) }
+    static func lime_700() Color { return Color.bytes(73, 125, 0) }
+    static func lime_800() Color { return Color.bytes(60, 99, 0) }
+    static func lime_900() Color { return Color.bytes(53, 83, 14) }
+    static func lime_950() Color { return Color.bytes(25, 46, 3) }
+    static func green_50() Color { return Color.bytes(240, 253, 244) }
+    static func green_100() Color { return Color.bytes(220, 252, 231) }
+    static func green_200() Color { return Color.bytes(185, 248, 207) }
+    static func green_300() Color { return Color.bytes(123, 241, 168) }
+    static func green_400() Color { return Color.bytes(5, 223, 114) }
+    static func green_500() Color { return Color.bytes(0, 201, 80) }
+    static func green_600() Color { return Color.bytes(0, 166, 62) }
+    static func green_700() Color { return Color.bytes(0, 130, 54) }
+    static func green_800() Color { return Color.bytes(1, 102, 48) }
+    static func green_900() Color { return Color.bytes(13, 84, 43) }
+    static func green_950() Color { return Color.bytes(3, 46, 21) }
+    static func emerald_50() Color { return Color.bytes(236, 253, 245) }
+    static func emerald_100() Color { return Color.bytes(208, 250, 229) }
+    static func emerald_200() Color { return Color.bytes(164, 244, 207) }
+    static func emerald_300() Color { return Color.bytes(94, 233, 181) }
+    static func emerald_400() Color { return Color.bytes(0, 212, 146) }
+    static func emerald_500() Color { return Color.bytes(0, 188, 125) }
+    static func emerald_600() Color { return Color.bytes(0, 153, 102) }
+    static func emerald_700() Color { return Color.bytes(0, 122, 85) }
+    static func emerald_800() Color { return Color.bytes(0, 96, 69) }
+    static func emerald_900() Color { return Color.bytes(0, 79, 59) }
+    static func emerald_950() Color { return Color.bytes(0, 44, 34) }
+    static func teal_50() Color { return Color.bytes(240, 253, 250) }
+    static func teal_100() Color { return Color.bytes(203, 251, 241) }
+    static func teal_200() Color { return Color.bytes(150, 247, 228) }
+    static func teal_300() Color { return Color.bytes(70, 236, 213) }
+    static func teal_400() Color { return Color.bytes(0, 213, 190) }
+    static func teal_500() Color { return Color.bytes(0, 187, 167) }
+    static func teal_600() Color { return Color.bytes(0, 150, 137) }
+    static func teal_700() Color { return Color.bytes(0, 120, 111) }
+    static func teal_800() Color { return Color.bytes(0, 95, 90) }
+    static func teal_900() Color { return Color.bytes(11, 79, 74) }
+    static func teal_950() Color { return Color.bytes(2, 47, 46) }
+    static func cyan_50() Color { return Color.bytes(236, 254, 255) }
+    static func cyan_100() Color { return Color.bytes(206, 250, 254) }
+    static func cyan_200() Color { return Color.bytes(162, 244, 253) }
+    static func cyan_300() Color { return Color.bytes(83, 234, 253) }
+    static func cyan_400() Color { return Color.bytes(0, 211, 242) }
+    static func cyan_500() Color { return Color.bytes(0, 184, 219) }
+    static func cyan_600() Color { return Color.bytes(0, 146, 184) }
+    static func cyan_700() Color { return Color.bytes(0, 117, 149) }
+    static func cyan_800() Color { return Color.bytes(0, 95, 120) }
+    static func cyan_900() Color { return Color.bytes(16, 78, 100) }
+    static func cyan_950() Color { return Color.bytes(5, 51, 69) }
+    static func sky_50() Color { return Color.bytes(240, 249, 255) }
+    static func sky_100() Color { return Color.bytes(223, 242, 254) }
+    static func sky_200() Color { return Color.bytes(184, 230, 254) }
+    static func sky_300() Color { return Color.bytes(116, 212, 255) }
+    static func sky_400() Color { return Color.bytes(0, 188, 255) }
+    static func sky_500() Color { return Color.bytes(0, 166, 244) }
+    static func sky_600() Color { return Color.bytes(0, 132, 209) }
+    static func sky_700() Color { return Color.bytes(0, 105, 168) }
+    static func sky_800() Color { return Color.bytes(0, 89, 138) }
+    static func sky_900() Color { return Color.bytes(2, 74, 112) }
+    static func sky_950() Color { return Color.bytes(5, 47, 74) }
+    static func blue_50() Color { return Color.bytes(239, 246, 255) }
+    static func blue_100() Color { return Color.bytes(219, 234, 254) }
+    static func blue_200() Color { return Color.bytes(190, 219, 255) }
+    static func blue_300() Color { return Color.bytes(142, 197, 255) }
+    static func blue_400() Color { return Color.bytes(81, 162, 255) }
+    static func blue_500() Color { return Color.bytes(43, 127, 255) }
+    static func blue_600() Color { return Color.bytes(21, 93, 252) }
+    static func blue_700() Color { return Color.bytes(20, 71, 230) }
+    static func blue_800() Color { return Color.bytes(25, 60, 184) }
+    static func blue_900() Color { return Color.bytes(28, 57, 142) }
+    static func blue_950() Color { return Color.bytes(22, 36, 86) }
+    static func indigo_50() Color { return Color.bytes(238, 242, 255) }
+    static func indigo_100() Color { return Color.bytes(224, 231, 255) }
+    static func indigo_200() Color { return Color.bytes(198, 210, 255) }
+    static func indigo_300() Color { return Color.bytes(163, 179, 255) }
+    static func indigo_400() Color { return Color.bytes(124, 134, 255) }
+    static func indigo_500() Color { return Color.bytes(97, 95, 255) }
+    static func indigo_600() Color { return Color.bytes(79, 57, 246) }
+    static func indigo_700() Color { return Color.bytes(67, 45, 215) }
+    static func indigo_800() Color { return Color.bytes(55, 42, 172) }
+    static func indigo_900() Color { return Color.bytes(49, 44, 133) }
+    static func indigo_950() Color { return Color.bytes(30, 26, 77) }
+    static func violet_50() Color { return Color.bytes(245, 243, 255) }
+    static func violet_100() Color { return Color.bytes(237, 233, 254) }
+    static func violet_200() Color { return Color.bytes(221, 214, 255) }
+    static func violet_300() Color { return Color.bytes(196, 180, 255) }
+    static func violet_400() Color { return Color.bytes(166, 132, 255) }
+    static func violet_500() Color { return Color.bytes(142, 81, 255) }
+    static func violet_600() Color { return Color.bytes(127, 34, 254) }
+    static func violet_700() Color { return Color.bytes(112, 8, 231) }
+    static func violet_800() Color { return Color.bytes(93, 14, 192) }
+    static func violet_900() Color { return Color.bytes(77, 23, 154) }
+    static func violet_950() Color { return Color.bytes(47, 13, 104) }
+    static func purple_50() Color { return Color.bytes(250, 245, 255) }
+    static func purple_100() Color { return Color.bytes(243, 232, 255) }
+    static func purple_200() Color { return Color.bytes(233, 212, 255) }
+    static func purple_300() Color { return Color.bytes(218, 178, 255) }
+    static func purple_400() Color { return Color.bytes(194, 122, 255) }
+    static func purple_500() Color { return Color.bytes(173, 70, 255) }
+    static func purple_600() Color { return Color.bytes(152, 16, 250) }
+    static func purple_700() Color { return Color.bytes(130, 0, 219) }
+    static func purple_800() Color { return Color.bytes(110, 17, 176) }
+    static func purple_900() Color { return Color.bytes(89, 22, 139) }
+    static func purple_950() Color { return Color.bytes(60, 3, 102) }
+    static func fuchsia_50() Color { return Color.bytes(253, 244, 255) }
+    static func fuchsia_100() Color { return Color.bytes(250, 232, 255) }
+    static func fuchsia_200() Color { return Color.bytes(246, 207, 255) }
+    static func fuchsia_300() Color { return Color.bytes(244, 168, 255) }
+    static func fuchsia_400() Color { return Color.bytes(237, 106, 255) }
+    static func fuchsia_500() Color { return Color.bytes(225, 42, 251) }
+    static func fuchsia_600() Color { return Color.bytes(200, 0, 222) }
+    static func fuchsia_700() Color { return Color.bytes(168, 0, 183) }
+    static func fuchsia_800() Color { return Color.bytes(138, 1, 148) }
+    static func fuchsia_900() Color { return Color.bytes(114, 19, 120) }
+    static func fuchsia_950() Color { return Color.bytes(75, 0, 79) }
+    static func pink_50() Color { return Color.bytes(253, 242, 248) }
+    static func pink_100() Color { return Color.bytes(252, 231, 243) }
+    static func pink_200() Color { return Color.bytes(252, 206, 232) }
+    static func pink_300() Color { return Color.bytes(253, 165, 213) }
+    static func pink_400() Color { return Color.bytes(251, 100, 182) }
+    static func pink_500() Color { return Color.bytes(246, 51, 154) }
+    static func pink_600() Color { return Color.bytes(230, 0, 118) }
+    static func pink_700() Color { return Color.bytes(198, 0, 92) }
+    static func pink_800() Color { return Color.bytes(163, 0, 76) }
+    static func pink_900() Color { return Color.bytes(134, 16, 67) }
+    static func pink_950() Color { return Color.bytes(81, 4, 36) }
+    static func rose_50() Color { return Color.bytes(255, 241, 242) }
+    static func rose_100() Color { return Color.bytes(255, 228, 230) }
+    static func rose_200() Color { return Color.bytes(255, 204, 211) }
+    static func rose_300() Color { return Color.bytes(255, 161, 173) }
+    static func rose_400() Color { return Color.bytes(255, 99, 126) }
+    static func rose_500() Color { return Color.bytes(255, 32, 86) }
+    static func rose_600() Color { return Color.bytes(236, 0, 63) }
+    static func rose_700() Color { return Color.bytes(199, 0, 54) }
+    static func rose_800() Color { return Color.bytes(165, 0, 54) }
+    static func rose_900() Color { return Color.bytes(139, 8, 54) }
+    static func rose_950() Color { return Color.bytes(77, 2, 24) }
+    static func slate_50() Color { return Color.bytes(248, 250, 252) }
+    static func slate_100() Color { return Color.bytes(241, 245, 249) }
+    static func slate_200() Color { return Color.bytes(226, 232, 240) }
+    static func slate_300() Color { return Color.bytes(202, 213, 226) }
+    static func slate_400() Color { return Color.bytes(144, 161, 185) }
+    static func slate_500() Color { return Color.bytes(98, 116, 142) }
+    static func slate_600() Color { return Color.bytes(69, 85, 108) }
+    static func slate_700() Color { return Color.bytes(49, 65, 88) }
+    static func slate_800() Color { return Color.bytes(29, 41, 61) }
+    static func slate_900() Color { return Color.bytes(15, 23, 43) }
+    static func slate_950() Color { return Color.bytes(2, 6, 24) }
+    static func gray_50() Color { return Color.bytes(249, 250, 251) }
+    static func gray_100() Color { return Color.bytes(243, 244, 246) }
+    static func gray_200() Color { return Color.bytes(229, 231, 235) }
+    static func gray_300() Color { return Color.bytes(209, 213, 220) }
+    static func gray_400() Color { return Color.bytes(153, 161, 175) }
+    static func gray_500() Color { return Color.bytes(106, 114, 130) }
+    static func gray_600() Color { return Color.bytes(74, 85, 101) }
+    static func gray_700() Color { return Color.bytes(54, 65, 83) }
+    static func gray_800() Color { return Color.bytes(30, 41, 57) }
+    static func gray_900() Color { return Color.bytes(16, 24, 40) }
+    static func gray_950() Color { return Color.bytes(3, 7, 18) }
+    static func zinc_50() Color { return Color.bytes(250, 250, 250) }
+    static func zinc_100() Color { return Color.bytes(244, 244, 245) }
+    static func zinc_200() Color { return Color.bytes(228, 228, 231) }
+    static func zinc_300() Color { return Color.bytes(212, 212, 216) }
+    static func zinc_400() Color { return Color.bytes(159, 159, 169) }
+    static func zinc_500() Color { return Color.bytes(113, 113, 123) }
+    static func zinc_600() Color { return Color.bytes(82, 82, 92) }
+    static func zinc_700() Color { return Color.bytes(63, 63, 70) }
+    static func zinc_800() Color { return Color.bytes(39, 39, 42) }
+    static func zinc_900() Color { return Color.bytes(24, 24, 27) }
+    static func zinc_950() Color { return Color.bytes(9, 9, 11) }
+    static func neutral_50() Color { return Color.bytes(250, 250, 250) }
+    static func neutral_100() Color { return Color.bytes(245, 245, 245) }
+    static func neutral_200() Color { return Color.bytes(229, 229, 229) }
+    static func neutral_300() Color { return Color.bytes(212, 212, 212) }
+    static func neutral_400() Color { return Color.bytes(161, 161, 161) }
+    static func neutral_500() Color { return Color.bytes(115, 115, 115) }
+    static func neutral_600() Color { return Color.bytes(82, 82, 82) }
+    static func neutral_700() Color { return Color.bytes(64, 64, 64) }
+    static func neutral_800() Color { return Color.bytes(38, 38, 38) }
+    static func neutral_900() Color { return Color.bytes(23, 23, 23) }
+    static func neutral_950() Color { return Color.bytes(10, 10, 10) }
+    static func stone_50() Color { return Color.bytes(250, 250, 249) }
+    static func stone_100() Color { return Color.bytes(245, 245, 244) }
+    static func stone_200() Color { return Color.bytes(231, 229, 228) }
+    static func stone_300() Color { return Color.bytes(214, 211, 209) }
+    static func stone_400() Color { return Color.bytes(166, 160, 155) }
+    static func stone_500() Color { return Color.bytes(121, 113, 107) }
+    static func stone_600() Color { return Color.bytes(87, 83, 77) }
+    static func stone_700() Color { return Color.bytes(68, 64, 59) }
+    static func stone_800() Color { return Color.bytes(41, 37, 36) }
+    static func stone_900() Color { return Color.bytes(28, 25, 23) }
+    static func stone_950() Color { return Color.bytes(12, 10, 9) }
+    static func taupe_50() Color { return Color.bytes(251, 250, 249) }
+    static func taupe_100() Color { return Color.bytes(243, 241, 241) }
+    static func taupe_200() Color { return Color.bytes(232, 228, 227) }
+    static func taupe_300() Color { return Color.bytes(216, 210, 208) }
+    static func taupe_400() Color { return Color.bytes(171, 160, 156) }
+    static func taupe_500() Color { return Color.bytes(124, 109, 103) }
+    static func taupe_600() Color { return Color.bytes(91, 79, 75) }
+    static func taupe_700() Color { return Color.bytes(71, 60, 57) }
+    static func taupe_800() Color { return Color.bytes(43, 36, 34) }
+    static func taupe_900() Color { return Color.bytes(29, 24, 22) }
+    static func taupe_950() Color { return Color.bytes(12, 10, 9) }
+    static func mauve_50() Color { return Color.bytes(250, 250, 250) }
+    static func mauve_100() Color { return Color.bytes(243, 241, 243) }
+    static func mauve_200() Color { return Color.bytes(231, 228, 231) }
+    static func mauve_300() Color { return Color.bytes(215, 208, 215) }
+    static func mauve_400() Color { return Color.bytes(168, 158, 169) }
+    static func mauve_500() Color { return Color.bytes(121, 105, 123) }
+    static func mauve_600() Color { return Color.bytes(89, 76, 91) }
+    static func mauve_700() Color { return Color.bytes(70, 57, 71) }
+    static func mauve_800() Color { return Color.bytes(42, 33, 44) }
+    static func mauve_900() Color { return Color.bytes(29, 22, 30) }
+    static func mauve_950() Color { return Color.bytes(12, 9, 12) }
+    static func mist_50() Color { return Color.bytes(249, 251, 251) }
+    static func mist_100() Color { return Color.bytes(241, 243, 243) }
+    static func mist_200() Color { return Color.bytes(227, 231, 232) }
+    static func mist_300() Color { return Color.bytes(208, 214, 216) }
+    static func mist_400() Color { return Color.bytes(156, 168, 171) }
+    static func mist_500() Color { return Color.bytes(103, 120, 124) }
+    static func mist_600() Color { return Color.bytes(75, 88, 91) }
+    static func mist_700() Color { return Color.bytes(57, 68, 71) }
+    static func mist_800() Color { return Color.bytes(34, 41, 43) }
+    static func mist_900() Color { return Color.bytes(22, 27, 29) }
+    static func mist_950() Color { return Color.bytes(9, 11, 12) }
+    static func olive_50() Color { return Color.bytes(251, 251, 249) }
+    static func olive_100() Color { return Color.bytes(244, 244, 240) }
+    static func olive_200() Color { return Color.bytes(232, 232, 227) }
+    static func olive_300() Color { return Color.bytes(216, 216, 208) }
+    static func olive_400() Color { return Color.bytes(171, 171, 156) }
+    static func olive_500() Color { return Color.bytes(124, 124, 103) }
+    static func olive_600() Color { return Color.bytes(91, 91, 75) }
+    static func olive_700() Color { return Color.bytes(71, 71, 57) }
+    static func olive_800() Color { return Color.bytes(43, 43, 34) }
+    static func olive_900() Color { return Color.bytes(29, 29, 22) }
+    static func olive_950() Color { return Color.bytes(12, 12, 9) }
+}
