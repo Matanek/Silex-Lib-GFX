@@ -5,22 +5,30 @@ struct Counter {
 }
 
 struct First {
-    let value:int
+    let expected:int
+    var trace:DropTrace
 
     drop {
-        print("first ", self.value)
+        assert(self.trace.next == self.expected)
+        self.trace.next++
     }
 }
 
 struct Second {
-    let value:int
+    let expected:int
+    var trace:DropTrace
 
     drop {
-        print("second ", self.value)
+        assert(self.trace.next == self.expected)
+        self.trace.next++
     }
 }
 
-func main() {
+class DropTrace {
+    public var next:int
+}
+
+test "isolate and mutate application resources" {
     var first = Bootstrap.Application()
     var second = Bootstrap.Application()
     var first_resources = first.resources()
@@ -36,7 +44,7 @@ func main() {
     }
     if true {
         let counter:@Counter = first_resources.get<Counter>()
-        print(counter.value)
+        assert(counter.value == 42)
     }
     if true {
         var counter:&Counter? = first_resources.try_get_mut<Counter>()
@@ -51,8 +59,10 @@ func main() {
     assert(removed != null)
     assert(!first_resources.has<Counter>())
 
-    second_resources.insert(First(value:1))
-    second_resources.insert(Second(value:2))
-    second_resources.insert(First(value:3))
+    var trace = DropTrace(next:1)
+    second_resources.insert(First(expected:1, trace:trace))
+    second_resources.insert(Second(expected:3, trace:trace))
+    second_resources.insert(First(expected:2, trace:trace))
     second_resources.clear()
+    assert(trace.next == 4)
 }

@@ -1,7 +1,7 @@
 use GFX.Window
 use GFX.Input
 
-func main() {
+test "share and reopen the SDL session" {
     if true {
         var window = Window(Window.Settings(
             title:"Shared runtime",
@@ -10,7 +10,6 @@ func main() {
         var input = Input()
         input.update()
         assert(window.id().value != 0)
-        print("window then input")
     }
 
     if true {
@@ -21,6 +20,5 @@ func main() {
         ))
         input.update()
         assert(window.id().value != 0)
-        print("input then window")
     }
 }

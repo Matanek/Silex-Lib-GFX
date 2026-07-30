@@ -1,6 +1,6 @@
 use GFX.Window
 
-func main() {
+test "configure and reopen a window" {
     var defaults = Window.Settings()
     assert(defaults.title == "Window")
     assert(defaults.width == 1280)
@@ -20,7 +20,7 @@ func main() {
     if true {
         var window = Window(
             Window.Settings(
-                title:"Silex Window Smoke",
+                title:"Silex Window Test",
                 width:320,
                 height:240,
                 hidden:true
@@ -28,7 +28,7 @@ func main() {
         )
 
         assert(window.id().value != 0)
-        assert(window.title() == "Silex Window Smoke")
+        assert(window.title() == "Silex Window Test")
         assert(window.size() == Window.Size(width:320, height:240))
         let pixels = window.pixel_size()
         assert(pixels.width >= 320)
@@ -41,10 +41,8 @@ func main() {
         window.show()
         window.hide()
         assert(!window.is_fullscreen())
-        print("direct window ", window.id().value)
     }
 
     var reopened_window = Window(Window.Settings(hidden:true))
     assert(reopened_window.id().value != 0)
-    print("reopened window")
 }

@@ -84,7 +84,6 @@ access to `Application` or its resource registry:
 
 ```sx
 use GFX.Bootstrap.Controller
-use GFX.Input
 use GFX.Input.State as InputState
 
 func react(input:@InputState, controller:&Controller) {

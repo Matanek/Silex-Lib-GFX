@@ -32,8 +32,8 @@ func push_key_event(kind:uint32, window:uint32, scancode:int32, modifiers:uint16
     assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
 }
 
-func main() {
-    var window = Window(Window.Settings(title:"Silex Input Smoke", hidden:true))
+test "translate SDL events into input state" {
+    var window = Window(Window.Settings(title:"Silex Input Test", hidden:true))
     var input = Input()
 
     input.update()
@@ -111,6 +111,4 @@ func main() {
         match events[5] { window_focus_lost(id) => { assert(id == window_id) }; else => { panic("expected focus loss") } }
         match events[6] { quit => {}; else => { panic("expected quit") } }
     }
-
-    print("input events and snapshot")
 }

@@ -27,6 +27,6 @@ func verify_input_plugin() {
     assert(application.run() == 0)
 }
 
-func main() {
+test "install input state through the plugin" {
     verify_input_plugin()
 }

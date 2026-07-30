@@ -1,7 +1,12 @@
 use GFX.Bootstrap
 
-func startup(application:Bootstrap.Application) {
-    print("custom runner")
+struct RunnerProbe {
+    var started:bool
+}
+
+func startup(probe:&RunnerProbe) {
+    assert(!probe.started)
+    probe.started = true
 }
 
 func run_once(application:Bootstrap.Application) int {
@@ -11,13 +16,15 @@ func run_once(application:Bootstrap.Application) int {
 
 func verify_runner() {
     var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(RunnerProbe(started:false))
     application.add_system(Bootstrap.Schedule.startup, startup)
     application.with_runner(run_once)
     assert(application.run() == 42)
-}
-
-func main() {
-    verify_runner()
+    if true {
+        let probe:@RunnerProbe = resources.get<RunnerProbe>()
+        assert(probe.started)
+    }
 }
 
 test "replace the default runner" {

@@ -54,7 +54,7 @@ func stop_manually(
     panic("manual close request was not observable")
 }
 
-func main() {
+test "close a window automatically" {
     Application()
         ..install(WindowPlugin(WindowPlugin.Settings()
             ..title = "Automatic close"
@@ -62,8 +62,9 @@ func main() {
         ))
         ..install(CloseProbePlugin(id_value:"AutomaticProbe", manual:false))
         ..run()
-    print("automatic close")
+}
 
+test "observe a close request manually" {
     Application()
         ..install(WindowPlugin(
             WindowPlugin.Settings()
@@ -73,5 +74,4 @@ func main() {
         ))
         ..install(CloseProbePlugin(id_value:"ManualProbe", manual:true))
         ..run()
-    print("manual close")
 }

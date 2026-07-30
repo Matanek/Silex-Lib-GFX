@@ -13,19 +13,17 @@ func update(time:@Time, world:&World) {
 }
 
 func observe(first:@Time, second:@Time) {
-    print(first.delta + second.delta)
+    assert(first.delta + second.delta == 4)
 }
 
-func no_dependencies() {
-    print("no dependencies")
-}
+func no_dependencies() {}
 
 func run_once(application:Bootstrap.Application) int {
     application.run_schedule(Bootstrap.Schedule.update)
     return 0
 }
 
-func main() {
+test "inject resources into systems" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(Time(delta:2))
@@ -34,9 +32,9 @@ func main() {
     application.add_system(Bootstrap.Schedule.update, observe)
     application.add_after_system(Bootstrap.Schedule.update, no_dependencies)
     application.with_runner(run_once)
-    application.run()
+    assert(application.run() == 0)
     if true {
         let world:@World = resources.get<World>()
-        print(world.value)
+        assert(world.value == 42)
     }
 }
