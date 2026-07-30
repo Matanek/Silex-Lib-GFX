@@ -43,8 +43,8 @@ func stop_manually(
 ) {
     for event in input.events() {
         match event {
-            window_close_requested(id) => {
-                assert(id == window.id())
+            window_close_requested(request) => {
+                assert(request.window == window.id())
                 controller.stop()
                 return
             }

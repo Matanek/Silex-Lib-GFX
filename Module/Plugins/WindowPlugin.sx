@@ -73,12 +73,12 @@ func handle_close_request(
 ) {
     for event in input.events() {
         match event {
-            quit => {
+            quit(meta) => {
                 controller.stop()
                 return
             }
-            window_close_requested(id) => {
-                if id == window.id() {
+            window_close_requested(request) => {
+                if request.window == window.id() {
                     controller.stop()
                     return
                 }

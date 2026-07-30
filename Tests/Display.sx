@@ -1,0 +1,21 @@
+use GFX.Display
+
+test "query platform displays" {
+    var displays = Display.Displays()
+    let ids = displays.all()
+    assert(ids.count() >= 1)
+    let primary = displays.primary()
+    assert(primary.value != 0)
+    let details = displays.info(primary)
+    assert(details.id == primary)
+    assert(details.name.count() > 0)
+    assert(details.bounds.w > 0)
+    assert(details.bounds.h > 0)
+    assert(details.content_scale > 0.0)
+    let desktop = displays.desktop_mode(primary)
+    assert(desktop.display == primary)
+    assert(desktop.size.x > 0.0)
+    assert(desktop.size.y > 0.0)
+    let modes = displays.modes(primary)
+    assert(modes.count() >= 1)
+}

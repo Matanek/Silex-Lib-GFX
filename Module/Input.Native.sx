@@ -1,0 +1,971 @@
+use Interop.C
+use Interop.Boundary
+use STD.Math
+use GFX.Window
+use GFX.Display
+use GFX.Input.Keyboard
+use GFX.Input.Pointer
+use GFX.Input.Events
+
+public func watch_lifecycle(context:uint, raw:uint) int32 {
+    let kind = C.load<uint32>(raw, 0 as uint)
+    if kind < 0x101 || kind > 0x106 { return 1 }
+    let timestamp = Events.Timestamp(nanoseconds:C.load<uint>(raw, 8 as uint))
+    var watcher = C.object_from_address<Watcher>(context)
+    if kind == 0x101 { watcher.record(Events.Event.terminating(Events.Meta(timestamp:timestamp))) }
+    if kind == 0x102 { watcher.record(Events.Event.low_memory(Events.Meta(timestamp:timestamp))) }
+    if kind == 0x103 { watcher.record(Events.Event.will_enter_background(Events.Meta(timestamp:timestamp))) }
+    if kind == 0x104 { watcher.record(Events.Event.did_enter_background(Events.Meta(timestamp:timestamp))) }
+    if kind == 0x105 { watcher.record(Events.Event.will_enter_foreground(Events.Meta(timestamp:timestamp))) }
+    if kind == 0x106 { watcher.record(Events.Event.did_enter_foreground(Events.Meta(timestamp:timestamp))) }
+    return 1
+}
+
+public class Watcher {
+    private var spin:int32
+    private var pending:Events.Event[]
+
+    public init() {
+        self.spin = 0
+        self.pending = []
+        let callback:func(uint, uint) int32 = watch_lifecycle
+        if sdl_add_event_watch(C.pointer_bits(C.function_address(callback)), C.pointer_bits(C.object_address(self))) == 0 {
+            panic("GFX.Input could not observe lifecycle events")
+        }
+    }
+
+    drop {
+        let callback:func(uint, uint) int32 = watch_lifecycle
+        sdl_remove_event_watch(C.pointer_bits(C.function_address(callback)), C.pointer_bits(C.object_address(self)))
+    }
+
+    public func take() Events.Event[] {
+        sdl_lock_spin(C.mutable_pointer(self.spin))
+        let result = self.pending
+        self.pending = []
+        sdl_unlock_spin(C.mutable_pointer(self.spin))
+        return result
+    }
+
+    internal func record(event:Events.Event) {
+        sdl_lock_spin(C.mutable_pointer(self.spin))
+        self.pending.append(event)
+        sdl_unlock_spin(C.mutable_pointer(self.spin))
+    }
+}
+
+public func global_mouse_position() Math.Vec2 {
+    var x:float32 = 0.0
+    var y:float32 = 0.0
+    let buttons = sdl_get_global_mouse_state(C.mutable_pointer(x), C.mutable_pointer(y))
+    return Math.Vec2(x as float, y as float)
+}
+
+public func keyboard_focus() Window.Id? { return focus_id(C.address_bits(sdl_get_keyboard_focus())) }
+public func mouse_focus() Window.Id? { return focus_id(C.address_bits(sdl_get_mouse_focus())) }
+
+func focus_id(address:uint) Window.Id? {
+    if address == 0 as uint { return null }
+    let value = sdl_get_window_id(C.pointer_bits(address))
+    if value == 0 { return null }
+    return Window.Id(value:value)
+}
+
+public func touch_devices() Events.TouchId[] {
+    var count:int32 = 0
+    let address = C.address_bits(sdl_get_touch_devices(C.mutable_pointer(count)))
+    if address == 0 as uint { return [] }
+    var result:Events.TouchId[] = []
+    var index = 0
+    while index < count as int {
+        result.append(Events.TouchId(value:C.load<uint>(address, (index as uint) * 8)))
+        index++
+    }
+    sdl_free(C.pointer_bits(address))
+    return result
+}
+
+public func current_modifiers() Keyboard.Modifiers { return modifiers(sdl_get_mod_state() as uint16) }
+
+public func keyboard_info(id:Keyboard.KeyboardId) Events.KeyboardInfo {
+    return Events.KeyboardInfo(id:id, name:copy_text(C.address_bits(sdl_get_keyboard_name(id.value))))
+}
+
+public func mouse_info(id:Pointer.MouseId) Events.MouseInfo {
+    return Events.MouseInfo(id:id, name:copy_text(C.address_bits(sdl_get_mouse_name(id.value))))
+}
+
+public func joystick_info(id:Events.JoystickId) Events.JoystickInfo {
+    let player = sdl_get_joystick_player(id.value)
+    var optional_player:int? = null
+    if player >= 0 { optional_player = player as int }
+    return Events.JoystickInfo(
+        id:id,
+        name:copy_text(C.address_bits(sdl_get_joystick_name(id.value))),
+        kind:joystick_kind(sdl_get_joystick_type(id.value)),
+        player:optional_player,
+        connected:true
+    )
+}
+
+public func gamepad_info(id:Events.GamepadId) Events.GamepadInfo {
+    let player = sdl_get_joystick_player(id.value)
+    var optional_player:int? = null
+    if player >= 0 { optional_player = player as int }
+    return Events.GamepadInfo(
+        id:id,
+        name:copy_text(C.address_bits(sdl_get_gamepad_name(id.value))),
+        kind:gamepad_kind(sdl_get_gamepad_type(id.value)),
+        player:optional_player,
+        connected:true
+    )
+}
+
+public func poll_event() Events.Event? {
+    while true {
+        var storage:uint[16]
+        if sdl_poll_event(C.mutable_pointer(storage)) == 0 { return null }
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let kind = C.load<uint32>(address, 0 as uint)
+        let timestamp = Events.Timestamp(nanoseconds:C.load<uint>(address, 8 as uint))
+
+        if kind == 0 || kind == 0xffff || kind == 0x7fff_ffff || kind == 0x4000 || kind == 0x4001 || kind == 0x4002 || kind == 0x4003 || kind == 0x7f00 { continue }
+
+        if kind == 0x100 { return Events.Event.quit(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x101 { return Events.Event.terminating(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x102 { return Events.Event.low_memory(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x103 { return Events.Event.will_enter_background(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x104 { return Events.Event.did_enter_background(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x105 { return Events.Event.will_enter_foreground(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x106 { return Events.Event.did_enter_foreground(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x107 { return Events.Event.locale_changed(Events.Meta(timestamp:timestamp)) }
+        if kind == 0x108 { return Events.Event.system_theme_changed(Events.SystemThemeEvent(theme:system_theme(sdl_get_system_theme()), timestamp:timestamp)) }
+
+        if kind >= 0x151 && kind <= 0x158 { return display_event(address, kind, timestamp) }
+        if kind >= 0x202 && kind <= 0x21a { return window_event(address, kind, timestamp) }
+        if kind >= 0x300 && kind <= 0x309 { return keyboard_event(address, kind, timestamp) }
+        if kind >= 0x400 && kind <= 0x405 { return mouse_event(address, kind, timestamp) }
+        if kind >= 0x600 && kind <= 0x608 { return joystick_event(address, kind, timestamp) }
+        if kind >= 0x650 && kind <= 0x65b { return gamepad_event(address, kind, timestamp) }
+        if kind >= 0x700 && kind <= 0x703 { return touch_event(address, kind, timestamp) }
+        if kind >= 0x710 && kind <= 0x712 { return pinch_event(address, kind, timestamp) }
+        if kind == 0x900 { return clipboard_event(address, timestamp) }
+        if kind >= 0x1000 && kind <= 0x1004 { return drop_event(address, kind, timestamp) }
+        if kind >= 0x1100 && kind <= 0x1102 { return audio_event(address, kind, timestamp) }
+        if kind == 0x1200 { return sensor_event(address, timestamp) }
+        if kind >= 0x1300 && kind <= 0x1307 { return pen_event(address, kind, timestamp) }
+        if kind >= 0x1400 && kind <= 0x1403 { return camera_event(address, kind, timestamp) }
+        if kind >= 0x2000 && kind <= 0x2002 { return render_event(address, kind, timestamp) }
+        if kind >= 0x8000 && kind < 0xffff { return custom_event(address, kind, timestamp) }
+        return Events.Event.unknown(Events.UnknownEvent(kind:kind, timestamp:timestamp))
+    }
+    return null
+}
+
+func display_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let display = Display.Id(value:C.load<uint32>(address, 16 as uint))
+    let plain = Events.DisplayEvent(display:display, timestamp:timestamp)
+    if kind == 0x151 {
+        return Events.Event.display_orientation_changed(Events.DisplayOrientationEvent(
+            display:display,
+            orientation:display_orientation(C.load<int32>(address, 20 as uint)),
+            timestamp:timestamp
+        ))
+    }
+    if kind == 0x152 { return Events.Event.display_added(plain) }
+    if kind == 0x153 { return Events.Event.display_removed(plain) }
+    if kind == 0x154 { return Events.Event.display_moved(plain) }
+    if kind == 0x155 { return Events.Event.display_desktop_mode_changed(plain) }
+    if kind == 0x156 { return Events.Event.display_current_mode_changed(plain) }
+    if kind == 0x157 { return Events.Event.display_content_scale_changed(plain) }
+    return Events.Event.display_usable_bounds_changed(plain)
+}
+
+func window_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let window = Window.Id(value:C.load<uint32>(address, 16 as uint))
+    let plain = Events.WindowEvent(window:window, timestamp:timestamp)
+    if kind == 0x202 { return Events.Event.window_shown(plain) }
+    if kind == 0x203 { return Events.Event.window_hidden(plain) }
+    if kind == 0x204 { return Events.Event.window_exposed(Events.WindowExposedEvent(window:window, live_resize:C.load<int32>(address, 20 as uint) != 0, timestamp:timestamp)) }
+    if kind == 0x205 { return Events.Event.window_moved(Events.WindowPositionEvent(window:window, position:Math.Vec2(C.load<int32>(address, 20 as uint) as float, C.load<int32>(address, 24 as uint) as float), timestamp:timestamp)) }
+    if kind == 0x206 { return Events.Event.window_resized(window_size(address, window, timestamp)) }
+    if kind == 0x207 { return Events.Event.window_pixel_size_changed(window_size(address, window, timestamp)) }
+    if kind == 0x208 { return Events.Event.window_metal_view_resized(window_size(address, window, timestamp)) }
+    if kind == 0x209 { return Events.Event.window_minimized(plain) }
+    if kind == 0x20a { return Events.Event.window_maximized(plain) }
+    if kind == 0x20b { return Events.Event.window_restored(plain) }
+    if kind == 0x20c { return Events.Event.window_mouse_entered(plain) }
+    if kind == 0x20d { return Events.Event.window_mouse_left(plain) }
+    if kind == 0x20e { return Events.Event.window_focus_gained(plain) }
+    if kind == 0x20f { return Events.Event.window_focus_lost(plain) }
+    if kind == 0x210 { return Events.Event.window_close_requested(plain) }
+    if kind == 0x211 { return Events.Event.window_hit_test(plain) }
+    if kind == 0x212 { return Events.Event.window_icc_profile_changed(plain) }
+    if kind == 0x213 { return Events.Event.window_display_changed(Events.WindowDisplayEvent(window:window, display:Display.Id(value:C.load<uint32>(address, 20 as uint)), timestamp:timestamp)) }
+    if kind == 0x214 { return Events.Event.window_display_scale_changed(plain) }
+    if kind == 0x215 { return Events.Event.window_safe_area_changed(plain) }
+    if kind == 0x216 { return Events.Event.window_occluded(plain) }
+    if kind == 0x217 { return Events.Event.window_entered_fullscreen(plain) }
+    if kind == 0x218 { return Events.Event.window_left_fullscreen(plain) }
+    if kind == 0x219 { return Events.Event.window_destroyed(plain) }
+    return Events.Event.window_hdr_state_changed(plain)
+}
+
+func window_size(address:uint, window:Window.Id, timestamp:Events.Timestamp) Events.WindowSizeEvent {
+    return Events.WindowSizeEvent(
+        window:window,
+        size:Math.Vec2(C.load<int32>(address, 20 as uint) as float, C.load<int32>(address, 24 as uint) as float),
+        timestamp:timestamp
+    )
+}
+
+func keyboard_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    if kind == 0x304 { return Events.Event.keymap_changed(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x305 || kind == 0x306 {
+        let event = Events.KeyboardDeviceEvent(keyboard:Keyboard.KeyboardId(value:C.load<uint32>(address, 16 as uint)), timestamp:timestamp)
+        if kind == 0x305 { return Events.Event.keyboard_added(event) }
+        return Events.Event.keyboard_removed(event)
+    }
+    if kind == 0x307 { return Events.Event.text_editing_candidates(Events.TextCandidatesEvent(
+        window:Window.Id(value:C.load<uint32>(address, 16 as uint)),
+        candidates:copy_text_array(C.load<uint>(address, 24 as uint), C.load<int32>(address, 32 as uint) as int),
+        selected:C.load<int32>(address, 36 as uint) as int,
+        horizontal:C.load<uint8>(address, 40 as uint) != 0,
+        timestamp:timestamp
+    )) }
+    if kind == 0x308 { return Events.Event.screen_keyboard_shown(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x309 { return Events.Event.screen_keyboard_hidden(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x302 { return Events.Event.text_editing(Events.TextEditingEvent(
+        window:Window.Id(value:C.load<uint32>(address, 16 as uint)),
+        text:copy_text(C.load<uint>(address, 24 as uint)),
+        start:C.load<int32>(address, 32 as uint) as int,
+        length:C.load<int32>(address, 36 as uint) as int,
+        timestamp:timestamp
+    )) }
+    if kind == 0x303 { return Events.Event.text_input(Events.TextInputEvent(
+        window:Window.Id(value:C.load<uint32>(address, 16 as uint)),
+        text:copy_text(C.load<uint>(address, 24 as uint)),
+        timestamp:timestamp
+    )) }
+    let key = Events.KeyEvent(
+        window:Window.Id(value:C.load<uint32>(address, 16 as uint)),
+        keyboard:Keyboard.KeyboardId(value:C.load<uint32>(address, 20 as uint)),
+        key:key_from_scancode(C.load<int32>(address, 24 as uint)),
+        keycode:C.load<uint32>(address, 28 as uint),
+        raw:C.load<uint16>(address, 34 as uint),
+        repeated:C.load<uint8>(address, 37 as uint) != 0,
+        modifiers:modifiers(C.load<uint16>(address, 32 as uint)),
+        timestamp:timestamp
+    )
+    if kind == 0x300 { return Events.Event.key_pressed(key) }
+    return Events.Event.key_released(key)
+}
+
+func mouse_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    if kind == 0x404 || kind == 0x405 {
+        let event = Events.MouseDeviceEvent(mouse:Pointer.MouseId(value:C.load<uint32>(address, 16 as uint)), timestamp:timestamp)
+        if kind == 0x404 { return Events.Event.mouse_added(event) }
+        return Events.Event.mouse_removed(event)
+    }
+    let window = Window.Id(value:C.load<uint32>(address, 16 as uint))
+    let mouse = Pointer.MouseId(value:C.load<uint32>(address, 20 as uint))
+    if kind == 0x400 { return Events.Event.mouse_moved(Events.MouseMotionEvent(
+        window:window, mouse:mouse, buttons:C.load<uint32>(address, 24 as uint),
+        position:Math.Vec2(load_float(address, 28), load_float(address, 32)),
+        delta:Math.Vec2(load_float(address, 36), load_float(address, 40)), relative:relative_mouse_source(mouse), timestamp:timestamp
+    )) }
+    if kind == 0x403 { return Events.Event.mouse_wheel(Events.MouseWheelEvent(
+        window:window, mouse:mouse,
+        delta:Math.Vec2(load_float(address, 24), load_float(address, 28)),
+        integer_delta:Math.Vec2(C.load<int32>(address, 44 as uint) as float, C.load<int32>(address, 48 as uint) as float),
+        position:Math.Vec2(load_float(address, 36), load_float(address, 40)),
+        flipped:C.load<int32>(address, 32 as uint) == 1, timestamp:timestamp
+    )) }
+    let button = Events.MouseButtonEvent(
+        window:window, mouse:mouse, button:mouse_button(C.load<uint8>(address, 24 as uint)),
+        down:kind == 0x401, clicks:C.load<uint8>(address, 26 as uint),
+        position:Math.Vec2(load_float(address, 28), load_float(address, 32)), timestamp:timestamp
+    )
+    if kind == 0x401 { return Events.Event.mouse_button_pressed(button) }
+    return Events.Event.mouse_button_released(button)
+}
+
+func joystick_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let id = Events.JoystickId(value:C.load<uint32>(address, 16 as uint))
+    if kind == 0x600 { return Events.Event.joystick_axis_moved(Events.JoystickAxisEvent(joystick:id, axis:C.load<uint8>(address, 20 as uint), value:normalize_axis(C.load<int16>(address, 24 as uint)), timestamp:timestamp)) }
+    if kind == 0x601 { return Events.Event.joystick_ball_moved(Events.JoystickBallEvent(joystick:id, ball:C.load<uint8>(address, 20 as uint), delta:Math.Vec2(C.load<int16>(address, 24 as uint) as float, C.load<int16>(address, 26 as uint) as float), timestamp:timestamp)) }
+    if kind == 0x602 { return Events.Event.joystick_hat_moved(Events.JoystickHatEvent(joystick:id, hat:C.load<uint8>(address, 20 as uint), value:hat(C.load<uint8>(address, 21 as uint)), timestamp:timestamp)) }
+    if kind == 0x603 || kind == 0x604 {
+        let event = Events.JoystickButtonEvent(joystick:id, button:C.load<uint8>(address, 20 as uint), down:kind == 0x603, timestamp:timestamp)
+        if kind == 0x603 { return Events.Event.joystick_button_pressed(event) }
+        return Events.Event.joystick_button_released(event)
+    }
+    let device = Events.JoystickDeviceEvent(joystick:id, timestamp:timestamp)
+    if kind == 0x605 { return Events.Event.joystick_added(device) }
+    if kind == 0x606 { return Events.Event.joystick_removed(device) }
+    if kind == 0x607 { return Events.Event.joystick_battery_updated(Events.JoystickBatteryEvent(joystick:id, state:power_state(C.load<int32>(address, 20 as uint)), percent:C.load<int32>(address, 24 as uint) as int, timestamp:timestamp)) }
+    return Events.Event.joystick_update_complete(device)
+}
+
+func gamepad_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let id = Events.GamepadId(value:C.load<uint32>(address, 16 as uint))
+    if kind == 0x650 { return Events.Event.gamepad_axis_moved(Events.GamepadAxisEvent(gamepad:id, axis:gamepad_axis(C.load<uint8>(address, 20 as uint)), value:normalize_axis(C.load<int16>(address, 24 as uint)), timestamp:timestamp)) }
+    if kind == 0x651 || kind == 0x652 {
+        let event = Events.GamepadButtonEvent(gamepad:id, button:gamepad_button(C.load<uint8>(address, 20 as uint)), down:kind == 0x651, timestamp:timestamp)
+        if kind == 0x651 { return Events.Event.gamepad_button_pressed(event) }
+        return Events.Event.gamepad_button_released(event)
+    }
+    let device = Events.GamepadDeviceEvent(gamepad:id, timestamp:timestamp)
+    if kind == 0x653 { return Events.Event.gamepad_added(device) }
+    if kind == 0x654 { return Events.Event.gamepad_removed(device) }
+    if kind == 0x655 { return Events.Event.gamepad_remapped(device) }
+    if kind >= 0x656 && kind <= 0x658 {
+        let touch = Events.GamepadTouchEvent(gamepad:id, touchpad:C.load<int32>(address, 20 as uint) as int, finger:C.load<int32>(address, 24 as uint) as int, position:Math.Vec2(load_float(address, 28), load_float(address, 32)), pressure:load_float(address, 36), timestamp:timestamp)
+        if kind == 0x656 { return Events.Event.gamepad_touchpad_pressed(touch) }
+        if kind == 0x657 { return Events.Event.gamepad_touchpad_moved(touch) }
+        return Events.Event.gamepad_touchpad_released(touch)
+    }
+    if kind == 0x659 { return Events.Event.gamepad_sensor_updated(Events.GamepadSensorEvent(gamepad:id, sensor:sensor_type(C.load<int32>(address, 20 as uint)), values:float_values(address, 24, 3), sensor_timestamp:Events.Timestamp(nanoseconds:C.load<uint>(address, 40 as uint)), timestamp:timestamp)) }
+    if kind == 0x65a { return Events.Event.gamepad_update_complete(device) }
+    return Events.Event.gamepad_steam_handle_updated(device)
+}
+
+func touch_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.TouchEvent(
+        touch:Events.TouchId(value:C.load<uint>(address, 16 as uint)), finger:Events.FingerId(value:C.load<uint>(address, 24 as uint)),
+        window:Window.Id(value:C.load<uint32>(address, 52 as uint)),
+        position:Math.Vec2(load_float(address, 32), load_float(address, 36)),
+        delta:Math.Vec2(load_float(address, 40), load_float(address, 44)), pressure:load_float(address, 48), timestamp:timestamp
+    )
+    if kind == 0x700 { return Events.Event.finger_pressed(event) }
+    if kind == 0x701 { return Events.Event.finger_released(event) }
+    if kind == 0x702 { return Events.Event.finger_moved(event) }
+    return Events.Event.finger_canceled(event)
+}
+
+func pinch_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.PinchEvent(window:Window.Id(value:C.load<uint32>(address, 20 as uint)), scale:load_float(address, 16), timestamp:timestamp)
+    if kind == 0x710 { return Events.Event.pinch_began(event) }
+    if kind == 0x711 { return Events.Event.pinch_updated(event) }
+    return Events.Event.pinch_ended(event)
+}
+
+func clipboard_event(address:uint, timestamp:Events.Timestamp) Events.Event {
+    return Events.Event.clipboard_updated(Events.ClipboardEvent(
+        owned:C.load<uint8>(address, 16 as uint) != 0,
+        mime_types:copy_text_array(C.load<uint>(address, 24 as uint), C.load<int32>(address, 20 as uint) as int),
+        timestamp:timestamp
+    ))
+}
+
+func drop_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.DropEvent(
+        window:Window.Id(value:C.load<uint32>(address, 16 as uint)),
+        position:Math.Vec2(load_float(address, 20), load_float(address, 24)),
+        source:copy_text(C.load<uint>(address, 32 as uint)), data:copy_text(C.load<uint>(address, 40 as uint)), timestamp:timestamp
+    )
+    if kind == 0x1000 { return Events.Event.file_dropped(event) }
+    if kind == 0x1001 { return Events.Event.text_dropped(event) }
+    if kind == 0x1002 { return Events.Event.drop_began(event) }
+    if kind == 0x1003 { return Events.Event.drop_completed(event) }
+    return Events.Event.drop_position(event)
+}
+
+func audio_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.AudioDeviceEvent(device:Events.AudioDeviceId(value:C.load<uint32>(address, 16 as uint)), recording:C.load<uint8>(address, 20 as uint) != 0, timestamp:timestamp)
+    if kind == 0x1100 { return Events.Event.audio_device_added(event) }
+    if kind == 0x1101 { return Events.Event.audio_device_removed(event) }
+    return Events.Event.audio_device_format_changed(event)
+}
+
+func sensor_event(address:uint, timestamp:Events.Timestamp) Events.Event {
+    let id = C.load<uint32>(address, 16 as uint)
+    return Events.Event.sensor_updated(Events.SensorEvent(sensor:Events.SensorId(value:id), kind:sensor_type(sdl_get_sensor_type(id)), values:float_values(address, 20, 6), sensor_timestamp:Events.Timestamp(nanoseconds:C.load<uint>(address, 48 as uint)), timestamp:timestamp))
+}
+
+func pen_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let window = Window.Id(value:C.load<uint32>(address, 16 as uint))
+    let pen = Events.PenId(value:C.load<uint32>(address, 20 as uint))
+    if kind == 0x1300 || kind == 0x1301 {
+        let proximity = Events.PenProximityEvent(pen:pen, window:window, timestamp:timestamp)
+        if kind == 0x1300 { return Events.Event.pen_entered(proximity) }
+        return Events.Event.pen_left(proximity)
+    }
+    let state = C.load<uint32>(address, 24 as uint)
+    let position = Math.Vec2(load_float(address, 28), load_float(address, 32))
+    let plain = Events.PenEvent(pen:pen, window:window, state:state, position:position, timestamp:timestamp)
+    if kind == 0x1302 || kind == 0x1303 {
+        let touch = Events.PenTouchEvent(pen:pen, window:window, state:state, position:position, eraser:C.load<uint8>(address, 36 as uint) != 0, down:kind == 0x1302, timestamp:timestamp)
+        if kind == 0x1302 { return Events.Event.pen_pressed(touch) }
+        return Events.Event.pen_released(touch)
+    }
+    if kind == 0x1304 || kind == 0x1305 {
+        let button = Events.PenButtonEvent(pen:pen, window:window, state:state, position:position, button:C.load<uint8>(address, 36 as uint), down:kind == 0x1304, timestamp:timestamp)
+        if kind == 0x1304 { return Events.Event.pen_button_pressed(button) }
+        return Events.Event.pen_button_released(button)
+    }
+    if kind == 0x1306 { return Events.Event.pen_moved(plain) }
+    return Events.Event.pen_axis_changed(Events.PenAxisEvent(pen:pen, window:window, state:state, position:position, axis:pen_axis(C.load<int32>(address, 36 as uint)), value:load_float(address, 40), timestamp:timestamp))
+}
+
+func camera_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.CameraEvent(camera:Events.CameraId(value:C.load<uint32>(address, 16 as uint)), timestamp:timestamp)
+    if kind == 0x1400 { return Events.Event.camera_device_added(event) }
+    if kind == 0x1401 { return Events.Event.camera_device_removed(event) }
+    if kind == 0x1402 { return Events.Event.camera_device_approved(event) }
+    return Events.Event.camera_device_denied(event)
+}
+
+func render_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let event = Events.RenderEvent(window:Window.Id(value:C.load<uint32>(address, 16 as uint)), timestamp:timestamp)
+    if kind == 0x2000 { return Events.Event.render_targets_reset(event) }
+    if kind == 0x2001 { return Events.Event.render_device_reset(event) }
+    return Events.Event.render_device_lost(event)
+}
+
+func custom_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
+    let value = C.load<uint32>(address, 16 as uint)
+    var window:Window.Id? = null
+    if value != 0 { window = Window.Id(value:value) }
+    return Events.Event.custom(Events.CustomEvent(kind:kind, window:window, code:C.load<int32>(address, 20 as uint), timestamp:timestamp))
+}
+
+func display_orientation(value:int32) Display.Orientation {
+    if value == 1 { return Display.Orientation.landscape }
+    if value == 2 { return Display.Orientation.landscape_flipped }
+    if value == 3 { return Display.Orientation.portrait }
+    if value == 4 { return Display.Orientation.portrait_flipped }
+    return Display.Orientation.unknown
+}
+
+func system_theme(value:int32) Events.SystemTheme {
+    if value == 1 { return Events.SystemTheme.light }
+    if value == 2 { return Events.SystemTheme.dark }
+    return Events.SystemTheme.unknown
+}
+
+func load_float(address:uint, offset:int) float { return C.load<float32>(address, offset as uint) as float }
+
+func float_values(address:uint, offset:int, count:int) float[] {
+    var result:float[] = []
+    var index = 0
+    while index < count { result.append(load_float(address, offset + index * 4)); index++ }
+    return result
+}
+
+func normalize_axis(value:int16) float {
+    if value < 0 { return (value as float) / 32768.0 }
+    return (value as float) / 32767.0
+}
+
+func relative_mouse_source(mouse:Pointer.MouseId) bool {
+    return mouse.value != 0 && mouse.value < 0xffff_fffe
+}
+
+func hat(value:uint8) Events.Hat {
+    if value == 0 { return Events.Hat.centered }
+    if value == 1 { return Events.Hat.up }
+    if value == 2 { return Events.Hat.right }
+    if value == 4 { return Events.Hat.down }
+    if value == 8 { return Events.Hat.left }
+    if value == 3 { return Events.Hat.up_right }
+    if value == 6 { return Events.Hat.down_right }
+    if value == 12 { return Events.Hat.down_left }
+    if value == 9 { return Events.Hat.up_left }
+    return Events.Hat.unknown(value)
+}
+
+func gamepad_axis(value:uint8) Events.GamepadAxis {
+    if value == 0 { return Events.GamepadAxis.left_x }
+    if value == 1 { return Events.GamepadAxis.left_y }
+    if value == 2 { return Events.GamepadAxis.right_x }
+    if value == 3 { return Events.GamepadAxis.right_y }
+    if value == 4 { return Events.GamepadAxis.left_trigger }
+    if value == 5 { return Events.GamepadAxis.right_trigger }
+    return Events.GamepadAxis.unknown(value)
+}
+
+func gamepad_button(value:uint8) Events.GamepadButton {
+    if value == 0 { return Events.GamepadButton.south }
+    if value == 1 { return Events.GamepadButton.east }
+    if value == 2 { return Events.GamepadButton.west }
+    if value == 3 { return Events.GamepadButton.north }
+    if value == 4 { return Events.GamepadButton.back }
+    if value == 5 { return Events.GamepadButton.guide }
+    if value == 6 { return Events.GamepadButton.start }
+    if value == 7 { return Events.GamepadButton.left_stick }
+    if value == 8 { return Events.GamepadButton.right_stick }
+    if value == 9 { return Events.GamepadButton.left_shoulder }
+    if value == 10 { return Events.GamepadButton.right_shoulder }
+    if value == 11 { return Events.GamepadButton.dpad_up }
+    if value == 12 { return Events.GamepadButton.dpad_down }
+    if value == 13 { return Events.GamepadButton.dpad_left }
+    if value == 14 { return Events.GamepadButton.dpad_right }
+    if value == 15 { return Events.GamepadButton.misc1 }
+    if value == 16 { return Events.GamepadButton.right_paddle1 }
+    if value == 17 { return Events.GamepadButton.left_paddle1 }
+    if value == 18 { return Events.GamepadButton.right_paddle2 }
+    if value == 19 { return Events.GamepadButton.left_paddle2 }
+    if value == 20 { return Events.GamepadButton.touchpad }
+    if value == 21 { return Events.GamepadButton.misc2 }
+    if value == 22 { return Events.GamepadButton.misc3 }
+    if value == 23 { return Events.GamepadButton.misc4 }
+    if value == 24 { return Events.GamepadButton.misc5 }
+    if value == 25 { return Events.GamepadButton.misc6 }
+    return Events.GamepadButton.unknown(value)
+}
+
+func pen_axis(value:int32) Events.PenAxis {
+    if value == 0 { return Events.PenAxis.pressure }
+    if value == 1 { return Events.PenAxis.tilt_x }
+    if value == 2 { return Events.PenAxis.tilt_y }
+    if value == 3 { return Events.PenAxis.distance }
+    if value == 4 { return Events.PenAxis.rotation }
+    if value == 5 { return Events.PenAxis.slider }
+    if value == 6 { return Events.PenAxis.tangential_pressure }
+    return Events.PenAxis.unknown(value as uint32)
+}
+
+func sensor_type(value:int32) Events.SensorType {
+    if value == 1 { return Events.SensorType.accelerometer }
+    if value == 2 { return Events.SensorType.gyroscope }
+    if value == 3 { return Events.SensorType.accelerometer_left }
+    if value == 4 { return Events.SensorType.gyroscope_left }
+    if value == 5 { return Events.SensorType.accelerometer_right }
+    if value == 6 { return Events.SensorType.gyroscope_right }
+    return Events.SensorType.unknown(value as int)
+}
+
+func power_state(value:int32) Events.PowerState {
+    if value == -1 { return Events.PowerState.error }
+    if value == 0 { return Events.PowerState.unknown }
+    if value == 1 { return Events.PowerState.on_battery }
+    if value == 2 { return Events.PowerState.no_battery }
+    if value == 3 { return Events.PowerState.charging }
+    if value == 4 { return Events.PowerState.charged }
+    return Events.PowerState.unknown_value(value as int)
+}
+
+func joystick_kind(value:int32) Events.JoystickKind {
+    if value == 1 { return Events.JoystickKind.gamepad }
+    if value == 2 { return Events.JoystickKind.wheel }
+    if value == 3 { return Events.JoystickKind.arcade_stick }
+    if value == 4 { return Events.JoystickKind.flight_stick }
+    if value == 5 { return Events.JoystickKind.dance_pad }
+    if value == 6 { return Events.JoystickKind.guitar }
+    if value == 7 { return Events.JoystickKind.drum_kit }
+    if value == 8 { return Events.JoystickKind.arcade_pad }
+    if value == 9 { return Events.JoystickKind.throttle }
+    return Events.JoystickKind.unknown(value as int)
+}
+
+func gamepad_kind(value:int32) Events.GamepadKind {
+    if value == 1 { return Events.GamepadKind.standard }
+    if value == 2 { return Events.GamepadKind.xbox_360 }
+    if value == 3 { return Events.GamepadKind.xbox_one }
+    if value == 4 { return Events.GamepadKind.playstation_3 }
+    if value == 5 { return Events.GamepadKind.playstation_4 }
+    if value == 6 { return Events.GamepadKind.playstation_5 }
+    if value == 7 { return Events.GamepadKind.switch_pro }
+    if value == 8 { return Events.GamepadKind.joycon_left }
+    if value == 9 { return Events.GamepadKind.joycon_right }
+    if value == 10 { return Events.GamepadKind.joycon_pair }
+    if value == 11 { return Events.GamepadKind.gamecube }
+    return Events.GamepadKind.unknown(value as int)
+}
+
+func copy_text(address:uint) str {
+    if address == 0 as uint { return "" }
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 1048576 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    panic("GFX.Input received an invalid platform string")
+}
+
+func copy_text_array(address:uint, count:int) str[] {
+    var result:str[] = []
+    if address == 0 as uint || count <= 0 { return result }
+    var index = 0
+    while index < count {
+        result.append(copy_text(C.load<uint>(address, (index as uint) * 8)))
+        index++
+    }
+    return result
+}
+
+func mouse_button(value:uint8) Pointer.MouseButton {
+    if value == 1 { return Pointer.MouseButton.left }
+    if value == 2 { return Pointer.MouseButton.middle }
+    if value == 3 { return Pointer.MouseButton.right }
+    if value == 4 { return Pointer.MouseButton.x1 }
+    if value == 5 { return Pointer.MouseButton.x2 }
+    return Pointer.MouseButton.other(value)
+}
+
+func modifiers(value:uint16) Keyboard.Modifiers {
+    return Keyboard.Modifiers(
+        shift:(value & 0x0003) != 0, control:(value & 0x00c0) != 0,
+        alt:(value & 0x0300) != 0, system:(value & 0x0c00) != 0,
+        left_shift:(value & 0x0001) != 0, right_shift:(value & 0x0002) != 0,
+        level5:(value & 0x0004) != 0,
+        left_control:(value & 0x0040) != 0, right_control:(value & 0x0080) != 0,
+        left_alt:(value & 0x0100) != 0, right_alt:(value & 0x0200) != 0,
+        left_system:(value & 0x0400) != 0, right_system:(value & 0x0800) != 0,
+        num_lock:(value & 0x1000) != 0, caps_lock:(value & 0x2000) != 0,
+        mode:(value & 0x4000) != 0, scroll_lock:(value & 0x8000) != 0
+    )
+}
+
+func key_from_scancode(value:int32) Keyboard.Key {
+    if value == 4 { return Keyboard.Key.a }
+    if value == 5 { return Keyboard.Key.b }
+    if value == 6 { return Keyboard.Key.c }
+    if value == 7 { return Keyboard.Key.d }
+    if value == 8 { return Keyboard.Key.e }
+    if value == 9 { return Keyboard.Key.f }
+    if value == 10 { return Keyboard.Key.g }
+    if value == 11 { return Keyboard.Key.h }
+    if value == 12 { return Keyboard.Key.i }
+    if value == 13 { return Keyboard.Key.j }
+    if value == 14 { return Keyboard.Key.k }
+    if value == 15 { return Keyboard.Key.l }
+    if value == 16 { return Keyboard.Key.m }
+    if value == 17 { return Keyboard.Key.n }
+    if value == 18 { return Keyboard.Key.o }
+    if value == 19 { return Keyboard.Key.p }
+    if value == 20 { return Keyboard.Key.q }
+    if value == 21 { return Keyboard.Key.r }
+    if value == 22 { return Keyboard.Key.s }
+    if value == 23 { return Keyboard.Key.t }
+    if value == 24 { return Keyboard.Key.u }
+    if value == 25 { return Keyboard.Key.v }
+    if value == 26 { return Keyboard.Key.w }
+    if value == 27 { return Keyboard.Key.x }
+    if value == 28 { return Keyboard.Key.y }
+    if value == 29 { return Keyboard.Key.z }
+    if value == 30 { return Keyboard.Key.num1 }
+    if value == 31 { return Keyboard.Key.num2 }
+    if value == 32 { return Keyboard.Key.num3 }
+    if value == 33 { return Keyboard.Key.num4 }
+    if value == 34 { return Keyboard.Key.num5 }
+    if value == 35 { return Keyboard.Key.num6 }
+    if value == 36 { return Keyboard.Key.num7 }
+    if value == 37 { return Keyboard.Key.num8 }
+    if value == 38 { return Keyboard.Key.num9 }
+    if value == 39 { return Keyboard.Key.num0 }
+    if value == 40 { return Keyboard.Key.enter }
+    if value == 41 { return Keyboard.Key.escape }
+    if value == 42 { return Keyboard.Key.backspace }
+    if value == 43 { return Keyboard.Key.tab }
+    if value == 44 { return Keyboard.Key.space }
+    if value == 45 { return Keyboard.Key.minus }
+    if value == 46 { return Keyboard.Key.equals }
+    if value == 47 { return Keyboard.Key.left_bracket }
+    if value == 48 { return Keyboard.Key.right_bracket }
+    if value == 49 { return Keyboard.Key.backslash }
+    if value == 50 { return Keyboard.Key.non_us_hash }
+    if value == 51 { return Keyboard.Key.semicolon }
+    if value == 52 { return Keyboard.Key.apostrophe }
+    if value == 53 { return Keyboard.Key.grave }
+    if value == 54 { return Keyboard.Key.comma }
+    if value == 55 { return Keyboard.Key.period }
+    if value == 56 { return Keyboard.Key.slash }
+    if value == 57 { return Keyboard.Key.caps_lock }
+    if value == 58 { return Keyboard.Key.f1 }
+    if value == 59 { return Keyboard.Key.f2 }
+    if value == 60 { return Keyboard.Key.f3 }
+    if value == 61 { return Keyboard.Key.f4 }
+    if value == 62 { return Keyboard.Key.f5 }
+    if value == 63 { return Keyboard.Key.f6 }
+    if value == 64 { return Keyboard.Key.f7 }
+    if value == 65 { return Keyboard.Key.f8 }
+    if value == 66 { return Keyboard.Key.f9 }
+    if value == 67 { return Keyboard.Key.f10 }
+    if value == 68 { return Keyboard.Key.f11 }
+    if value == 69 { return Keyboard.Key.f12 }
+    if value == 70 { return Keyboard.Key.print_screen }
+    if value == 71 { return Keyboard.Key.scroll_lock }
+    if value == 72 { return Keyboard.Key.pause }
+    if value == 73 { return Keyboard.Key.insert }
+    if value == 74 { return Keyboard.Key.home }
+    if value == 75 { return Keyboard.Key.page_up }
+    if value == 76 { return Keyboard.Key.delete }
+    if value == 77 { return Keyboard.Key.end }
+    if value == 78 { return Keyboard.Key.page_down }
+    if value == 79 { return Keyboard.Key.right }
+    if value == 80 { return Keyboard.Key.left }
+    if value == 81 { return Keyboard.Key.down }
+    if value == 82 { return Keyboard.Key.up }
+    if value == 83 { return Keyboard.Key.num_lock_clear }
+    if value == 84 { return Keyboard.Key.keypad_divide }
+    if value == 85 { return Keyboard.Key.keypad_multiply }
+    if value == 86 { return Keyboard.Key.keypad_minus }
+    if value == 87 { return Keyboard.Key.keypad_plus }
+    if value == 88 { return Keyboard.Key.keypad_enter }
+    if value == 89 { return Keyboard.Key.keypad_1 }
+    if value == 90 { return Keyboard.Key.keypad_2 }
+    if value == 91 { return Keyboard.Key.keypad_3 }
+    if value == 92 { return Keyboard.Key.keypad_4 }
+    if value == 93 { return Keyboard.Key.keypad_5 }
+    if value == 94 { return Keyboard.Key.keypad_6 }
+    if value == 95 { return Keyboard.Key.keypad_7 }
+    if value == 96 { return Keyboard.Key.keypad_8 }
+    if value == 97 { return Keyboard.Key.keypad_9 }
+    if value == 98 { return Keyboard.Key.keypad_0 }
+    if value == 99 { return Keyboard.Key.keypad_period }
+    if value == 100 { return Keyboard.Key.non_us_backslash }
+    if value == 101 { return Keyboard.Key.application }
+    if value == 102 { return Keyboard.Key.power }
+    if value == 103 { return Keyboard.Key.keypad_equals }
+    if value == 104 { return Keyboard.Key.f13 }
+    if value == 105 { return Keyboard.Key.f14 }
+    if value == 106 { return Keyboard.Key.f15 }
+    if value == 107 { return Keyboard.Key.f16 }
+    if value == 108 { return Keyboard.Key.f17 }
+    if value == 109 { return Keyboard.Key.f18 }
+    if value == 110 { return Keyboard.Key.f19 }
+    if value == 111 { return Keyboard.Key.f20 }
+    if value == 112 { return Keyboard.Key.f21 }
+    if value == 113 { return Keyboard.Key.f22 }
+    if value == 114 { return Keyboard.Key.f23 }
+    if value == 115 { return Keyboard.Key.f24 }
+    if value == 116 { return Keyboard.Key.execute }
+    if value == 117 { return Keyboard.Key.help }
+    if value == 118 { return Keyboard.Key.menu }
+    if value == 119 { return Keyboard.Key.select }
+    if value == 120 { return Keyboard.Key.stop }
+    if value == 121 { return Keyboard.Key.again }
+    if value == 122 { return Keyboard.Key.undo }
+    if value == 123 { return Keyboard.Key.cut }
+    if value == 124 { return Keyboard.Key.copy_key }
+    if value == 125 { return Keyboard.Key.paste }
+    if value == 126 { return Keyboard.Key.find }
+    if value == 127 { return Keyboard.Key.mute }
+    if value == 128 { return Keyboard.Key.volume_up }
+    if value == 129 { return Keyboard.Key.volume_down }
+    if value == 133 { return Keyboard.Key.keypad_comma }
+    if value == 134 { return Keyboard.Key.keypad_equalsas400 }
+    if value == 135 { return Keyboard.Key.international1 }
+    if value == 136 { return Keyboard.Key.international2 }
+    if value == 137 { return Keyboard.Key.international3 }
+    if value == 138 { return Keyboard.Key.international4 }
+    if value == 139 { return Keyboard.Key.international5 }
+    if value == 140 { return Keyboard.Key.international6 }
+    if value == 141 { return Keyboard.Key.international7 }
+    if value == 142 { return Keyboard.Key.international8 }
+    if value == 143 { return Keyboard.Key.international9 }
+    if value == 144 { return Keyboard.Key.lang1 }
+    if value == 145 { return Keyboard.Key.lang2 }
+    if value == 146 { return Keyboard.Key.lang3 }
+    if value == 147 { return Keyboard.Key.lang4 }
+    if value == 148 { return Keyboard.Key.lang5 }
+    if value == 149 { return Keyboard.Key.lang6 }
+    if value == 150 { return Keyboard.Key.lang7 }
+    if value == 151 { return Keyboard.Key.lang8 }
+    if value == 152 { return Keyboard.Key.lang9 }
+    if value == 153 { return Keyboard.Key.alternate_erase }
+    if value == 154 { return Keyboard.Key.system_request }
+    if value == 155 { return Keyboard.Key.cancel }
+    if value == 156 { return Keyboard.Key.clear }
+    if value == 157 { return Keyboard.Key.prior }
+    if value == 158 { return Keyboard.Key.return2 }
+    if value == 159 { return Keyboard.Key.separator }
+    if value == 160 { return Keyboard.Key.out }
+    if value == 161 { return Keyboard.Key.oper }
+    if value == 162 { return Keyboard.Key.clear_again }
+    if value == 163 { return Keyboard.Key.crsel }
+    if value == 164 { return Keyboard.Key.exsel }
+    if value == 176 { return Keyboard.Key.keypad_00 }
+    if value == 177 { return Keyboard.Key.keypad_000 }
+    if value == 178 { return Keyboard.Key.thousands_separator }
+    if value == 179 { return Keyboard.Key.decimal_separator }
+    if value == 180 { return Keyboard.Key.currency_unit }
+    if value == 181 { return Keyboard.Key.currency_subunit }
+    if value == 182 { return Keyboard.Key.keypad_leftparen }
+    if value == 183 { return Keyboard.Key.keypad_rightparen }
+    if value == 184 { return Keyboard.Key.keypad_leftbrace }
+    if value == 185 { return Keyboard.Key.keypad_rightbrace }
+    if value == 186 { return Keyboard.Key.keypad_tab }
+    if value == 187 { return Keyboard.Key.keypad_backspace }
+    if value == 188 { return Keyboard.Key.keypad_a }
+    if value == 189 { return Keyboard.Key.keypad_b }
+    if value == 190 { return Keyboard.Key.keypad_c }
+    if value == 191 { return Keyboard.Key.keypad_d }
+    if value == 192 { return Keyboard.Key.keypad_e }
+    if value == 193 { return Keyboard.Key.keypad_f }
+    if value == 194 { return Keyboard.Key.keypad_xor }
+    if value == 195 { return Keyboard.Key.keypad_power }
+    if value == 196 { return Keyboard.Key.keypad_percent }
+    if value == 197 { return Keyboard.Key.keypad_less }
+    if value == 198 { return Keyboard.Key.keypad_greater }
+    if value == 199 { return Keyboard.Key.keypad_ampersand }
+    if value == 200 { return Keyboard.Key.keypad_dblampersand }
+    if value == 201 { return Keyboard.Key.keypad_verticalbar }
+    if value == 202 { return Keyboard.Key.keypad_dblverticalbar }
+    if value == 203 { return Keyboard.Key.keypad_colon }
+    if value == 204 { return Keyboard.Key.keypad_hash }
+    if value == 205 { return Keyboard.Key.keypad_space }
+    if value == 206 { return Keyboard.Key.keypad_at }
+    if value == 207 { return Keyboard.Key.keypad_exclam }
+    if value == 208 { return Keyboard.Key.keypad_memstore }
+    if value == 209 { return Keyboard.Key.keypad_memrecall }
+    if value == 210 { return Keyboard.Key.keypad_memclear }
+    if value == 211 { return Keyboard.Key.keypad_memadd }
+    if value == 212 { return Keyboard.Key.keypad_memsubtract }
+    if value == 213 { return Keyboard.Key.keypad_memmultiply }
+    if value == 214 { return Keyboard.Key.keypad_memdivide }
+    if value == 215 { return Keyboard.Key.keypad_plusminus }
+    if value == 216 { return Keyboard.Key.keypad_clear }
+    if value == 217 { return Keyboard.Key.keypad_clearentry }
+    if value == 218 { return Keyboard.Key.keypad_binary }
+    if value == 219 { return Keyboard.Key.keypad_octal }
+    if value == 220 { return Keyboard.Key.keypad_decimal }
+    if value == 221 { return Keyboard.Key.keypad_hexadecimal }
+    if value == 224 { return Keyboard.Key.left_control }
+    if value == 225 { return Keyboard.Key.left_shift }
+    if value == 226 { return Keyboard.Key.left_alt }
+    if value == 227 { return Keyboard.Key.left_system }
+    if value == 228 { return Keyboard.Key.right_control }
+    if value == 229 { return Keyboard.Key.right_shift }
+    if value == 230 { return Keyboard.Key.right_alt }
+    if value == 231 { return Keyboard.Key.right_system }
+    if value == 257 { return Keyboard.Key.mode }
+    if value == 258 { return Keyboard.Key.sleep }
+    if value == 259 { return Keyboard.Key.wake }
+    if value == 260 { return Keyboard.Key.channel_increment }
+    if value == 261 { return Keyboard.Key.channel_decrement }
+    if value == 262 { return Keyboard.Key.media_play }
+    if value == 263 { return Keyboard.Key.media_pause }
+    if value == 264 { return Keyboard.Key.media_record }
+    if value == 265 { return Keyboard.Key.media_fast_forward }
+    if value == 266 { return Keyboard.Key.media_rewind }
+    if value == 267 { return Keyboard.Key.media_next_track }
+    if value == 268 { return Keyboard.Key.media_previous_track }
+    if value == 269 { return Keyboard.Key.media_stop }
+    if value == 270 { return Keyboard.Key.media_eject }
+    if value == 271 { return Keyboard.Key.media_play_pause }
+    if value == 272 { return Keyboard.Key.media_select }
+    if value == 273 { return Keyboard.Key.ac_new }
+    if value == 274 { return Keyboard.Key.ac_open }
+    if value == 275 { return Keyboard.Key.ac_close }
+    if value == 276 { return Keyboard.Key.ac_exit }
+    if value == 277 { return Keyboard.Key.ac_save }
+    if value == 278 { return Keyboard.Key.ac_print }
+    if value == 279 { return Keyboard.Key.ac_properties }
+    if value == 280 { return Keyboard.Key.ac_search }
+    if value == 281 { return Keyboard.Key.ac_home }
+    if value == 282 { return Keyboard.Key.ac_back }
+    if value == 283 { return Keyboard.Key.ac_forward }
+    if value == 284 { return Keyboard.Key.ac_stop }
+    if value == 285 { return Keyboard.Key.ac_refresh }
+    if value == 286 { return Keyboard.Key.ac_bookmarks }
+    if value == 287 { return Keyboard.Key.soft_left }
+    if value == 288 { return Keyboard.Key.soft_right }
+    if value == 289 { return Keyboard.Key.call }
+    if value == 290 { return Keyboard.Key.end_call }
+    if value >= 4 && value <= 29 { return letter_key(value) }
+    if value >= 30 && value <= 38 { return number_key(value) }
+    if value == 39 { return Keyboard.Key.num0 }
+    if value == 40 { return Keyboard.Key.enter }
+    if value == 41 { return Keyboard.Key.escape }
+    if value == 42 { return Keyboard.Key.backspace }
+    if value == 43 { return Keyboard.Key.tab }
+    if value == 44 { return Keyboard.Key.space }
+    if value >= 58 && value <= 69 { return function_key(value) }
+    if value == 75 { return Keyboard.Key.page_up }
+    if value == 78 { return Keyboard.Key.page_down }
+    if value == 79 { return Keyboard.Key.right }
+    if value == 80 { return Keyboard.Key.left }
+    if value == 81 { return Keyboard.Key.down }
+    if value == 82 { return Keyboard.Key.up }
+    if value == 224 { return Keyboard.Key.left_control }
+    if value == 225 { return Keyboard.Key.left_shift }
+    if value == 226 { return Keyboard.Key.left_alt }
+    if value == 228 { return Keyboard.Key.right_control }
+    if value == 229 { return Keyboard.Key.right_shift }
+    if value == 230 { return Keyboard.Key.right_alt }
+    return Keyboard.Key.unknown(value as uint32)
+}
+
+func letter_key(value:int32) Keyboard.Key {
+    if value == 4 { return Keyboard.Key.a }
+    if value == 5 { return Keyboard.Key.b }
+    if value == 6 { return Keyboard.Key.c }
+    if value == 7 { return Keyboard.Key.d }
+    if value == 8 { return Keyboard.Key.e }
+    if value == 9 { return Keyboard.Key.f }
+    if value == 10 { return Keyboard.Key.g }
+    if value == 11 { return Keyboard.Key.h }
+    if value == 12 { return Keyboard.Key.i }
+    if value == 13 { return Keyboard.Key.j }
+    if value == 14 { return Keyboard.Key.k }
+    if value == 15 { return Keyboard.Key.l }
+    if value == 16 { return Keyboard.Key.m }
+    if value == 17 { return Keyboard.Key.n }
+    if value == 18 { return Keyboard.Key.o }
+    if value == 19 { return Keyboard.Key.p }
+    if value == 20 { return Keyboard.Key.q }
+    if value == 21 { return Keyboard.Key.r }
+    if value == 22 { return Keyboard.Key.s }
+    if value == 23 { return Keyboard.Key.t }
+    if value == 24 { return Keyboard.Key.u }
+    if value == 25 { return Keyboard.Key.v }
+    if value == 26 { return Keyboard.Key.w }
+    if value == 27 { return Keyboard.Key.x }
+    if value == 28 { return Keyboard.Key.y }
+    return Keyboard.Key.z
+}
+
+func number_key(value:int32) Keyboard.Key {
+    if value == 30 { return Keyboard.Key.num1 }
+    if value == 31 { return Keyboard.Key.num2 }
+    if value == 32 { return Keyboard.Key.num3 }
+    if value == 33 { return Keyboard.Key.num4 }
+    if value == 34 { return Keyboard.Key.num5 }
+    if value == 35 { return Keyboard.Key.num6 }
+    if value == 36 { return Keyboard.Key.num7 }
+    if value == 37 { return Keyboard.Key.num8 }
+    return Keyboard.Key.num9
+}
+
+func function_key(value:int32) Keyboard.Key {
+    if value == 58 { return Keyboard.Key.f1 }
+    if value == 59 { return Keyboard.Key.f2 }
+    if value == 60 { return Keyboard.Key.f3 }
+    if value == 61 { return Keyboard.Key.f4 }
+    if value == 62 { return Keyboard.Key.f5 }
+    if value == 63 { return Keyboard.Key.f6 }
+    if value == 64 { return Keyboard.Key.f7 }
+    if value == 65 { return Keyboard.Key.f8 }
+    if value == 66 { return Keyboard.Key.f9 }
+    if value == 67 { return Keyboard.Key.f10 }
+    if value == 68 { return Keyboard.Key.f11 }
+    return Keyboard.Key.f12
+}
+
+let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PollEvent")
+let sdl_get_global_mouse_state = C.function<func(C.MutablePointer<float32>, C.MutablePointer<float32>) uint32>(library:Boundary.SDL3, name:"SDL_GetGlobalMouseState")
+let sdl_get_mod_state = C.function<func() uint32>(library:Boundary.SDL3, name:"SDL_GetModState")
+let sdl_get_sensor_type = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetSensorTypeForID")
+let sdl_get_keyboard_name = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetKeyboardNameForID")
+let sdl_get_mouse_name = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetMouseNameForID")
+let sdl_get_joystick_name = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetJoystickNameForID")
+let sdl_get_joystick_type = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetJoystickTypeForID")
+let sdl_get_joystick_player = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetJoystickPlayerIndexForID")
+let sdl_get_gamepad_name = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetGamepadNameForID")
+let sdl_get_gamepad_type = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetGamepadTypeForID")
+let sdl_get_system_theme = C.function<func() int32>(library:Boundary.SDL3, name:"SDL_GetSystemTheme")
+let sdl_get_keyboard_focus = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetKeyboardFocus")
+let sdl_get_mouse_focus = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetMouseFocus")
+let sdl_get_window_id = C.function<func(C.Pointer<uint8>) uint32>(library:Boundary.SDL3, name:"SDL_GetWindowID")
+let sdl_get_touch_devices = C.function<func(C.MutablePointer<int32>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetTouchDevices")
+let sdl_free = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_free")
+let sdl_add_event_watch = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_AddEventWatch")
+let sdl_remove_event_watch = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_RemoveEventWatch")
+let sdl_lock_spin = C.function<func(C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_LockSpinlock")
+let sdl_unlock_spin = C.function<func(C.MutablePointer<int32>) void>(library:Boundary.SDL3, name:"SDL_UnlockSpinlock")

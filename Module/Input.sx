@@ -1,97 +1,152 @@
 use Interop.C
 use Interop.Boundary
+use STD.Math
 use GFX.Session
 use GFX.Window
+use GFX.Input.Keyboard
+use GFX.Input.Pointer
+use GFX.Input.Events
+use GFX.Input.Native
 
-public enum Key {
-    escape; space; enter; backspace; tab
-    left_shift; right_shift; left_control; right_control; left_alt; right_alt
-    a; b; c; d; e; f; g; h; i; j; k; l; m
-    n; o; p; q; r; s; t; u; v; w; x; y; z
-    num0; num1; num2; num3; num4; num5; num6; num7; num8; num9
-    f1; f2; f3; f4; f5; f6; f7; f8; f9; f10; f11; f12
-    up; down; left; right; page_up; page_down
-}
-
-public enum MouseButton {
-    left; right; middle; x1; x2
-}
-
-public struct Modifiers {
-    let shift:bool
-    let control:bool
-    let alt:bool
-    let system:bool
-    let caps_lock:bool
-    let num_lock:bool
-}
-
-public struct KeyEvent {
-    let window:Window.Id
-    let key:Key
-    let repeated:bool
-    let modifiers:Modifiers
-    let timestamp:uint
-}
-
-public struct MouseButtonEvent {
-    let window:Window.Id
-    let button:MouseButton
-    let timestamp:uint
-}
-
-public enum Event {
-    quit
-    window_close_requested(Window.Id)
-    window_resized(Window.Id, Window.Size)
-    window_pixel_size_changed(Window.Id, Window.Size)
-    window_focus_gained(Window.Id)
-    window_focus_lost(Window.Id)
-    key_pressed(KeyEvent)
-    key_released(KeyEvent)
-    mouse_button_pressed(MouseButtonEvent)
-    mouse_button_released(MouseButtonEvent)
-}
+public use GFX.Input.Keyboard.Key as Key
+public use GFX.Input.Keyboard.Modifiers as Modifiers
+public use GFX.Input.Keyboard.KeyboardId as KeyboardId
+public use GFX.Input.Pointer.MouseButton as MouseButton
+public use GFX.Input.Pointer.MouseId as MouseId
+public use GFX.Input.Events.Event as Event
+public use GFX.Input.Events.Timestamp as Timestamp
+public use GFX.Input.Events.KeyEvent as KeyEvent
+public use GFX.Input.Events.MouseButtonEvent as MouseButtonEvent
+public use GFX.Input.Events.JoystickId as JoystickId
+public use GFX.Input.Events.GamepadId as GamepadId
+public use GFX.Input.Events.GamepadAxis as GamepadAxis
+public use GFX.Input.Events.GamepadButton as GamepadButton
+public use GFX.Input.Events.Hat as Hat
+public use GFX.Input.Events.PowerState as PowerState
+public use GFX.Input.Events.JoystickKind as JoystickKind
+public use GFX.Input.Events.GamepadKind as GamepadKind
+public use GFX.Input.Events.TouchId as TouchId
+public use GFX.Input.Events.FingerId as FingerId
+public use GFX.Input.Events.PenId as PenId
+public use GFX.Input.Events.PenAxis as PenAxis
+public use GFX.Input.Events.SensorId as SensorId
+public use GFX.Input.Events.SensorType as SensorType
 
 public class State {
     private let empty_events:Event[]
     private var frame_events:Event[]
     private var has_frame_events:bool
     private var quit_requested:bool
-    private var current_keys_low:uint
-    private var current_keys_high:uint
-    private var entered_keys_low:uint
-    private var entered_keys_high:uint
-    private var released_keys_low:uint
-    private var released_keys_high:uint
-    private var current_mouse_buttons:uint
-    private var entered_mouse_buttons:uint
-    private var released_mouse_buttons:uint
+    private var current_keys:Key[]
+    private var entered_keys:Key[]
+    private var released_keys:Key[]
+    private var current_mouse_buttons:MouseButton[]
+    private var entered_mouse_buttons:MouseButton[]
+    private var released_mouse_buttons:MouseButton[]
+    private var current_modifiers:Modifiers
+    private var keyboard_focus:Window.Id?
+    private var mouse_focus:Window.Id?
+    private var mouse_position:Math.Vec2
+    private var global_mouse_position:Math.Vec2
+    private var mouse_delta:Math.Vec2
+    private var mouse_wheel:Math.Vec2
+    private var text_input:str
+    private var text_editing:str
+    private var text_candidates:str[]
+    private var selected_candidate:int
+    private var keyboards:KeyboardId[]
+    private var mice:MouseId[]
+    private var joysticks:Events.JoystickId[]
+    private var gamepads:Events.GamepadId[]
+    private var keyboard_details:Events.KeyboardInfo[]
+    private var mouse_details:Events.MouseInfo[]
+    private var joystick_details:Events.JoystickInfo[]
+    private var gamepad_details:Events.GamepadInfo[]
+    private var joystick_axes:Events.JoystickAxisEvent[]
+    private var joystick_balls:Events.JoystickBallEvent[]
+    private var joystick_hats:Events.JoystickHatEvent[]
+    private var joystick_buttons:Events.JoystickButtonEvent[]
+    private var joystick_batteries:Events.JoystickBatteryEvent[]
+    private var gamepad_axes:Events.GamepadAxisEvent[]
+    private var gamepad_buttons:Events.GamepadButtonEvent[]
+    private var gamepad_touches:Events.GamepadTouchEvent[]
+    private var gamepad_sensors:Events.GamepadSensorEvent[]
+    private var touch_devices:Events.TouchId[]
+    private var touches:Events.TouchEvent[]
+    private var pens:Events.PenState[]
+    private var sensors:Events.SensorEvent[]
 
     internal init() {
         self.empty_events = []
         self.frame_events = []
         self.has_frame_events = false
         self.quit_requested = false
-        self.current_keys_low = 0 as uint
-        self.current_keys_high = 0 as uint
-        self.entered_keys_low = 0 as uint
-        self.entered_keys_high = 0 as uint
-        self.released_keys_low = 0 as uint
-        self.released_keys_high = 0 as uint
-        self.current_mouse_buttons = 0 as uint
-        self.entered_mouse_buttons = 0 as uint
-        self.released_mouse_buttons = 0 as uint
+        self.current_keys = []
+        self.entered_keys = []
+        self.released_keys = []
+        self.current_mouse_buttons = []
+        self.entered_mouse_buttons = []
+        self.released_mouse_buttons = []
+        self.current_modifiers = Modifiers(
+            shift:false, control:false, alt:false, system:false,
+            left_shift:false, right_shift:false, level5:false,
+            left_control:false, right_control:false, left_alt:false, right_alt:false,
+            left_system:false, right_system:false, mode:false,
+            caps_lock:false, num_lock:false, scroll_lock:false
+        )
+        self.keyboard_focus = null
+        self.mouse_focus = null
+        self.mouse_position = Math.Vec2()
+        self.global_mouse_position = Math.Vec2()
+        self.mouse_delta = Math.Vec2()
+        self.mouse_wheel = Math.Vec2()
+        self.text_input = ""
+        self.text_editing = ""
+        self.text_candidates = []
+        self.selected_candidate = -1
+        self.keyboards = []
+        self.mice = []
+        self.joysticks = []
+        self.gamepads = []
+        self.keyboard_details = []
+        self.mouse_details = []
+        self.joystick_details = []
+        self.gamepad_details = []
+        self.joystick_axes = []
+        self.joystick_balls = []
+        self.joystick_hats = []
+        self.joystick_buttons = []
+        self.joystick_batteries = []
+        self.gamepad_axes = []
+        self.gamepad_buttons = []
+        self.gamepad_touches = []
+        self.gamepad_sensors = []
+        self.touch_devices = []
+        self.touches = []
+        self.pens = []
+        self.sensors = []
     }
 
     internal func begin_frame() {
         self.has_frame_events = false
-        self.entered_keys_low = 0 as uint
-        self.entered_keys_high = 0 as uint
-        self.released_keys_low = 0 as uint
-        self.released_keys_high = 0 as uint
-        self.entered_mouse_buttons = 0 as uint
-        self.released_mouse_buttons = 0 as uint
+        self.entered_keys = []
+        self.released_keys = []
+        self.entered_mouse_buttons = []
+        self.released_mouse_buttons = []
+        self.mouse_delta = Math.Vec2()
+        self.mouse_wheel = Math.Vec2()
+        self.text_input = ""
+        self.joystick_balls = []
+        var pen_index = 0
+        while pen_index < self.pens.count() {
+            self.pens[pen_index] = clear_pen_transitions(self.pens[pen_index])
+            pen_index++
+        }
+        self.keyboard_focus = Native.keyboard_focus()
+        self.mouse_focus = Native.mouse_focus()
+        self.global_mouse_position = Native.global_mouse_position()
+        self.current_modifiers = Native.current_modifiers()
+        self.touch_devices = Native.touch_devices()
     }
 
     public func events() @Event[..] {
@@ -106,81 +161,126 @@ public class State {
     }
 
     public func is_down(key:Key) bool {
-        return has_key(self.current_keys_low, self.current_keys_high, key)
+        return contains_key(self.current_keys, key)
     }
 
     public func is_pressed(key:Key) bool {
-        return has_key(self.entered_keys_low, self.entered_keys_high, key)
+        return contains_key(self.entered_keys, key)
     }
 
     public func is_released(key:Key) bool {
-        return has_key(self.released_keys_low, self.released_keys_high, key)
+        return contains_key(self.released_keys, key)
     }
 
     public func is_down(button:MouseButton) bool {
-        return has_mouse_button(self.current_mouse_buttons, button)
+        return contains_mouse_button(self.current_mouse_buttons, button)
     }
 
     public func is_pressed(button:MouseButton) bool {
-        return has_mouse_button(self.entered_mouse_buttons, button)
+        return contains_mouse_button(self.entered_mouse_buttons, button)
     }
 
     public func is_released(button:MouseButton) bool {
-        return has_mouse_button(self.released_mouse_buttons, button)
+        return contains_mouse_button(self.released_mouse_buttons, button)
     }
 
-    internal func handle(raw:RawEvent) {
-        if raw.kind == 1 {
-            self.quit_requested = true
-            self.append(Event.quit)
-            return
-        }
+    public func modifiers() Modifiers { return self.current_modifiers }
+    public func focused_window() Window.Id? { return self.keyboard_focus }
+    public func mouse_focused_window() Window.Id? { return self.mouse_focus }
+    public func mouse_position() Math.Vec2 { return self.mouse_position }
+    public func global_mouse_position() Math.Vec2 { return self.global_mouse_position }
+    public func mouse_delta() Math.Vec2 { return self.mouse_delta }
+    public func mouse_wheel() Math.Vec2 { return self.mouse_wheel }
+    public func text_input() str { return self.text_input }
+    public func text_editing() str { return self.text_editing }
+    public func text_candidates() @str[..] { return @self.text_candidates[0:self.text_candidates.count()] }
+    public func selected_text_candidate() int { return self.selected_candidate }
+    public func keyboards() @KeyboardId[..] { return @self.keyboards[0:self.keyboards.count()] }
+    public func mice() @MouseId[..] { return @self.mice[0:self.mice.count()] }
+    public func joysticks() @Events.JoystickId[..] { return @self.joysticks[0:self.joysticks.count()] }
+    public func gamepads() @Events.GamepadId[..] { return @self.gamepads[0:self.gamepads.count()] }
+    public func keyboard_infos() @Events.KeyboardInfo[..] { return @self.keyboard_details[0:self.keyboard_details.count()] }
+    public func mouse_infos() @Events.MouseInfo[..] { return @self.mouse_details[0:self.mouse_details.count()] }
+    public func joystick_infos() @Events.JoystickInfo[..] { return @self.joystick_details[0:self.joystick_details.count()] }
+    public func gamepad_infos() @Events.GamepadInfo[..] { return @self.gamepad_details[0:self.gamepad_details.count()] }
+    public func joystick_axis(id:Events.JoystickId, axis:uint8) float { return find_joystick_axis(self.joystick_axes, id, axis) }
+    public func joystick_hat(id:Events.JoystickId, hat:uint8) Events.Hat { return find_joystick_hat(self.joystick_hats, id, hat) }
+    public func is_joystick_button_down(id:Events.JoystickId, button:uint8) bool { return find_joystick_button(self.joystick_buttons, id, button) }
+    public func is_joystick_button_pressed(id:Events.JoystickId, button:uint8) bool { return has_joystick_transition(self.frame_events, id, button, true) }
+    public func is_joystick_button_released(id:Events.JoystickId, button:uint8) bool { return has_joystick_transition(self.frame_events, id, button, false) }
+    public func joystick_trackballs() @Events.JoystickBallEvent[..] { return @self.joystick_balls[0:self.joystick_balls.count()] }
+    public func joystick_battery_states() @Events.JoystickBatteryEvent[..] { return @self.joystick_batteries[0:self.joystick_batteries.count()] }
+    public func gamepad_axis(id:Events.GamepadId, axis:Events.GamepadAxis) float { return find_gamepad_axis(self.gamepad_axes, id, axis) }
+    public func is_gamepad_button_down(id:Events.GamepadId, button:Events.GamepadButton) bool { return find_gamepad_button(self.gamepad_buttons, id, button) }
+    public func is_gamepad_button_pressed(id:Events.GamepadId, button:Events.GamepadButton) bool { return has_gamepad_transition(self.frame_events, id, button, true) }
+    public func is_gamepad_button_released(id:Events.GamepadId, button:Events.GamepadButton) bool { return has_gamepad_transition(self.frame_events, id, button, false) }
+    public func gamepad_touchpoints() @Events.GamepadTouchEvent[..] { return @self.gamepad_touches[0:self.gamepad_touches.count()] }
+    public func gamepad_sensor_states() @Events.GamepadSensorEvent[..] { return @self.gamepad_sensors[0:self.gamepad_sensors.count()] }
+    public func active_touches() @Events.TouchEvent[..] { return @self.touches[0:self.touches.count()] }
+    public func touch_devices() @Events.TouchId[..] { return @self.touch_devices[0:self.touch_devices.count()] }
+    public func pen_states() @Events.PenState[..] { return @self.pens[0:self.pens.count()] }
+    public func sensor_states() @Events.SensorEvent[..] { return @self.sensors[0:self.sensors.count()] }
 
-        let window = Window.Id(value:raw.window)
-        if raw.kind == 2 {
-            self.quit_requested = true
-            self.append(Event.window_close_requested(window))
-            return
+    internal func handle(event:Event) {
+        match event {
+            quit(meta) => { self.quit_requested = true }
+            window_focus_gained(value) => { self.keyboard_focus = value.window }
+            window_focus_lost(value) => { self.keyboard_focus = null }
+            window_mouse_entered(value) => { self.mouse_focus = value.window }
+            window_mouse_left(value) => { self.mouse_focus = null }
+            key_pressed(value) => { self.current_modifiers = value.modifiers; self.set_key(value.key, true, value.repeated) }
+            key_released(value) => { self.current_modifiers = value.modifiers; self.set_key(value.key, false, false) }
+            text_input(value) => { self.text_input = self.text_input + value.text; self.text_editing = "" }
+            text_editing(value) => { self.text_editing = value.text }
+            text_editing_candidates(value) => { self.text_candidates = value.candidates; self.selected_candidate = value.selected }
+            keyboard_added(value) => { self.add_keyboard(value.keyboard) }
+            keyboard_removed(value) => { self.remove_keyboard(value.keyboard) }
+            mouse_moved(value) => { self.mouse_position = value.position; self.mouse_delta = add_points(self.mouse_delta, value.delta) }
+            mouse_button_pressed(value) => { self.mouse_position = value.position; self.set_mouse_button(value.button, true) }
+            mouse_button_released(value) => { self.mouse_position = value.position; self.set_mouse_button(value.button, false) }
+            mouse_wheel(value) => { self.mouse_position = value.position; self.mouse_wheel = add_points(self.mouse_wheel, value.delta) }
+            mouse_added(value) => { self.add_mouse(value.mouse) }
+            mouse_removed(value) => { self.remove_mouse(value.mouse) }
+            joystick_axis_moved(value) => { self.set_joystick_axis(value) }
+            joystick_ball_moved(value) => { self.set_joystick_ball(value) }
+            joystick_hat_moved(value) => { self.set_joystick_hat(value) }
+            joystick_button_pressed(value) => { self.set_joystick_button(value) }
+            joystick_button_released(value) => { self.set_joystick_button(value) }
+            joystick_battery_updated(value) => { self.set_joystick_battery(value) }
+            joystick_added(value) => { self.add_joystick(value.joystick) }
+            joystick_removed(value) => { self.remove_joystick(value.joystick) }
+            gamepad_axis_moved(value) => { self.set_gamepad_axis(value) }
+            gamepad_button_pressed(value) => { self.set_gamepad_button(value) }
+            gamepad_button_released(value) => { self.set_gamepad_button(value) }
+            gamepad_touchpad_pressed(value) => { self.set_gamepad_touch(value) }
+            gamepad_touchpad_moved(value) => { self.set_gamepad_touch(value) }
+            gamepad_touchpad_released(value) => { self.remove_gamepad_touch(value) }
+            gamepad_sensor_updated(value) => { self.set_gamepad_sensor(value) }
+            gamepad_added(value) => { self.add_gamepad(value.gamepad) }
+            gamepad_removed(value) => { self.remove_gamepad(value.gamepad) }
+            finger_pressed(value) => { self.set_touch(value) }
+            finger_moved(value) => { self.set_touch(value) }
+            finger_released(value) => { self.remove_touch(value) }
+            finger_canceled(value) => { self.remove_touch(value) }
+            pen_entered(value) => { self.ensure_pen(value.pen, value.window, value.timestamp) }
+            pen_left(value) => { self.remove_pen(value.pen) }
+            pen_pressed(value) => { self.update_pen_touch(value) }
+            pen_released(value) => { self.update_pen_touch(value) }
+            pen_button_pressed(value) => { self.update_pen_button(value) }
+            pen_button_released(value) => { self.update_pen_button(value) }
+            pen_moved(value) => { self.update_pen_motion(value) }
+            pen_axis_changed(value) => { self.update_pen_axis(value) }
+            sensor_updated(value) => { self.set_sensor(value) }
+            else => {}
         }
-        if raw.kind == 3 {
-            self.append(Event.window_resized(window, Window.Size(width:raw.first as int, height:raw.second as int)))
-            return
-        }
-        if raw.kind == 4 {
-            self.append(Event.window_pixel_size_changed(window, Window.Size(width:raw.first as int, height:raw.second as int)))
-            return
-        }
-        if raw.kind == 5 { self.append(Event.window_focus_gained(window)); return }
-        if raw.kind == 6 { self.append(Event.window_focus_lost(window)); return }
+        self.append(event)
+    }
 
-        if raw.kind == 7 || raw.kind == 8 {
-            let converted = key_from_scancode(raw.scancode)
-            if let key = converted {
-                let down = raw.kind == 7
-                self.set_key(key, down, raw.repeated)
-                let event = KeyEvent(
-                    window:window,
-                    key:key,
-                    repeated:raw.repeated,
-                    modifiers:modifiers(raw.modifiers),
-                    timestamp:raw.timestamp
-                )
-                if down { self.append(Event.key_pressed(event)) }
-                else { self.append(Event.key_released(event)) }
-            }
-            return
+    internal func handle_watched(event:Event) {
+        for current in self.frame_events {
+            if same_lifecycle_event(current, event) { return }
         }
-
-        if raw.kind == 9 || raw.kind == 10 {
-            let converted = mouse_button_from_native(raw.mouse_button)
-            if let button = converted {
-                let down = raw.kind == 9
-                self.set_mouse_button(button, down)
-                let event = MouseButtonEvent(window:window, button:button, timestamp:raw.timestamp)
-                if down { self.append(Event.mouse_button_pressed(event)) }
-                else { self.append(Event.mouse_button_released(event)) }
-            }
-        }
+        self.handle(event)
     }
 
     private func append(event:Event) {
@@ -193,38 +293,251 @@ public class State {
     }
 
     private func set_key(key:Key, down:bool, repeated:bool) {
-        let index = key_index(key)
-        if index < 64 {
-            let mask = (1 as uint) << (index as uint)
-            let was_down = (self.current_keys_low & mask) != 0 as uint
-            if down { self.current_keys_low = set_bit(self.current_keys_low, mask) }
-            else if was_down { self.current_keys_low = self.current_keys_low ^ mask }
-            if down && !was_down && !repeated { self.entered_keys_low = set_bit(self.entered_keys_low, mask) }
-            if !down && was_down { self.released_keys_low = set_bit(self.released_keys_low, mask) }
-            return
-        }
-
-        let mask = (1 as uint) << ((index - 64) as uint)
-        let was_down = (self.current_keys_high & mask) != 0 as uint
-        if down { self.current_keys_high = set_bit(self.current_keys_high, mask) }
-        else if was_down { self.current_keys_high = self.current_keys_high ^ mask }
-        if down && !was_down && !repeated { self.entered_keys_high = set_bit(self.entered_keys_high, mask) }
-        if !down && was_down { self.released_keys_high = set_bit(self.released_keys_high, mask) }
+        let was_down = contains_key(self.current_keys, key)
+        if down && !was_down { self.current_keys.append(key) }
+        if !down && was_down { self.current_keys = keys_without(self.current_keys, key) }
+        if down && !was_down && !repeated { self.entered_keys.append(key) }
+        if !down && was_down { self.released_keys.append(key) }
     }
 
     private func set_mouse_button(button:MouseButton, down:bool) {
-        let mask = (1 as uint) << (mouse_button_index(button) as uint)
-        let was_down = (self.current_mouse_buttons & mask) != 0 as uint
-        if down { self.current_mouse_buttons = set_bit(self.current_mouse_buttons, mask) }
-        else if was_down { self.current_mouse_buttons = self.current_mouse_buttons ^ mask }
-        if down && !was_down { self.entered_mouse_buttons = set_bit(self.entered_mouse_buttons, mask) }
-        if !down && was_down { self.released_mouse_buttons = set_bit(self.released_mouse_buttons, mask) }
+        let was_down = contains_mouse_button(self.current_mouse_buttons, button)
+        if down && !was_down { self.current_mouse_buttons.append(button); self.entered_mouse_buttons.append(button) }
+        if !down && was_down { self.current_mouse_buttons = mouse_buttons_without(self.current_mouse_buttons, button); self.released_mouse_buttons.append(button) }
+    }
+
+    private func add_keyboard(id:KeyboardId) {
+        for current in self.keyboards { if current == id { return } }
+        self.keyboards.append(id)
+        self.keyboard_details.append(Native.keyboard_info(id))
+    }
+
+    private func remove_keyboard(id:KeyboardId) {
+        self.keyboards = keyboards_without(self.keyboards, id)
+        self.keyboard_details = keyboard_infos_without(self.keyboard_details, id)
+    }
+
+    private func add_mouse(id:MouseId) {
+        for current in self.mice { if current == id { return } }
+        self.mice.append(id)
+        self.mouse_details.append(Native.mouse_info(id))
+    }
+
+    private func remove_mouse(id:MouseId) {
+        self.mice = mice_without(self.mice, id)
+        self.mouse_details = mouse_infos_without(self.mouse_details, id)
+    }
+
+    private func add_joystick(id:Events.JoystickId) {
+        for gamepad in self.gamepads { if gamepad.value == id.value { return } }
+        for current in self.joysticks { if current == id { return } }
+        self.joysticks.append(id)
+        self.joystick_details.append(Native.joystick_info(id))
+    }
+
+    private func remove_joystick(id:Events.JoystickId) {
+        self.joysticks = joysticks_without(self.joysticks, id)
+        self.joystick_axes = joystick_axes_without(self.joystick_axes, id)
+        self.joystick_balls = joystick_balls_without(self.joystick_balls, id)
+        self.joystick_hats = joystick_hats_without(self.joystick_hats, id)
+        self.joystick_buttons = joystick_buttons_without(self.joystick_buttons, id)
+        self.joystick_batteries = joystick_batteries_without(self.joystick_batteries, id)
+        self.joystick_details = joystick_infos_without(self.joystick_details, id)
+    }
+
+    private func add_gamepad(id:Events.GamepadId) {
+        for current in self.gamepads { if current == id { return } }
+        self.gamepads.append(id)
+        self.gamepad_details.append(Native.gamepad_info(id))
+        self.remove_joystick(Events.JoystickId(value:id.value))
+    }
+
+    private func remove_gamepad(id:Events.GamepadId) {
+        self.gamepads = gamepads_without(self.gamepads, id)
+        self.gamepad_axes = gamepad_axes_without(self.gamepad_axes, id)
+        self.gamepad_buttons = gamepad_buttons_without(self.gamepad_buttons, id)
+        self.gamepad_touches = gamepad_touches_without(self.gamepad_touches, id)
+        self.gamepad_sensors = gamepad_sensors_without(self.gamepad_sensors, id)
+        self.gamepad_details = gamepad_infos_without(self.gamepad_details, id)
+    }
+
+    private func set_joystick_axis(value:Events.JoystickAxisEvent) {
+        if self.is_gamepad_device(value.joystick.value) { return }
+        self.add_joystick(value.joystick)
+        var index = 0
+        while index < self.joystick_axes.count() {
+            if self.joystick_axes[index].joystick == value.joystick && self.joystick_axes[index].axis == value.axis { self.joystick_axes[index] = value; return }
+            index++
+        }
+        self.joystick_axes.append(value)
+    }
+
+    private func set_joystick_ball(value:Events.JoystickBallEvent) {
+        if self.is_gamepad_device(value.joystick.value) { return }
+        self.add_joystick(value.joystick)
+        var index = 0
+        while index < self.joystick_balls.count() {
+            if self.joystick_balls[index].joystick == value.joystick && self.joystick_balls[index].ball == value.ball {
+                let previous = self.joystick_balls[index]
+                self.joystick_balls[index] = Events.JoystickBallEvent(
+                    joystick:value.joystick,
+                    ball:value.ball,
+                    delta:Math.Vec2(previous.delta.x + value.delta.x, previous.delta.y + value.delta.y),
+                    timestamp:value.timestamp
+                )
+                return
+            }
+            index++
+        }
+        self.joystick_balls.append(value)
+    }
+
+    private func set_joystick_hat(value:Events.JoystickHatEvent) {
+        if self.is_gamepad_device(value.joystick.value) { return }
+        self.add_joystick(value.joystick)
+        var index = 0
+        while index < self.joystick_hats.count() {
+            if self.joystick_hats[index].joystick == value.joystick && self.joystick_hats[index].hat == value.hat { self.joystick_hats[index] = value; return }
+            index++
+        }
+        self.joystick_hats.append(value)
+    }
+
+    private func set_joystick_button(value:Events.JoystickButtonEvent) {
+        if self.is_gamepad_device(value.joystick.value) { return }
+        self.add_joystick(value.joystick)
+        var index = 0
+        while index < self.joystick_buttons.count() {
+            if self.joystick_buttons[index].joystick == value.joystick && self.joystick_buttons[index].button == value.button { self.joystick_buttons[index] = value; return }
+            index++
+        }
+        self.joystick_buttons.append(value)
+    }
+
+    private func set_joystick_battery(value:Events.JoystickBatteryEvent) {
+        if self.is_gamepad_device(value.joystick.value) { return }
+        self.add_joystick(value.joystick)
+        var index = 0
+        while index < self.joystick_batteries.count() {
+            if self.joystick_batteries[index].joystick == value.joystick { self.joystick_batteries[index] = value; return }
+            index++
+        }
+        self.joystick_batteries.append(value)
+    }
+
+    private func is_gamepad_device(id:uint32) bool {
+        for gamepad in self.gamepads { if gamepad.value == id { return true } }
+        return false
+    }
+
+    private func set_gamepad_axis(value:Events.GamepadAxisEvent) {
+        self.add_gamepad(value.gamepad)
+        var index = 0
+        while index < self.gamepad_axes.count() {
+            if self.gamepad_axes[index].gamepad == value.gamepad && self.gamepad_axes[index].axis == value.axis { self.gamepad_axes[index] = value; return }
+            index++
+        }
+        self.gamepad_axes.append(value)
+    }
+
+    private func set_gamepad_button(value:Events.GamepadButtonEvent) {
+        self.add_gamepad(value.gamepad)
+        var index = 0
+        while index < self.gamepad_buttons.count() {
+            if self.gamepad_buttons[index].gamepad == value.gamepad && self.gamepad_buttons[index].button == value.button { self.gamepad_buttons[index] = value; return }
+            index++
+        }
+        self.gamepad_buttons.append(value)
+    }
+
+    private func set_gamepad_touch(value:Events.GamepadTouchEvent) {
+        self.add_gamepad(value.gamepad)
+        var index = 0
+        while index < self.gamepad_touches.count() {
+            if self.gamepad_touches[index].gamepad == value.gamepad && self.gamepad_touches[index].touchpad == value.touchpad && self.gamepad_touches[index].finger == value.finger { self.gamepad_touches[index] = value; return }
+            index++
+        }
+        self.gamepad_touches.append(value)
+    }
+
+    private func remove_gamepad_touch(value:Events.GamepadTouchEvent) { self.gamepad_touches = gamepad_touches_without_finger(self.gamepad_touches, value) }
+
+    private func set_gamepad_sensor(value:Events.GamepadSensorEvent) {
+        self.add_gamepad(value.gamepad)
+        var index = 0
+        while index < self.gamepad_sensors.count() {
+            if self.gamepad_sensors[index].gamepad == value.gamepad && self.gamepad_sensors[index].sensor == value.sensor { self.gamepad_sensors[index] = value; return }
+            index++
+        }
+        self.gamepad_sensors.append(value)
+    }
+
+    private func set_touch(value:Events.TouchEvent) {
+        var index = 0
+        while index < self.touches.count() {
+            if self.touches[index].touch == value.touch && self.touches[index].finger == value.finger { self.touches[index] = value; return }
+            index++
+        }
+        self.touches.append(value)
+    }
+
+    private func remove_touch(value:Events.TouchEvent) { self.touches = touches_without(self.touches, value.touch, value.finger) }
+
+    private func ensure_pen(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) {
+        for pen in self.pens { if pen.pen == id { return } }
+        self.pens.append(empty_pen(id, window, timestamp))
+    }
+
+    private func remove_pen(id:Events.PenId) { self.pens = pens_without(self.pens, id) }
+
+    private func update_pen_motion(value:Events.PenEvent) {
+        let index = self.pen_index(value.pen, value.window, value.timestamp)
+        let old = self.pens[index]
+        self.pens[index] = pen_with_input(old, value.window, value.state, value.position, old.eraser, value.timestamp)
+    }
+
+    private func update_pen_touch(value:Events.PenTouchEvent) {
+        let index = self.pen_index(value.pen, value.window, value.timestamp)
+        let old = self.pens[index]
+        self.pens[index] = pen_with_input(old, value.window, value.state, value.position, value.eraser, value.timestamp)
+    }
+
+    private func update_pen_button(value:Events.PenButtonEvent) {
+        let index = self.pen_index(value.pen, value.window, value.timestamp)
+        let old = self.pens[index]
+        self.pens[index] = pen_with_input(old, value.window, value.state, value.position, old.eraser, value.timestamp)
+    }
+
+    private func update_pen_axis(value:Events.PenAxisEvent) {
+        let index = self.pen_index(value.pen, value.window, value.timestamp)
+        let old = pen_with_input(self.pens[index], value.window, value.state, value.position, self.pens[index].eraser, value.timestamp)
+        self.pens[index] = pen_with_axis(old, value.axis, value.value)
+    }
+
+    private func pen_index(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) int {
+        var index = 0
+        while index < self.pens.count() {
+            if self.pens[index].pen == id { return index }
+            index++
+        }
+        self.pens.append(empty_pen(id, window, timestamp))
+        return self.pens.count() - 1
+    }
+
+    private func set_sensor(value:Events.SensorEvent) {
+        var index = 0
+        while index < self.sensors.count() {
+            if self.sensors[index].sensor == value.sensor { self.sensors[index] = value; return }
+            index++
+        }
+        self.sensors.append(value)
     }
 }
 
 public class Input {
     private static var active:bool = false
     private var current_state:State
+    private var lifecycle_watcher:Native.Watcher?
 
     public init() {
         if Input.active {
@@ -232,21 +545,28 @@ public class Input {
         }
         Session.open()
         self.current_state = State()
+        self.lifecycle_watcher = Native.Watcher()
         Input.active = true
     }
 
     drop {
         Input.active = false
+        self.lifecycle_watcher = null
         Session.close()
     }
 
     public func update() {
         self.current_state.begin_frame()
+        var watched:Event[] = []
+        if let watcher = self.lifecycle_watcher {
+            watched = watcher.take()
+        }
         while true {
-            let pending = poll_event()
-            if let raw = pending {
-                self.current_state.handle(raw)
+            let pending = Native.poll_event()
+            if let event = pending {
+                self.current_state.handle(event)
             } else {
+                for event in watched { self.current_state.handle_watched(event) }
                 return
             }
         }
@@ -287,197 +607,322 @@ public class Input {
     public func is_released(button:MouseButton) bool {
         return self.current_state.is_released(button)
     }
+
+    public func modifiers() Modifiers { return self.current_state.modifiers() }
+    public func focused_window() Window.Id? { return self.current_state.focused_window() }
+    public func mouse_focused_window() Window.Id? { return self.current_state.mouse_focused_window() }
+    public func mouse_position() Math.Vec2 { return self.current_state.mouse_position() }
+    public func global_mouse_position() Math.Vec2 { return self.current_state.global_mouse_position() }
+    public func mouse_delta() Math.Vec2 { return self.current_state.mouse_delta() }
+    public func mouse_wheel() Math.Vec2 { return self.current_state.mouse_wheel() }
+    public func text_input() str { return self.current_state.text_input() }
+    public func text_editing() str { return self.current_state.text_editing() }
+    public func text_candidates() @str[..] { return self.current_state.text_candidates() }
+    public func selected_text_candidate() int { return self.current_state.selected_text_candidate() }
+    public func keyboards() @KeyboardId[..] { return self.current_state.keyboards() }
+    public func mice() @MouseId[..] { return self.current_state.mice() }
+    public func joysticks() @Events.JoystickId[..] { return self.current_state.joysticks() }
+    public func gamepads() @Events.GamepadId[..] { return self.current_state.gamepads() }
+    public func keyboard_infos() @Events.KeyboardInfo[..] { return self.current_state.keyboard_infos() }
+    public func mouse_infos() @Events.MouseInfo[..] { return self.current_state.mouse_infos() }
+    public func joystick_infos() @Events.JoystickInfo[..] { return self.current_state.joystick_infos() }
+    public func gamepad_infos() @Events.GamepadInfo[..] { return self.current_state.gamepad_infos() }
+    public func joystick_axis(id:Events.JoystickId, axis:uint8) float { return self.current_state.joystick_axis(id, axis) }
+    public func joystick_hat(id:Events.JoystickId, hat:uint8) Events.Hat { return self.current_state.joystick_hat(id, hat) }
+    public func is_joystick_button_down(id:Events.JoystickId, button:uint8) bool { return self.current_state.is_joystick_button_down(id, button) }
+    public func is_joystick_button_pressed(id:Events.JoystickId, button:uint8) bool { return self.current_state.is_joystick_button_pressed(id, button) }
+    public func is_joystick_button_released(id:Events.JoystickId, button:uint8) bool { return self.current_state.is_joystick_button_released(id, button) }
+    public func gamepad_axis(id:Events.GamepadId, axis:Events.GamepadAxis) float { return self.current_state.gamepad_axis(id, axis) }
+    public func is_gamepad_button_down(id:Events.GamepadId, button:Events.GamepadButton) bool { return self.current_state.is_gamepad_button_down(id, button) }
+    public func is_gamepad_button_pressed(id:Events.GamepadId, button:Events.GamepadButton) bool { return self.current_state.is_gamepad_button_pressed(id, button) }
+    public func is_gamepad_button_released(id:Events.GamepadId, button:Events.GamepadButton) bool { return self.current_state.is_gamepad_button_released(id, button) }
+    public func joystick_trackballs() @Events.JoystickBallEvent[..] { return self.current_state.joystick_trackballs() }
+    public func joystick_battery_states() @Events.JoystickBatteryEvent[..] { return self.current_state.joystick_battery_states() }
+    public func gamepad_touchpoints() @Events.GamepadTouchEvent[..] { return self.current_state.gamepad_touchpoints() }
+    public func gamepad_sensor_states() @Events.GamepadSensorEvent[..] { return self.current_state.gamepad_sensor_states() }
+    public func active_touches() @Events.TouchEvent[..] { return self.current_state.active_touches() }
+    public func touch_devices() @Events.TouchId[..] { return self.current_state.touch_devices() }
+    public func pen_states() @Events.PenState[..] { return self.current_state.pen_states() }
+    public func sensor_states() @Events.SensorEvent[..] { return self.current_state.sensor_states() }
 }
 
-func has_key(low:uint, high:uint, key:Key) bool {
-    let index = key_index(key)
-    if index < 64 {
-        return (low & ((1 as uint) << (index as uint))) != 0 as uint
+func contains_key(values:Key[], key:Key) bool {
+    for value in values { if value == key { return true } }
+    return false
+}
+
+func same_lifecycle_event(first:Event, second:Event) bool {
+    return match first {
+        terminating(a) => same_terminating(second, a.timestamp)
+        low_memory(a) => same_low_memory(second, a.timestamp)
+        will_enter_background(a) => same_will_enter_background(second, a.timestamp)
+        did_enter_background(a) => same_did_enter_background(second, a.timestamp)
+        will_enter_foreground(a) => same_will_enter_foreground(second, a.timestamp)
+        did_enter_foreground(a) => same_did_enter_foreground(second, a.timestamp)
+        else => false
     }
-    return (high & ((1 as uint) << ((index - 64) as uint))) != 0 as uint
 }
 
-func has_mouse_button(state:uint, button:MouseButton) bool {
-    return (state & ((1 as uint) << (mouse_button_index(button) as uint))) != 0 as uint
+func same_terminating(event:Event, timestamp:Events.Timestamp) bool { return match event { terminating(value) => value.timestamp == timestamp; else => false } }
+func same_low_memory(event:Event, timestamp:Events.Timestamp) bool { return match event { low_memory(value) => value.timestamp == timestamp; else => false } }
+func same_will_enter_background(event:Event, timestamp:Events.Timestamp) bool { return match event { will_enter_background(value) => value.timestamp == timestamp; else => false } }
+func same_did_enter_background(event:Event, timestamp:Events.Timestamp) bool { return match event { did_enter_background(value) => value.timestamp == timestamp; else => false } }
+func same_will_enter_foreground(event:Event, timestamp:Events.Timestamp) bool { return match event { will_enter_foreground(value) => value.timestamp == timestamp; else => false } }
+func same_did_enter_foreground(event:Event, timestamp:Events.Timestamp) bool { return match event { did_enter_foreground(value) => value.timestamp == timestamp; else => false } }
+
+func contains_mouse_button(values:MouseButton[], button:MouseButton) bool {
+    for value in values { if value == button { return true } }
+    return false
 }
 
-func set_bit(state:uint, mask:uint) uint {
-    if (state & mask) != 0 as uint { return state }
-    return state ^ mask
+func keys_without(values:Key[], removed:Key) Key[] {
+    var result:Key[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
 }
 
-func mouse_button_from_native(value:uint8) MouseButton? {
-    if value == 1 { return MouseButton.left }
-    if value == 2 { return MouseButton.middle }
-    if value == 3 { return MouseButton.right }
-    if value == 4 { return MouseButton.x1 }
-    if value == 5 { return MouseButton.x2 }
-    return null
+func mouse_buttons_without(values:MouseButton[], removed:MouseButton) MouseButton[] {
+    var result:MouseButton[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
 }
 
-func mouse_button_index(button:MouseButton) int {
-    return match button {
-        left => 0
-        right => 1
-        middle => 2
-        x1 => 3
-        x2 => 4
+func add_points(first:Math.Vec2, second:Math.Vec2) Math.Vec2 {
+    return first.add(second)
+}
+
+func find_joystick_axis(values:Events.JoystickAxisEvent[], id:Events.JoystickId, axis:uint8) float {
+    for value in values { if value.joystick == id && value.axis == axis { return value.value } }
+    return 0.0
+}
+
+func find_joystick_hat(values:Events.JoystickHatEvent[], id:Events.JoystickId, hat:uint8) Events.Hat {
+    for value in values { if value.joystick == id && value.hat == hat { return value.value } }
+    return Events.Hat.centered
+}
+
+func find_joystick_button(values:Events.JoystickButtonEvent[], id:Events.JoystickId, button:uint8) bool {
+    for value in values { if value.joystick == id && value.button == button { return value.down } }
+    return false
+}
+
+func find_gamepad_axis(values:Events.GamepadAxisEvent[], id:Events.GamepadId, axis:Events.GamepadAxis) float {
+    for value in values { if value.gamepad == id && value.axis == axis { return value.value } }
+    return 0.0
+}
+
+func find_gamepad_button(values:Events.GamepadButtonEvent[], id:Events.GamepadId, button:Events.GamepadButton) bool {
+    for value in values { if value.gamepad == id && value.button == button { return value.down } }
+    return false
+}
+
+func has_joystick_transition(events:Event[], id:Events.JoystickId, button:uint8, pressed:bool) bool {
+    for event in events {
+        match event {
+            joystick_button_pressed(value) => { if pressed && value.joystick == id && value.button == button { return true } }
+            joystick_button_released(value) => { if !pressed && value.joystick == id && value.button == button { return true } }
+            else => {}
+        }
     }
+    return false
 }
 
-func modifiers(value:uint16) Modifiers {
-    return Modifiers(
-        shift:(value & 0x0003) != 0,
-        control:(value & 0x00c0) != 0,
-        alt:(value & 0x0300) != 0,
-        system:(value & 0x0c00) != 0,
-        num_lock:(value & 0x1000) != 0,
-        caps_lock:(value & 0x2000) != 0
+func has_gamepad_transition(events:Event[], id:Events.GamepadId, button:Events.GamepadButton, pressed:bool) bool {
+    for event in events {
+        match event {
+            gamepad_button_pressed(value) => { if pressed && value.gamepad == id && value.button == button { return true } }
+            gamepad_button_released(value) => { if !pressed && value.gamepad == id && value.button == button { return true } }
+            else => {}
+        }
+    }
+    return false
+}
+
+func keyboards_without(values:KeyboardId[], removed:KeyboardId) KeyboardId[] {
+    var result:KeyboardId[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
+}
+
+func mice_without(values:MouseId[], removed:MouseId) MouseId[] {
+    var result:MouseId[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
+}
+
+func keyboard_infos_without(values:Events.KeyboardInfo[], removed:KeyboardId) Events.KeyboardInfo[] {
+    var result:Events.KeyboardInfo[] = []
+    for value in values { if value.id != removed { result.append(value) } }
+    return result
+}
+
+func mouse_infos_without(values:Events.MouseInfo[], removed:MouseId) Events.MouseInfo[] {
+    var result:Events.MouseInfo[] = []
+    for value in values { if value.id != removed { result.append(value) } }
+    return result
+}
+
+func joystick_infos_without(values:Events.JoystickInfo[], removed:Events.JoystickId) Events.JoystickInfo[] {
+    var result:Events.JoystickInfo[] = []
+    for value in values { if value.id != removed { result.append(value) } }
+    return result
+}
+
+func gamepad_infos_without(values:Events.GamepadInfo[], removed:Events.GamepadId) Events.GamepadInfo[] {
+    var result:Events.GamepadInfo[] = []
+    for value in values { if value.id != removed { result.append(value) } }
+    return result
+}
+
+func joysticks_without(values:Events.JoystickId[], removed:Events.JoystickId) Events.JoystickId[] {
+    var result:Events.JoystickId[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
+}
+
+func gamepads_without(values:Events.GamepadId[], removed:Events.GamepadId) Events.GamepadId[] {
+    var result:Events.GamepadId[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
+}
+
+func joystick_axes_without(values:Events.JoystickAxisEvent[], removed:Events.JoystickId) Events.JoystickAxisEvent[] {
+    var result:Events.JoystickAxisEvent[] = []
+    for value in values { if value.joystick != removed { result.append(value) } }
+    return result
+}
+
+func joystick_balls_without(values:Events.JoystickBallEvent[], removed:Events.JoystickId) Events.JoystickBallEvent[] {
+    var result:Events.JoystickBallEvent[] = []
+    for value in values { if value.joystick != removed { result.append(value) } }
+    return result
+}
+
+func joystick_hats_without(values:Events.JoystickHatEvent[], removed:Events.JoystickId) Events.JoystickHatEvent[] {
+    var result:Events.JoystickHatEvent[] = []
+    for value in values { if value.joystick != removed { result.append(value) } }
+    return result
+}
+
+func joystick_buttons_without(values:Events.JoystickButtonEvent[], removed:Events.JoystickId) Events.JoystickButtonEvent[] {
+    var result:Events.JoystickButtonEvent[] = []
+    for value in values { if value.joystick != removed { result.append(value) } }
+    return result
+}
+
+func joystick_batteries_without(values:Events.JoystickBatteryEvent[], removed:Events.JoystickId) Events.JoystickBatteryEvent[] {
+    var result:Events.JoystickBatteryEvent[] = []
+    for value in values { if value.joystick != removed { result.append(value) } }
+    return result
+}
+
+func gamepad_axes_without(values:Events.GamepadAxisEvent[], removed:Events.GamepadId) Events.GamepadAxisEvent[] {
+    var result:Events.GamepadAxisEvent[] = []
+    for value in values { if value.gamepad != removed { result.append(value) } }
+    return result
+}
+
+func gamepad_buttons_without(values:Events.GamepadButtonEvent[], removed:Events.GamepadId) Events.GamepadButtonEvent[] {
+    var result:Events.GamepadButtonEvent[] = []
+    for value in values { if value.gamepad != removed { result.append(value) } }
+    return result
+}
+
+func gamepad_touches_without(values:Events.GamepadTouchEvent[], removed:Events.GamepadId) Events.GamepadTouchEvent[] {
+    var result:Events.GamepadTouchEvent[] = []
+    for value in values { if value.gamepad != removed { result.append(value) } }
+    return result
+}
+
+func gamepad_touches_without_finger(values:Events.GamepadTouchEvent[], removed:Events.GamepadTouchEvent) Events.GamepadTouchEvent[] {
+    var result:Events.GamepadTouchEvent[] = []
+    for value in values {
+        if value.gamepad != removed.gamepad || value.touchpad != removed.touchpad || value.finger != removed.finger { result.append(value) }
+    }
+    return result
+}
+
+func gamepad_sensors_without(values:Events.GamepadSensorEvent[], removed:Events.GamepadId) Events.GamepadSensorEvent[] {
+    var result:Events.GamepadSensorEvent[] = []
+    for value in values { if value.gamepad != removed { result.append(value) } }
+    return result
+}
+
+func touches_without(values:Events.TouchEvent[], touch:Events.TouchId, finger:Events.FingerId) Events.TouchEvent[] {
+    var result:Events.TouchEvent[] = []
+    for value in values { if value.touch != touch || value.finger != finger { result.append(value) } }
+    return result
+}
+
+func pens_without(values:Events.PenState[], removed:Events.PenId) Events.PenState[] {
+    var result:Events.PenState[] = []
+    for value in values { if value.pen != removed { result.append(value) } }
+    return result
+}
+
+func empty_pen(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) Events.PenState {
+    return Events.PenState(
+        pen:id, window:window, position:Math.Vec2(), input:0,
+        in_proximity:true, down:false, eraser:false, buttons:0 as uint,
+        buttons_pressed:0 as uint, buttons_released:0 as uint,
+        pressure:0.0, tilt_x:0.0, tilt_y:0.0, distance:0.0, rotation:0.0,
+        slider:0.0, tangential_pressure:0.0, timestamp:timestamp
     )
 }
 
-func key_from_scancode(value:int32) Key? {
-    if value >= 4 && value <= 29 {
-        return letter_key(value)
-    }
-    if value >= 30 && value <= 38 {
-        return number_key(value)
-    }
-    if value == 39 { return Key.num0 }
-    if value == 40 { return Key.enter }
-    if value == 41 { return Key.escape }
-    if value == 42 { return Key.backspace }
-    if value == 43 { return Key.tab }
-    if value == 44 { return Key.space }
-    if value >= 58 && value <= 69 { return function_key(value) }
-    if value == 75 { return Key.page_up }
-    if value == 78 { return Key.page_down }
-    if value == 79 { return Key.right }
-    if value == 80 { return Key.left }
-    if value == 81 { return Key.down }
-    if value == 82 { return Key.up }
-    if value == 224 { return Key.left_control }
-    if value == 225 { return Key.left_shift }
-    if value == 226 { return Key.left_alt }
-    if value == 228 { return Key.right_control }
-    if value == 229 { return Key.right_shift }
-    if value == 230 { return Key.right_alt }
-    return null
-}
-
-func letter_key(value:int32) Key {
-    if value == 4 { return Key.a }
-    if value == 5 { return Key.b }
-    if value == 6 { return Key.c }
-    if value == 7 { return Key.d }
-    if value == 8 { return Key.e }
-    if value == 9 { return Key.f }
-    if value == 10 { return Key.g }
-    if value == 11 { return Key.h }
-    if value == 12 { return Key.i }
-    if value == 13 { return Key.j }
-    if value == 14 { return Key.k }
-    if value == 15 { return Key.l }
-    if value == 16 { return Key.m }
-    if value == 17 { return Key.n }
-    if value == 18 { return Key.o }
-    if value == 19 { return Key.p }
-    if value == 20 { return Key.q }
-    if value == 21 { return Key.r }
-    if value == 22 { return Key.s }
-    if value == 23 { return Key.t }
-    if value == 24 { return Key.u }
-    if value == 25 { return Key.v }
-    if value == 26 { return Key.w }
-    if value == 27 { return Key.x }
-    if value == 28 { return Key.y }
-    return Key.z
-}
-
-func number_key(value:int32) Key {
-    if value == 30 { return Key.num1 }
-    if value == 31 { return Key.num2 }
-    if value == 32 { return Key.num3 }
-    if value == 33 { return Key.num4 }
-    if value == 34 { return Key.num5 }
-    if value == 35 { return Key.num6 }
-    if value == 36 { return Key.num7 }
-    if value == 37 { return Key.num8 }
-    return Key.num9
-}
-
-func function_key(value:int32) Key {
-    if value == 58 { return Key.f1 }
-    if value == 59 { return Key.f2 }
-    if value == 60 { return Key.f3 }
-    if value == 61 { return Key.f4 }
-    if value == 62 { return Key.f5 }
-    if value == 63 { return Key.f6 }
-    if value == 64 { return Key.f7 }
-    if value == 65 { return Key.f8 }
-    if value == 66 { return Key.f9 }
-    if value == 67 { return Key.f10 }
-    if value == 68 { return Key.f11 }
-    return Key.f12
-}
-
-func key_index(key:Key) int {
-    return match key {
-        escape => 0; space => 1; enter => 2; backspace => 3; tab => 4
-        left_shift => 5; right_shift => 6; left_control => 7; right_control => 8; left_alt => 9; right_alt => 10
-        a => 11; b => 12; c => 13; d => 14; e => 15; f => 16; g => 17; h => 18; i => 19; j => 20; k => 21; l => 22; m => 23
-        n => 24; o => 25; p => 26; q => 27; r => 28; s => 29; t => 30; u => 31; v => 32; w => 33; x => 34; y => 35; z => 36
-        num0 => 37; num1 => 38; num2 => 39; num3 => 40; num4 => 41; num5 => 42; num6 => 43; num7 => 44; num8 => 45; num9 => 46
-        f1 => 47; f2 => 48; f3 => 49; f4 => 50; f5 => 51; f6 => 52; f7 => 53; f8 => 54; f9 => 55; f10 => 56; f11 => 57; f12 => 58
-        up => 59; down => 60; left => 61; right => 62; page_up => 63; page_down => 64
-    }
-}
-
-struct RawEvent {
-    let kind:int
-    let timestamp:uint
-    let window:uint32
-    let first:int32
-    let second:int32
-    let scancode:int32
-    let mouse_button:uint8
-    let modifiers:uint16
-    let repeated:bool
-}
-
-let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(
-    library:Boundary.SDL3,
-    name:"SDL_PollEvent"
-)
-
-func poll_event() RawEvent? {
-    var storage:uint[16]
-    if sdl_poll_event(C.mutable_pointer(storage)) == 0 { return null }
-
-    let address = C.address_bits(C.mutable_pointer(storage))
-    let event_type = C.load<uint32>(address, 0 as uint)
-    var kind = 0
-
-    if event_type == 0x100 { kind = 1 }
-    if event_type == 0x210 { kind = 2 }
-    if event_type == 0x206 { kind = 3 }
-    if event_type == 0x207 { kind = 4 }
-    if event_type == 0x20e { kind = 5 }
-    if event_type == 0x20f { kind = 6 }
-    if event_type == 0x300 { kind = 7 }
-    if event_type == 0x301 { kind = 8 }
-    if event_type == 0x401 { kind = 9 }
-    if event_type == 0x402 { kind = 10 }
-
-    return RawEvent(
-        kind:kind,
-        timestamp:C.load<uint>(address, 8 as uint),
-        window:C.load<uint32>(address, 16 as uint),
-        first:C.load<int32>(address, 20 as uint),
-        second:C.load<int32>(address, 24 as uint),
-        scancode:C.load<int32>(address, 24 as uint),
-        mouse_button:C.load<uint8>(address, 24 as uint),
-        modifiers:C.load<uint16>(address, 32 as uint),
-        repeated:C.load<uint8>(address, 37 as uint) != 0
+func pen_with_input(old:Events.PenState, window:Window.Id, input:uint32, position:Math.Vec2, eraser:bool, timestamp:Events.Timestamp) Events.PenState {
+    let buttons = ((input >> 1) & 31) as uint
+    let changed = buttons ^ old.buttons
+    return Events.PenState(
+        pen:old.pen, window:window, position:position, input:input,
+        in_proximity:(input & 0x8000_0000) != 0, down:(input & 1) != 0,
+        eraser:eraser || (input & 0x4000_0000) != 0, buttons:buttons,
+        buttons_pressed:merge_button_bits(old.buttons_pressed, changed & buttons),
+        buttons_released:merge_button_bits(old.buttons_released, changed & old.buttons),
+        pressure:old.pressure, tilt_x:old.tilt_x, tilt_y:old.tilt_y, distance:old.distance,
+        rotation:old.rotation, slider:old.slider, tangential_pressure:old.tangential_pressure,
+        timestamp:timestamp
     )
+}
+
+func pen_with_axis(old:Events.PenState, axis:Events.PenAxis, value:float) Events.PenState {
+    var pressure = old.pressure
+    var tilt_x = old.tilt_x
+    var tilt_y = old.tilt_y
+    var distance = old.distance
+    var rotation = old.rotation
+    var slider = old.slider
+    var tangential = old.tangential_pressure
+    match axis {
+        pressure => { pressure = value }
+        tilt_x => { tilt_x = value }
+        tilt_y => { tilt_y = value }
+        distance => { distance = value }
+        rotation => { rotation = value }
+        slider => { slider = value }
+        tangential_pressure => { tangential = value }
+        unknown(code) => {}
+    }
+    return Events.PenState(
+        pen:old.pen, window:old.window, position:old.position, input:old.input,
+        in_proximity:old.in_proximity, down:old.down, eraser:old.eraser, buttons:old.buttons,
+        buttons_pressed:old.buttons_pressed, buttons_released:old.buttons_released,
+        pressure:pressure, tilt_x:tilt_x, tilt_y:tilt_y, distance:distance,
+        rotation:rotation, slider:slider, tangential_pressure:tangential, timestamp:old.timestamp
+    )
+}
+
+func clear_pen_transitions(old:Events.PenState) Events.PenState {
+    return Events.PenState(
+        pen:old.pen, window:old.window, position:old.position, input:old.input,
+        in_proximity:old.in_proximity, down:old.down, eraser:old.eraser, buttons:old.buttons,
+        buttons_pressed:0 as uint, buttons_released:0 as uint,
+        pressure:old.pressure, tilt_x:old.tilt_x, tilt_y:old.tilt_y, distance:old.distance,
+        rotation:old.rotation, slider:old.slider, tangential_pressure:old.tangential_pressure,
+        timestamp:old.timestamp
+    )
+}
+
+func merge_button_bits(current:uint, added:uint) uint {
+    return current ^ (added & (current ^ 31 as uint))
 }

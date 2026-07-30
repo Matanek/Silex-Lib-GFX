@@ -1,0 +1,10 @@
+public enum MouseButton {
+    left
+    right
+    middle
+    x1
+    x2
+    other(uint8)
+}
+
+public struct MouseId { let value:uint32 }

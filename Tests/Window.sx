@@ -1,4 +1,5 @@
 use GFX.Window
+use STD.Math
 
 test "configure and reopen a window" {
     var defaults = Window.Settings()
@@ -10,6 +11,12 @@ test "configure and reopen a window" {
     assert(!defaults.borderless)
     assert(defaults.high_pixel_density)
     assert(!defaults.hidden)
+    assert(!defaults.maximized)
+    assert(!defaults.minimized)
+    assert(!defaults.always_on_top)
+    assert(!defaults.transparent)
+    assert(defaults.focusable)
+    assert(!defaults.utility)
     defaults.title = "Configured"
     defaults.width = 640
     defaults.height = 360
@@ -29,15 +36,66 @@ test "configure and reopen a window" {
 
         assert(window.id().value != 0)
         assert(window.title() == "Silex Window Test")
-        assert(window.size() == Window.Size(width:320, height:240))
+        assert(window.size() == Math.Vec2(320.0, 240.0))
         let pixels = window.pixel_size()
-        assert(pixels.width >= 320)
-        assert(pixels.height >= 240)
+        assert(pixels.x >= 320.0)
+        assert(pixels.y >= 240.0)
+        assert(window.display().value != 0)
+        assert(window.pixel_density() > 0.0)
+        assert(window.display_scale() > 0.0)
+        let safe = window.safe_area()
+        assert(safe.w > 0)
+        assert(safe.h > 0)
+        window.set_minimum_size(Math.Vec2(200.0, 150.0))
+        window.set_maximum_size(Math.Vec2(800.0, 600.0))
+        if let minimum = window.minimum_size() { assert(minimum == Math.Vec2(200.0, 150.0)) }
+        else { panic("expected a minimum size") }
+        if let maximum = window.maximum_size() { assert(maximum == Math.Vec2(800.0, 600.0)) }
+        else { panic("expected a maximum size") }
+        window.set_aspect_ratio(1.0, 2.0)
+        if let ratio = window.aspect_ratio() { assert(ratio.minimum == 1.0); assert(ratio.maximum == 2.0) }
+        else { panic("expected an aspect ratio") }
+        window.clear_aspect_ratio()
+        assert(window.aspect_ratio() == null)
 
         window.set_title("Silex Window Ready")
         assert(window.title() == "Silex Window Ready")
-        window.set_size(400, 300)
-        assert(window.size() == Window.Size(width:400, height:300))
+        window.resize(Math.Vec2(400.9, 300.9))
+        assert(window.size() == Math.Vec2(400.0, 300.0))
+        window.set_position(Math.Vec2(40.9, 40.9))
+        let position = window.position()
+        assert(position.x >= 0)
+        assert(position.y >= 0)
+        window.set_opacity(0.75)
+        assert(window.opacity() > 0.7)
+        window.set_opacity(1.0)
+        window.set_resizable(false)
+        assert(!window.state().resizable)
+        window.set_resizable(true)
+        window.set_bordered(false)
+        assert(!window.state().bordered)
+        window.set_bordered(true)
+        window.set_always_on_top(true)
+        assert(window.state().always_on_top)
+        window.set_always_on_top(false)
+        window.set_focusable(true)
+        window.set_mouse_grabbed(true)
+        window.set_mouse_grabbed(false)
+        window.confine_mouse(Math.Rect(0.0, 0.0, 100.0, 100.0))
+        assert(window.mouse_confinement() != null)
+        window.release_mouse_confinement()
+        assert(window.mouse_confinement() == null)
+        window.start_text_input()
+        assert(window.is_text_input_active())
+        window.set_text_input_area(Window.TextInputArea(area:Math.Rect(10.0, 10.0, 100.0, 20.0), cursor:2))
+        assert(window.text_input_area().cursor == 2)
+        window.clear_text_composition()
+        window.stop_text_input()
+        assert(!window.is_text_input_active())
+        window.set_progress_state(Window.ProgressState.normal)
+        window.set_progress(0.5)
+        assert(window.progress() >= 0.49)
+        window.set_progress_state(Window.ProgressState.none)
         window.show()
         window.hide()
         assert(!window.is_fullscreen())
@@ -45,4 +103,25 @@ test "configure and reopen a window" {
 
     var reopened_window = Window(Window.Settings(hidden:true))
     assert(reopened_window.id().value != 0)
+}
+
+test "compose a hidden window hierarchy" {
+    var parent = Window(Window.Settings(title:"Parent", hidden:true))
+    var child = Window(Window.Settings(title:"Child", hidden:true))
+    child.set_parent(parent)
+    if let owner = child.parent() { assert(owner.id() == parent.id()) }
+    else { panic("expected a parent window") }
+    child.set_modal(true)
+    assert(child.state().modal)
+    child.set_modal(false)
+    child.clear_parent()
+    assert(child.parent() == null)
+
+    var popup = Window.popup(
+        parent,
+        Math.Rect(4.0, 4.0, 64.0, 32.0),
+        Window.PopupKind.tooltip
+    )
+    if let owner = popup.parent() { assert(owner.id() == parent.id()) }
+    else { panic("expected a popup parent") }
 }

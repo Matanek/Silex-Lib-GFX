@@ -1,81 +1,86 @@
-# Own a GFX window
+# Own and control a GFX window
 
-`GFX.Window` is the direct lifetime boundary for one platform window. It keeps
-the private platform runtime alive and does not depend on `GFX.Bootstrap`:
+`GFX.Window` owns one platform window and keeps the private platform session
+alive. The public surface contains GFX values and intentions, never an SDL
+handle, flag, property name or encoded position.
 
 ```sx
+use STD.Math
 use GFX.Window
 
-func main() {
-    var settings = Window.Settings()
-    settings.title = "Silex"
-    settings.width = 1280
-    settings.height = 720
-    var window = Window(settings)
-    window.show()
-}
-```
-
-`Window.Settings` is deliberately mutable: completing after `settings.` exposes
-all available options before the window is created. A cascade offers the same
-discoverable configuration inline:
-
-```sx
 var window = Window(Window.Settings()
     ..title = "Silex"
     ..width = 1280
     ..height = 720
+    ..resizable = true
+    ..hidden = false
 )
 ```
 
-Create and use windows on the main thread. Invalid dimensions and platform
-failures produce a targeted GFX panic. The last reference destroys the private
-platform window automatically; there is no `close()` and no native handle in
-the public API.
+Creation settings also cover minimized/maximized startup, always-on-top,
+transparency, focusability and utility windows. Contradictory startup states
+are rejected before SDL is called. Create and use windows on the main thread;
+the last reference destroys the native window automatically.
 
-`Window.Id` is a comparable GFX value intended to associate future events with
-their window. Its numeric `value` is suitable for logs but is not a native
-address.
+## Placement, dimensions and fullscreen
 
-## Use WindowPlugin
+Positions and logical sizes use `Math.Vec2`; rectangles use `Math.Rect` with
+`x`, `y`, `w` and `h`. `pixel_size()` is the drawable pixel size;
+`pixel_density()` is the ratio between pixels and logical coordinates.
+`display_scale()` is the UI content scale of the current display. Values sent
+to integer platform operations are truncated with `Math.trunc`; invalid,
+non-finite or out-of-range dimensions are rejected.
 
-`GFX.Plugins.WindowPlugin` creates the same direct `Window` at startup and
-removes it at shutdown:
+`position`, `set_position`, `center`, `display`, `safe_area` and `borders`
+cover placement. Minimum and maximum sizes and the aspect-ratio interval are
+optional constraints: `null` means absent, never a sentinel size. Fullscreen
+separates desktop fullscreen from an optional copied `Display.Mode` selected
+with `set_fullscreen_mode`.
+
+`borders()` returns `(top:int, left:int, bottom:int, right:int)`, while
+`aspect_ratio()` returns `(minimum:float, maximum:float)?`. Their named tuple
+members remain directly available to completion without introducing nominal
+geometry types local to Window.
+
+## Presentation and interaction
+
+`state()` reads visible, fullscreen, minimized, maximized, occluded, bordered,
+resizable, always-on-top, transparent, focusable and focus/grab/modal facts in
+one operation. Setters request bordered, resizable, always-on-top, focusable,
+opacity, mouse grab, keyboard grab and relative mouse mode independently.
+Opacity and progress values outside `[0.0, 1.0]` are rejected.
+
+Mouse confinement uses an optional local logical rectangle; `warp_mouse`
+places the pointer in local coordinates. Text input is explicitly started and
+stopped on a window. `TextInputSettings` describes content kind,
+capitalization, autocorrection and multiline input. The editing rectangle and
+cursor are readable, composition can be cleared, and virtual-keyboard
+visibility is observable. Committed text and IME composition arrive through
+the single `Input` stream.
+
+## Hierarchy, modal windows and system attention
+
+`set_parent`, `clear_parent` and `parent` retain a safe GFX relationship. A
+cycle, self-parenting or modal state without a parent is rejected. The child
+retains its parent; detaching or destroying it does not destroy the parent.
+
+Popups use a distinct factory and require a parent, a relative rectangle and a
+`menu` or `tooltip` intention:
 
 ```sx
-use GFX.Bootstrap.Application
-use GFX.Plugins.WindowPlugin
-
-func main() {
-    var application = Application()
-        ..install(WindowPlugin(WindowPlugin.Settings()
-            ..title = "Silex"
-        ))
-        ..run()
-}
+var popup = Window.popup(
+    parent,
+    Math.Rect(8.0, 24.0, 240.0, 180.0),
+    Window.PopupKind.menu
+)
 ```
 
-The plugin pumps platform events during `Schedule.pre_update` so the window
-remains responsive and installs `InputPlugin` as a dependency. By default, a
-global quit request or a close request targeting its window stops the
-application. No application-specific closing system is required.
+`request_attention` distinguishes brief attention, attention until focus, and
+canceling attention. System progress distinguishes none, indeterminate,
+normal, paused and error. `show_system_menu` takes an explicit local position.
+Unsupported platform operations fail with a targeted GFX panic rather than
+silently pretending success.
 
-Choose manual handling when the application needs to confirm the request or
-apply a different lifecycle policy:
-
-```sx
-var settings = WindowPlugin.Settings()
-    ..title = "Editor"
-
-var application = Application()
-    ..install(WindowPlugin(
-        settings,
-        WindowPlugin.CloseBehavior.manual
-    ))
-    ..run()
-```
-
-Manual handling leaves every event observable through `GFX.Input.State` and
-does not stop the application. Unless `WindowPlugin.Settings.hidden` is true, the
-plugin explicitly shows, raises and synchronizes the window at startup instead
-of relying on the platform's implicit creation behavior.
+`WindowPlugin` creates this same `Window`, installs `InputPlugin`, and applies
+automatic or manual close policy. A close request for another window never
+stops the application.

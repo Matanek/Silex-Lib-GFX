@@ -1,0 +1,213 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Input
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PushEvent")
+
+func enqueue(storage:&uint[16]) { assert(sdl_push_event(C.mutable_pointer(storage)) != 0) }
+
+func mouse_motion(x:float32, y:float32, dx:float32, dy:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let kind = C.store<uint32>(address, 0 as uint, 0x400 as uint32)
+    let position_x = C.store<float32>(address, 28 as uint, x)
+    let position_y = C.store<float32>(address, 32 as uint, y)
+    let delta_x = C.store<float32>(address, 36 as uint, dx)
+    let delta_y = C.store<float32>(address, 40 as uint, dy)
+    enqueue(storage)
+}
+
+func mouse_wheel(x:float32, y:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let kind = C.store<uint32>(address, 0 as uint, 0x403 as uint32)
+    let delta_x = C.store<float32>(address, 24 as uint, x)
+    let delta_y = C.store<float32>(address, 28 as uint, y)
+    let mouse_x = C.store<float32>(address, 36 as uint, 12.0)
+    let mouse_y = C.store<float32>(address, 40 as uint, 21.0)
+    enqueue(storage)
+}
+
+func text_event(kind:uint32, text:str) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_text = C.store<uint>(address, 24 as uint, C.address_bits(C.terminated_pointer(text)))
+    enqueue(storage)
+}
+
+func key_event(kind:uint32, scancode:int32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_scancode = C.store<int32>(address, 24 as uint, scancode)
+    enqueue(storage)
+}
+
+func joystick_event(kind:uint32, id:uint32, index:uint8, value:int16) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_id = C.store<uint32>(address, 16 as uint, id)
+    let stored_index = C.store<uint8>(address, 20 as uint, index)
+    let stored_value = C.store<int16>(address, 24 as uint, value)
+    enqueue(storage)
+}
+
+func device_event(kind:uint32, id:uint32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_id = C.store<uint32>(address, 16 as uint, id)
+    enqueue(storage)
+}
+
+func touch_event(kind:uint32, touch:uint, finger:uint, x:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_touch = C.store<uint>(address, 16 as uint, touch)
+    let stored_finger = C.store<uint>(address, 24 as uint, finger)
+    let stored_x = C.store<float32>(address, 32 as uint, x)
+    enqueue(storage)
+}
+
+func pen_event(kind:uint32, id:uint32, axis:int32, value:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_id = C.store<uint32>(address, 20 as uint, id)
+    let stored_state = C.store<uint32>(address, 24 as uint, 0x8000_0001 as uint32)
+    let stored_axis = C.store<int32>(address, 36 as uint, axis)
+    let stored_value = C.store<float32>(address, 40 as uint, value)
+    enqueue(storage)
+}
+
+func pump_transient_data(input:&Input) {
+    var candidate_addresses:uint[2]
+    let candidates = C.address_bits(C.mutable_pointer(candidate_addresses))
+    let first_candidate = C.store<uint>(candidates, 0 as uint, C.address_bits(C.terminated_pointer("héros")))
+    let second_candidate = C.store<uint>(candidates, 8 as uint, C.address_bits(C.terminated_pointer("héroïne")))
+
+    var editing:uint[16]
+    let editing_address = C.address_bits(C.mutable_pointer(editing))
+    let editing_kind = C.store<uint32>(editing_address, 0 as uint, 0x307 as uint32)
+    let editing_values = C.store<uint>(editing_address, 24 as uint, candidates)
+    let editing_count = C.store<int32>(editing_address, 32 as uint, 2)
+    let editing_selection = C.store<int32>(editing_address, 36 as uint, 1)
+    enqueue(editing)
+
+    var clipboard:uint[16]
+    let clipboard_address = C.address_bits(C.mutable_pointer(clipboard))
+    let clipboard_kind = C.store<uint32>(clipboard_address, 0 as uint, 0x900 as uint32)
+    let clipboard_owned = C.store<uint8>(clipboard_address, 16 as uint, 1 as uint8)
+    let clipboard_count = C.store<int32>(clipboard_address, 20 as uint, 2)
+    let clipboard_values = C.store<uint>(clipboard_address, 24 as uint, candidates)
+    enqueue(clipboard)
+
+    var drop_storage:uint[16]
+    let drop_address = C.address_bits(C.mutable_pointer(drop_storage))
+    let drop_kind = C.store<uint32>(drop_address, 0 as uint, 0x1000 as uint32)
+    let drop_source = C.store<uint>(drop_address, 32 as uint, C.address_bits(C.terminated_pointer("Finder")))
+    let drop_data = C.store<uint>(drop_address, 40 as uint, C.address_bits(C.terminated_pointer("/tmp/été.sx")))
+    enqueue(drop_storage)
+
+    input.update()
+}
+
+test "accumulate rich input state by frame" {
+    var input = Input()
+    input.update()
+
+    key_event(0x300, 400)
+    mouse_motion(10.0, 20.0, 1.5, -2.0)
+    mouse_motion(12.0, 21.0, 2.5, 3.0)
+    mouse_wheel(0.25, 1.5)
+    mouse_wheel(0.75, -0.5)
+    text_event(0x303, "hé")
+    text_event(0x303, "!")
+
+    device_event(0x605, 41)
+    joystick_event(0x600, 41, 2, -32768)
+    joystick_event(0x603, 41, 3, 0)
+    device_event(0x653, 52)
+    joystick_event(0x650, 52, 4, 32767)
+    joystick_event(0x651, 52, 0, 0)
+
+    touch_event(0x700, 0x1_0000_0001 as uint, 0x2_0000_0002 as uint, 0.25)
+    pen_event(0x1300, 71, 0, 0.0)
+    pen_event(0x1307, 71, 0, 0.75)
+    input.update()
+
+    let future = Input.Key.unknown(400)
+    assert(input.is_down(future))
+    assert(input.is_pressed(future))
+    assert(input.mouse_position().x == 12.0)
+    assert(input.mouse_delta().x == 4.0)
+    assert(input.mouse_delta().y == 1.0)
+    assert(input.mouse_wheel().x == 1.0)
+    assert(input.mouse_wheel().y == 1.0)
+    assert(input.text_input() == "hé!")
+
+    let joystick = Input.JoystickId(value:41)
+    assert(input.joystick_axis(joystick, 2) == -1.0)
+    assert(input.is_joystick_button_down(joystick, 3))
+    assert(input.is_joystick_button_pressed(joystick, 3))
+    let gamepad = Input.GamepadId(value:52)
+    assert(input.gamepad_axis(gamepad, Input.GamepadAxis.left_trigger) == 1.0)
+    assert(input.is_gamepad_button_down(gamepad, Input.GamepadButton.south))
+    assert(input.is_gamepad_button_pressed(gamepad, Input.GamepadButton.south))
+    if true {
+        let touches = input.active_touches()
+        assert(touches.count() == 1)
+        assert(touches[0].touch.value == 0x1_0000_0001 as uint)
+    }
+    if true {
+        let pens = input.pen_states()
+        assert(pens.count() == 1)
+        assert(pens[0].pressure == 0.75)
+    }
+
+    key_event(0x301, 400)
+    joystick_event(0x604, 41, 3, 0)
+    joystick_event(0x652, 52, 0, 0)
+    touch_event(0x703, 0x1_0000_0001 as uint, 0x2_0000_0002 as uint, 0.25)
+    input.update()
+    assert(!input.is_down(future))
+    assert(input.is_released(future))
+    assert(input.is_joystick_button_released(joystick, 3))
+    assert(input.is_gamepad_button_released(gamepad, Input.GamepadButton.south))
+    if true {
+        let touches = input.active_touches()
+        assert(touches.count() == 0)
+    }
+    assert(input.mouse_delta().x == 0.0)
+    assert(input.mouse_wheel().y == 0.0)
+    assert(input.text_input() == "")
+}
+
+test "copy transient strings and lists into the frame" {
+    var input = Input()
+    input.update()
+    pump_transient_data(input)
+
+    if true {
+        let candidates = input.text_candidates()
+        assert(candidates.count() == 2)
+        assert(candidates[0] == "héros")
+        assert(candidates[1] == "héroïne")
+        assert(input.selected_text_candidate() == 1)
+    }
+    if true {
+        let events = input.events()
+        assert(events.count() == 3)
+        match events[1] {
+            clipboard_updated(value) => { assert(value.owned); assert(value.mime_types[0] == "héros") }
+            else => { panic("expected clipboard update") }
+        }
+        match events[2] {
+            file_dropped(value) => { assert(value.source == "Finder"); assert(value.data == "/tmp/été.sx") }
+            else => { panic("expected file drop") }
+        }
+    }
+}

@@ -1,5 +1,6 @@
 use Interop.C
 use Interop.Boundary
+use STD.Math
 use GFX.Window
 use GFX.Input
 
@@ -47,11 +48,15 @@ test "translate SDL events into input state" {
     assert(input.is_down(Input.Key.a))
     assert(input.is_pressed(Input.Key.a))
     assert(!input.is_released(Input.Key.a))
-    assert(input.is_quit_requested())
+    assert(!input.is_quit_requested())
     if true {
         let events = input.events()
-        assert(events.count() == 2)
+        assert(events.count() == 3)
         match events[0] {
+            custom(event) => { assert(event.kind == 0x8000) }
+            else => { panic("expected custom") }
+        }
+        match events[1] {
             key_pressed(event) => {
                 assert(event.window == window_id)
                 assert(event.key == Input.Key.a)
@@ -59,12 +64,12 @@ test "translate SDL events into input state" {
                 assert(event.modifiers.shift)
                 assert(event.modifiers.control)
                 assert(!event.modifiers.alt)
-                assert(event.timestamp == 42 as uint)
+                assert(event.timestamp == Input.Timestamp(nanoseconds:42 as uint))
             }
             else => { panic("expected key_pressed") }
         }
-        match events[1] {
-            window_close_requested(id) => { assert(id == window_id) }
+        match events[2] {
+            window_close_requested(event) => { assert(event.window == window_id) }
             else => { panic("expected window_close_requested") }
         }
     }
@@ -78,7 +83,7 @@ test "translate SDL events into input state" {
     assert(input.is_down(Input.MouseButton.left))
     assert(input.is_pressed(Input.MouseButton.left))
     assert(!input.is_released(Input.MouseButton.left))
-    assert(input.is_quit_requested())
+    assert(!input.is_quit_requested())
 
     push_key_event(0x301, window_id.value, 4, 0, false, 44 as uint)
     push_window_event(0x402, window_id.value, 0, 1)
@@ -100,15 +105,15 @@ test "translate SDL events into input state" {
         let events = input.events()
         assert(events.count() == 7)
         match events[2] {
-            window_resized(id, size) => { assert(id == window_id); assert(size == Window.Size(width:640, height:360)) }
+            window_resized(event) => { assert(event.window == window_id); assert(event.size == Math.Vec2(640.0, 360.0)) }
             else => { panic("expected window_resized") }
         }
         match events[3] {
-            window_pixel_size_changed(id, size) => { assert(id == window_id); assert(size == Window.Size(width:1280, height:720)) }
+            window_pixel_size_changed(event) => { assert(event.window == window_id); assert(event.size == Math.Vec2(1280.0, 720.0)) }
             else => { panic("expected window_pixel_size_changed") }
         }
-        match events[4] { window_focus_gained(id) => { assert(id == window_id) }; else => { panic("expected focus gain") } }
-        match events[5] { window_focus_lost(id) => { assert(id == window_id) }; else => { panic("expected focus loss") } }
-        match events[6] { quit => {}; else => { panic("expected quit") } }
+        match events[4] { window_focus_gained(event) => { assert(event.window == window_id) }; else => { panic("expected focus gain") } }
+        match events[5] { window_focus_lost(event) => { assert(event.window == window_id) }; else => { panic("expected focus loss") } }
+        match events[6] { quit(meta) => { assert(meta.timestamp.nanoseconds >= 0 as uint) }; else => { panic("expected quit") } }
     }
 }
