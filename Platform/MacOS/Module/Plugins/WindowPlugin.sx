@@ -1,0 +1,11 @@
+use Interop.C
+use Interop.MacOS
+
+let sdl_pump_events = C.function<func() void>(
+    library:MacOS.SDL3,
+    name:"SDL_PumpEvents"
+)
+
+func pump_events() {
+    sdl_pump_events()
+}

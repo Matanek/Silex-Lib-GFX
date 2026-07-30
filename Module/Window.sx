@@ -1,0 +1,135 @@
+use GFX.Session
+
+public struct Settings {
+    let title:str = "Window"
+    let width:int = 1280
+    let height:int = 720
+    let resizable:bool = true
+    let fullscreen:bool = false
+    let borderless:bool = false
+    let high_pixel_density:bool = true
+    let hidden:bool = false
+}
+
+public struct Id {
+    let value:uint32
+}
+
+public struct Size {
+    let width:int
+    let height:int
+}
+
+struct SessionLifetime {
+    var value:Session? = null
+}
+
+public class Window {
+    private var lifetime:SessionLifetime = SessionLifetime()
+    private let handle:uint
+    private var current_title:str
+
+    public init(session:Session, settings:Settings) {
+        validate_size(settings.width, settings.height)
+        let handle = Platform.create(
+            settings.title,
+            settings.width,
+            settings.height,
+            settings.resizable,
+            settings.fullscreen,
+            settings.borderless,
+            settings.high_pixel_density,
+            settings.hidden
+        )
+        if handle == 0 as uint {
+            panic("GFX.Window could not create a platform window")
+        }
+        self.lifetime = SessionLifetime(value:session)
+        self.handle = handle
+        self.current_title = settings.title
+    }
+
+    drop {
+        Platform.destroy(self.handle)
+    }
+
+    public func id() Id {
+        return Id(value:Platform.id(self.handle))
+    }
+
+    public func title() str {
+        return self.current_title
+    }
+
+    public func set_title(title:str) {
+        require_action(Platform.set_title(self.handle, title), "set its title")
+        self.current_title = title
+    }
+
+    public func size() Size {
+        return Size(
+            width:Platform.width(self.handle, false),
+            height:Platform.height(self.handle, false)
+        )
+    }
+
+    public func pixel_size() Size {
+        return Size(
+            width:Platform.width(self.handle, true),
+            height:Platform.height(self.handle, true)
+        )
+    }
+
+    public func set_size(width:int, height:int) {
+        validate_size(width, height)
+        require_action(Platform.set_size(self.handle, width, height), "change its size")
+    }
+
+    public func show() {
+        require_action(Platform.show(self.handle), "show")
+    }
+
+    public func hide() {
+        require_action(Platform.hide(self.handle), "hide")
+    }
+
+    public func raise() {
+        require_action(Platform.raise(self.handle), "raise")
+    }
+
+    public func sync() {
+        require_action(Platform.sync(self.handle), "synchronize")
+    }
+
+    public func maximize() {
+        require_action(Platform.maximize(self.handle), "maximize")
+    }
+
+    public func minimize() {
+        require_action(Platform.minimize(self.handle), "minimize")
+    }
+
+    public func restore() {
+        require_action(Platform.restore(self.handle), "restore")
+    }
+
+    public func set_fullscreen(enabled:bool) {
+        require_action(Platform.set_fullscreen(self.handle, enabled), "change fullscreen state")
+    }
+
+    public func is_fullscreen() bool {
+        return Platform.is_fullscreen(self.handle)
+    }
+}
+
+func validate_size(width:int, height:int) {
+    if width <= 0 || height <= 0 || width > 2147483647 || height > 2147483647 {
+        panic("GFX.Window dimensions must be positive 32-bit integers")
+    }
+}
+
+func require_action(success:bool, action:str) {
+    if !success {
+        panic("GFX.Window could not " + action)
+    }
+}

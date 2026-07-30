@@ -1,0 +1,51 @@
+use Interop.C
+use Interop.MacOS
+
+let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:MacOS.SDL3,
+    name:"SDL_PollEvent"
+)
+
+struct RawEvent {
+    let kind:int
+    let timestamp:uint
+    let window:uint32
+    let first:int32
+    let second:int32
+    let scancode:int32
+    let mouse_button:uint8
+    let modifiers:uint16
+    let repeated:bool
+}
+
+func poll() RawEvent? {
+    var storage:uint[16]
+    if sdl_poll_event(C.mutable_pointer(storage)) == 0 { return null }
+
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let event_type = C.load<uint32>(address, 0 as uint)
+    var kind = 0
+
+    if event_type == 0x100 { kind = 1 }
+    if event_type == 0x210 { kind = 2 }
+    if event_type == 0x206 { kind = 3 }
+    if event_type == 0x207 { kind = 4 }
+    if event_type == 0x20e { kind = 5 }
+    if event_type == 0x20f { kind = 6 }
+    if event_type == 0x300 { kind = 7 }
+    if event_type == 0x301 { kind = 8 }
+    if event_type == 0x401 { kind = 9 }
+    if event_type == 0x402 { kind = 10 }
+
+    return RawEvent(
+        kind:kind,
+        timestamp:C.load<uint>(address, 8 as uint),
+        window:C.load<uint32>(address, 16 as uint),
+        first:C.load<int32>(address, 20 as uint),
+        second:C.load<int32>(address, 24 as uint),
+        scancode:C.load<int32>(address, 24 as uint),
+        mouse_button:C.load<uint8>(address, 24 as uint),
+        modifiers:C.load<uint16>(address, 32 as uint),
+        repeated:C.load<uint8>(address, 37 as uint) != 0
+    )
+}

@@ -1,0 +1,118 @@
+use Interop.C
+use Interop.MacOS
+use GFX.Session
+use GFX.Window
+use GFX.Input
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:MacOS.SDL3,
+    name:"SDL_PushEvent"
+)
+
+func push_window_event(kind:uint32, window:uint32, first:int32, second:int32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_window = C.store<uint32>(address, 16 as uint, window)
+    let stored_first = C.store<int32>(address, 20 as uint, first)
+    let stored_second = C.store<int32>(address, 24 as uint, second)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func push_key_event(kind:uint32, window:uint32, scancode:int32, modifiers:uint16, repeated:bool, timestamp:uint) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_timestamp = C.store<uint>(address, 8 as uint, timestamp)
+    let stored_window = C.store<uint32>(address, 16 as uint, window)
+    let stored_scancode = C.store<int32>(address, 24 as uint, scancode)
+    let stored_modifiers = C.store<uint16>(address, 32 as uint, modifiers)
+    var repeated_byte:uint8 = 0
+    if repeated { repeated_byte = 1 }
+    let stored_repeat = C.store<uint8>(address, 37 as uint, repeated_byte)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func main() {
+    var session = Session()
+    var window = Window(session, Window.Settings(title:"Silex Input Smoke", hidden:true))
+    var input = Input(session)
+
+    input.update()
+    let window_id = window.id()
+
+    push_window_event(0x8000, window_id.value, 0, 0)
+    push_key_event(0x300, window_id.value, 4, 0x0041 as uint16, false, 42 as uint)
+    push_window_event(0x210, window_id.value, 0, 0)
+    input.update()
+
+    assert(input.is_down(Input.Key.a))
+    assert(input.is_pressed(Input.Key.a))
+    assert(!input.is_released(Input.Key.a))
+    assert(input.is_quit_requested())
+    if true {
+        let events = input.events()
+        assert(events.count() == 2)
+        match events[0] {
+            key_pressed(event) => {
+                assert(event.window == window_id)
+                assert(event.key == Input.Key.a)
+                assert(!event.repeated)
+                assert(event.modifiers.shift)
+                assert(event.modifiers.control)
+                assert(!event.modifiers.alt)
+                assert(event.timestamp == 42 as uint)
+            }
+            else => { panic("expected key_pressed") }
+        }
+        match events[1] {
+            window_close_requested(id) => { assert(id == window_id) }
+            else => { panic("expected window_close_requested") }
+        }
+    }
+
+    push_key_event(0x300, window_id.value, 4, 0, true, 43 as uint)
+    push_window_event(0x401, window_id.value, 0, 1)
+    input.update()
+    assert(input.is_down(Input.Key.a))
+    assert(!input.is_pressed(Input.Key.a))
+    assert(!input.is_released(Input.Key.a))
+    assert(input.is_down(Input.MouseButton.left))
+    assert(input.is_pressed(Input.MouseButton.left))
+    assert(!input.is_released(Input.MouseButton.left))
+    assert(input.is_quit_requested())
+
+    push_key_event(0x301, window_id.value, 4, 0, false, 44 as uint)
+    push_window_event(0x402, window_id.value, 0, 1)
+    push_window_event(0x206, window_id.value, 640, 360)
+    push_window_event(0x207, window_id.value, 1280, 720)
+    push_window_event(0x20e, window_id.value, 0, 0)
+    push_window_event(0x20f, window_id.value, 0, 0)
+    push_window_event(0x100, 0, 0, 0)
+    input.update()
+
+    assert(!input.is_down(Input.Key.a))
+    assert(!input.is_pressed(Input.Key.a))
+    assert(input.is_released(Input.Key.a))
+    assert(!input.is_down(Input.MouseButton.left))
+    assert(!input.is_pressed(Input.MouseButton.left))
+    assert(input.is_released(Input.MouseButton.left))
+    assert(input.is_quit_requested())
+    if true {
+        let events = input.events()
+        assert(events.count() == 7)
+        match events[2] {
+            window_resized(id, size) => { assert(id == window_id); assert(size == Window.Size(width:640, height:360)) }
+            else => { panic("expected window_resized") }
+        }
+        match events[3] {
+            window_pixel_size_changed(id, size) => { assert(id == window_id); assert(size == Window.Size(width:1280, height:720)) }
+            else => { panic("expected window_pixel_size_changed") }
+        }
+        match events[4] { window_focus_gained(id) => { assert(id == window_id) }; else => { panic("expected focus gain") } }
+        match events[5] { window_focus_lost(id) => { assert(id == window_id) }; else => { panic("expected focus loss") } }
+        match events[6] { quit => {}; else => { panic("expected quit") } }
+    }
+
+    print("input events and snapshot")
+}

@@ -1,0 +1,11 @@
+use Interop.C
+use Interop.MacOS
+
+let linked_version = C.function<func() int32>(
+    library:MacOS.SDL3,
+    name:"SDL_GetVersion"
+)
+
+func version() int32 {
+    return linked_version()
+}

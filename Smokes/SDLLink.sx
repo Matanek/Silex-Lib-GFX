@@ -1,0 +1,5 @@
+use GFX.Backend
+
+func main() {
+    assert(Backend.version() == 3004010)
+}

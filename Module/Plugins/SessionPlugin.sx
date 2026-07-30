@@ -1,0 +1,23 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Schedule
+use GFX.Session
+
+public struct SessionPlugin:Plugin {
+
+    func id() str { return "GFX.Plugins.SessionPlugin" }
+
+    func build(application:Application) {
+        application.add_system(Schedule.startup, start_session)
+        application.add_system(Schedule.shutdown, stop_session)
+    }
+}
+
+func start_session(application:Application) {
+    application.resources().insert(Session())
+}
+
+func stop_session(application:Application) {
+    var removed = application.resources().remove<Session>()
+    assert(removed != null)
+}

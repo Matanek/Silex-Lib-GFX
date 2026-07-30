@@ -1,0 +1,84 @@
+use GFX.Bootstrap
+
+struct FoundationPlugin:Bootstrap.Plugin {
+    func id() str {
+        return "Foundation"
+    }
+
+    func build(application:Bootstrap.Application) {
+        application.add_system(Bootstrap.Schedule.startup, foundation_startup)
+        application.add_system(Bootstrap.Schedule.shutdown, foundation_shutdown)
+    }
+}
+
+struct GamePlugin:Bootstrap.Plugin {
+    func id() str {
+        return "Game"
+    }
+
+    func build(application:Bootstrap.Application) {
+        application.install(FoundationPlugin())
+        application.add_system(Bootstrap.Schedule.startup, game_startup)
+        application.add_after_system(Bootstrap.Schedule.startup, after_startup)
+        application.add_system(Bootstrap.Schedule.update, update)
+        application.add_system(Bootstrap.Schedule.shutdown, game_shutdown)
+        application.add_after_system(Bootstrap.Schedule.shutdown, after_shutdown)
+    }
+}
+
+func foundation_startup(application:Bootstrap.Application) {
+    print(1)
+}
+
+func game_startup(application:Bootstrap.Application) {
+    print(2)
+}
+
+func after_startup(application:Bootstrap.Application) {
+    print(3)
+}
+
+func update(controller:&Bootstrap.Controller) {
+    print(4)
+    controller.stop()
+}
+
+func foundation_shutdown(application:Bootstrap.Application) {
+    print(6)
+}
+
+func game_shutdown(application:Bootstrap.Application) {
+    print(5)
+}
+
+func after_shutdown(application:Bootstrap.Application) {
+    print(7)
+}
+
+func legacy_stop(application:Bootstrap.Application) {
+    application.stop()
+}
+
+func verify_bootstrap() {
+    var application = Bootstrap.Application()
+    application.install(GamePlugin())
+    application.install(GamePlugin())
+
+    assert(application.has_plugin("Foundation"))
+    assert(application.has_plugin("Game"))
+    let plugins = application.installed_plugins()
+    assert(plugins.count() == 2)
+    assert(application.run() == 0)
+
+    var legacy = Bootstrap.Application()
+    legacy.add_system(Bootstrap.Schedule.update, legacy_stop)
+    assert(legacy.run() == 0)
+}
+
+func main() {
+    verify_bootstrap()
+}
+
+test "compose plugins and schedules" {
+    verify_bootstrap()
+}

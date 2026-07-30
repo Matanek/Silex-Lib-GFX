@@ -1,0 +1,272 @@
+public enum Schedule {
+    initialize
+    startup
+    pre_update
+    update
+    post_update
+    render
+    shutdown
+    finalize
+}
+
+public protocol Plugin {
+    func id() str
+    func build(application:Application)
+}
+
+public class Resources {
+    private var __resource_order:int[]
+
+    public init() {
+        self.__resource_order = []
+    }
+
+    public func insert<T>(value:T) {
+        panic("Resources.insert was not specialized")
+    }
+
+    public func has<T>() bool {
+        panic("Resources.has was not specialized")
+    }
+
+    public func get<T>() @T {
+        panic("Resources.get was not specialized")
+    }
+
+    public func get_mut<T>() &T {
+        panic("Resources.get_mut was not specialized")
+    }
+
+    public func try_get<T>() @T? {
+        panic("Resources.try_get was not specialized")
+    }
+
+    public func try_get_mut<T>() &T? {
+        panic("Resources.try_get_mut was not specialized")
+    }
+
+    public func remove<T>() T? {
+        panic("Resources.remove was not specialized")
+    }
+
+    public func clear() {
+        panic("Resources.clear was not specialized")
+    }
+
+    drop {
+        self.clear()
+    }
+}
+
+struct RegisteredSystem {
+    let schedule:Schedule
+    let after:bool
+    let callback:func(Application)
+}
+
+public class Controller {
+    private var running:bool
+
+    internal init() {
+        self.running = false
+    }
+
+    public func stop() {
+        self.running = false
+    }
+
+    internal func start() {
+        self.running = true
+    }
+
+    internal func is_running() bool {
+        return self.running
+    }
+}
+
+public class Application {
+    private var resource_store:Resources
+    private var registered_systems:RegisteredSystem[]
+    private var installed_plugins:str[]
+    private var installing_plugins:str[]
+    private var current_runner:func(Application) int
+    private var configuration_locked:bool
+
+    public init() {
+        self.resource_store = Resources()
+        self.registered_systems = []
+        self.installed_plugins = []
+        self.installing_plugins = []
+        self.current_runner = run_default
+        self.configuration_locked = false
+        self.resource_store.insert(Controller())
+    }
+
+    public func resources() Resources {
+        return self.resource_store
+    }
+
+    drop {
+        self.resource_store.clear()
+    }
+
+    public func install<T:Plugin>(plugin:T) Application {
+        if self.configuration_locked {
+            panic("Application cannot install a plugin after run")
+        }
+
+        let id = plugin.id()
+        if contains(self.installed_plugins, id) {
+            return self
+        }
+        if contains(self.installing_plugins, id) {
+            panic("Application plugin dependency cycle: " + id)
+        }
+
+        var installing = self.installing_plugins
+        installing.append(id)
+        self.installing_plugins = installing
+        plugin.build(self)
+        installing = self.installing_plugins
+        let completed = installing.take_last()
+        self.installing_plugins = installing
+        assert(completed == id)
+        var installed = self.installed_plugins
+        installed.append(id)
+        self.installed_plugins = installed
+        return self
+    }
+
+    public func has_plugin(id:str) bool {
+        return contains(self.installed_plugins, id)
+    }
+
+    public func installed_plugins() str[] {
+        return self.installed_plugins
+    }
+
+    public func add_system(schedule:Schedule, callback:func(Application)) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a system after run")
+        }
+        var systems = self.registered_systems
+        systems.append(RegisteredSystem(
+            schedule:schedule,
+            after:false,
+            callback:callback
+        ))
+        self.registered_systems = systems
+        return self
+    }
+
+    public func add_system<System>(schedule:Schedule, callback:System) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    public func add_after_system(schedule:Schedule, callback:func(Application)) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a system after run")
+        }
+        var systems = self.registered_systems
+        systems.append(RegisteredSystem(
+            schedule:schedule,
+            after:true,
+            callback:callback
+        ))
+        self.registered_systems = systems
+        return self
+    }
+
+    public func add_after_system<System>(schedule:Schedule, callback:System) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    public func with_runner(runner:func(Application) int) Application {
+        if self.configuration_locked {
+            panic("Application cannot replace its runner after run")
+        }
+        self.current_runner = runner
+        return self
+    }
+
+    public func run() int {
+        if self.configuration_locked {
+            panic("Application can only run once")
+        }
+        self.configuration_locked = true
+        return self.current_runner(self)
+    }
+
+    public func run_schedule(schedule:Schedule) {
+        let reversed = schedule == Schedule.shutdown || schedule == Schedule.finalize
+        self.run_systems(schedule, false, reversed)
+        self.run_systems(schedule, true, reversed)
+    }
+
+    public func stop() {
+        var resources = self.resource_store
+        var controller:&Controller = resources.get_mut<Controller>()
+        controller.stop()
+    }
+
+    public func is_running() bool {
+        var resources = self.resource_store
+        let controller:@Controller = resources.get<Controller>()
+        return controller.is_running()
+    }
+
+    internal func start() {
+        var resources = self.resource_store
+        var controller:&Controller = resources.get_mut<Controller>()
+        controller.start()
+    }
+
+    private func run_systems(schedule:Schedule, after:bool, reversed:bool) {
+        if reversed {
+            var index = self.registered_systems.count() - 1
+            while index >= 0 {
+                let system = self.registered_systems[index]
+                if system.schedule == schedule && system.after == after {
+                    system.callback(self)
+                }
+                index--
+            }
+            return
+        }
+
+        var index = 0
+        while index < self.registered_systems.count() {
+            let system = self.registered_systems[index]
+            if system.schedule == schedule && system.after == after {
+                system.callback(self)
+            }
+            index++
+        }
+    }
+}
+
+func contains(values:@str[], expected:str) bool {
+    for value in values {
+        if value == expected {
+            return true
+        }
+    }
+    return false
+}
+
+func run_default(application:Application) int {
+    application.start()
+    application.run_schedule(Schedule.initialize)
+    application.run_schedule(Schedule.startup)
+
+    while application.is_running() {
+        application.run_schedule(Schedule.pre_update)
+        application.run_schedule(Schedule.update)
+        application.run_schedule(Schedule.post_update)
+        application.run_schedule(Schedule.render)
+    }
+
+    application.run_schedule(Schedule.shutdown)
+    application.run_schedule(Schedule.finalize)
+    return 0
+}

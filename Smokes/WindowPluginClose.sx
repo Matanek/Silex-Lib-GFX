@@ -1,0 +1,75 @@
+use Interop.C
+use Interop.MacOS
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Controller
+use GFX.Bootstrap.Schedule
+use GFX.Window
+use GFX.Input
+use GFX.Input.State as InputState
+use GFX.Plugins.WindowPlugin
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:MacOS.SDL3,
+    name:"SDL_PushEvent"
+)
+
+struct CloseProbePlugin:Plugin {
+    let id_value:str
+    let manual:bool
+
+    func id() str { return self.id_value }
+
+    func build(application:Application) {
+        application.add_system(Schedule.startup, push_close_request)
+        if self.manual {
+            application.add_system(Schedule.update, stop_manually)
+        }
+    }
+}
+
+func push_close_request(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func stop_manually(
+    input:@InputState,
+    window:@Window,
+    controller:&Controller
+) {
+    for event in input.events() {
+        match event {
+            window_close_requested(id) => {
+                assert(id == window.id())
+                controller.stop()
+                return
+            }
+            else => {}
+        }
+    }
+    panic("manual close request was not observable")
+}
+
+func main() {
+    Application()
+        ..install(WindowPlugin(Window.Settings(
+            title:"Automatic close",
+            hidden:true
+        )))
+        ..install(CloseProbePlugin(id_value:"AutomaticProbe", manual:false))
+        ..run()
+    print("automatic close")
+
+    Application()
+        ..install(WindowPlugin(
+            Window.Settings(title:"Manual close", hidden:true),
+            WindowPlugin.CloseBehavior.manual
+        ))
+        ..install(CloseProbePlugin(id_value:"ManualProbe", manual:true))
+        ..run()
+    print("manual close")
+}

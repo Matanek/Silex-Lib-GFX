@@ -1,0 +1,58 @@
+use GFX.Bootstrap
+
+struct Counter {
+    var value:int
+}
+
+struct First {
+    let value:int
+
+    drop {
+        print("first ", self.value)
+    }
+}
+
+struct Second {
+    let value:int
+
+    drop {
+        print("second ", self.value)
+    }
+}
+
+func main() {
+    var first = Bootstrap.Application()
+    var second = Bootstrap.Application()
+    var first_resources = first.resources()
+    var second_resources = second.resources()
+
+    first_resources.insert(Counter(value:40))
+    assert(first_resources.has<Counter>())
+    assert(!second_resources.has<Counter>())
+
+    if true {
+        var counter:&Counter = first_resources.get_mut<Counter>()
+        counter.value += 2
+    }
+    if true {
+        let counter:@Counter = first_resources.get<Counter>()
+        print(counter.value)
+    }
+    if true {
+        var counter:&Counter? = first_resources.try_get_mut<Counter>()
+        assert(counter != null)
+    }
+
+    if true {
+        let missing:@Counter? = second_resources.try_get<Counter>()
+        assert(missing == null)
+    }
+    let removed = first_resources.remove<Counter>()
+    assert(removed != null)
+    assert(!first_resources.has<Counter>())
+
+    second_resources.insert(First(value:1))
+    second_resources.insert(Second(value:2))
+    second_resources.insert(First(value:3))
+    second_resources.clear()
+}

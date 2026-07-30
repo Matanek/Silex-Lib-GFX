@@ -1,0 +1,436 @@
+use GFX.Session
+use GFX.Window
+
+public enum Key {
+    escape; space; enter; backspace; tab
+    left_shift; right_shift; left_control; right_control; left_alt; right_alt
+    a; b; c; d; e; f; g; h; i; j; k; l; m
+    n; o; p; q; r; s; t; u; v; w; x; y; z
+    num0; num1; num2; num3; num4; num5; num6; num7; num8; num9
+    f1; f2; f3; f4; f5; f6; f7; f8; f9; f10; f11; f12
+    up; down; left; right; page_up; page_down
+}
+
+public enum MouseButton {
+    left; right; middle; x1; x2
+}
+
+public struct Modifiers {
+    let shift:bool
+    let control:bool
+    let alt:bool
+    let system:bool
+    let caps_lock:bool
+    let num_lock:bool
+}
+
+public struct KeyEvent {
+    let window:Window.Id
+    let key:Key
+    let repeated:bool
+    let modifiers:Modifiers
+    let timestamp:uint
+}
+
+public struct MouseButtonEvent {
+    let window:Window.Id
+    let button:MouseButton
+    let timestamp:uint
+}
+
+public enum Event {
+    quit
+    window_close_requested(Window.Id)
+    window_resized(Window.Id, Window.Size)
+    window_pixel_size_changed(Window.Id, Window.Size)
+    window_focus_gained(Window.Id)
+    window_focus_lost(Window.Id)
+    key_pressed(KeyEvent)
+    key_released(KeyEvent)
+    mouse_button_pressed(MouseButtonEvent)
+    mouse_button_released(MouseButtonEvent)
+}
+
+struct SessionLifetime {
+    var value:Session? = null
+}
+
+public class State {
+    private let empty_events:Event[]
+    private var frame_events:Event[]
+    private var has_frame_events:bool
+    private var quit_requested:bool
+    private var current_keys_low:uint
+    private var current_keys_high:uint
+    private var entered_keys_low:uint
+    private var entered_keys_high:uint
+    private var released_keys_low:uint
+    private var released_keys_high:uint
+    private var current_mouse_buttons:uint
+    private var entered_mouse_buttons:uint
+    private var released_mouse_buttons:uint
+
+    internal init() {
+        self.empty_events = []
+        self.frame_events = []
+        self.has_frame_events = false
+        self.quit_requested = false
+        self.current_keys_low = 0 as uint
+        self.current_keys_high = 0 as uint
+        self.entered_keys_low = 0 as uint
+        self.entered_keys_high = 0 as uint
+        self.released_keys_low = 0 as uint
+        self.released_keys_high = 0 as uint
+        self.current_mouse_buttons = 0 as uint
+        self.entered_mouse_buttons = 0 as uint
+        self.released_mouse_buttons = 0 as uint
+    }
+
+    internal func begin_frame() {
+        self.has_frame_events = false
+        self.entered_keys_low = 0 as uint
+        self.entered_keys_high = 0 as uint
+        self.released_keys_low = 0 as uint
+        self.released_keys_high = 0 as uint
+        self.entered_mouse_buttons = 0 as uint
+        self.released_mouse_buttons = 0 as uint
+    }
+
+    public func events() @Event[..] {
+        if !self.has_frame_events {
+            return @self.empty_events[0:0]
+        }
+        return @self.frame_events[0:self.frame_events.count()]
+    }
+
+    public func is_quit_requested() bool {
+        return self.quit_requested
+    }
+
+    public func is_down(key:Key) bool {
+        return has_key(self.current_keys_low, self.current_keys_high, key)
+    }
+
+    public func is_pressed(key:Key) bool {
+        return has_key(self.entered_keys_low, self.entered_keys_high, key)
+    }
+
+    public func is_released(key:Key) bool {
+        return has_key(self.released_keys_low, self.released_keys_high, key)
+    }
+
+    public func is_down(button:MouseButton) bool {
+        return has_mouse_button(self.current_mouse_buttons, button)
+    }
+
+    public func is_pressed(button:MouseButton) bool {
+        return has_mouse_button(self.entered_mouse_buttons, button)
+    }
+
+    public func is_released(button:MouseButton) bool {
+        return has_mouse_button(self.released_mouse_buttons, button)
+    }
+
+    internal func handle(raw:Platform.RawEvent) {
+        if raw.kind == 1 {
+            self.quit_requested = true
+            self.append(Event.quit)
+            return
+        }
+
+        let window = Window.Id(value:raw.window)
+        if raw.kind == 2 {
+            self.quit_requested = true
+            self.append(Event.window_close_requested(window))
+            return
+        }
+        if raw.kind == 3 {
+            self.append(Event.window_resized(window, Window.Size(width:raw.first as int, height:raw.second as int)))
+            return
+        }
+        if raw.kind == 4 {
+            self.append(Event.window_pixel_size_changed(window, Window.Size(width:raw.first as int, height:raw.second as int)))
+            return
+        }
+        if raw.kind == 5 { self.append(Event.window_focus_gained(window)); return }
+        if raw.kind == 6 { self.append(Event.window_focus_lost(window)); return }
+
+        if raw.kind == 7 || raw.kind == 8 {
+            let converted = key_from_scancode(raw.scancode)
+            if let key = converted {
+                let down = raw.kind == 7
+                self.set_key(key, down, raw.repeated)
+                let event = KeyEvent(
+                    window:window,
+                    key:key,
+                    repeated:raw.repeated,
+                    modifiers:modifiers(raw.modifiers),
+                    timestamp:raw.timestamp
+                )
+                if down { self.append(Event.key_pressed(event)) }
+                else { self.append(Event.key_released(event)) }
+            }
+            return
+        }
+
+        if raw.kind == 9 || raw.kind == 10 {
+            let converted = mouse_button_from_native(raw.mouse_button)
+            if let button = converted {
+                let down = raw.kind == 9
+                self.set_mouse_button(button, down)
+                let event = MouseButtonEvent(window:window, button:button, timestamp:raw.timestamp)
+                if down { self.append(Event.mouse_button_pressed(event)) }
+                else { self.append(Event.mouse_button_released(event)) }
+            }
+        }
+    }
+
+    private func append(event:Event) {
+        if !self.has_frame_events {
+            self.frame_events = [event]
+            self.has_frame_events = true
+            return
+        }
+        self.frame_events.append(event)
+    }
+
+    private func set_key(key:Key, down:bool, repeated:bool) {
+        let index = key_index(key)
+        if index < 64 {
+            let mask = (1 as uint) << (index as uint)
+            let was_down = (self.current_keys_low & mask) != 0 as uint
+            if down { self.current_keys_low = set_bit(self.current_keys_low, mask) }
+            else if was_down { self.current_keys_low = self.current_keys_low ^ mask }
+            if down && !was_down && !repeated { self.entered_keys_low = set_bit(self.entered_keys_low, mask) }
+            if !down && was_down { self.released_keys_low = set_bit(self.released_keys_low, mask) }
+            return
+        }
+
+        let mask = (1 as uint) << ((index - 64) as uint)
+        let was_down = (self.current_keys_high & mask) != 0 as uint
+        if down { self.current_keys_high = set_bit(self.current_keys_high, mask) }
+        else if was_down { self.current_keys_high = self.current_keys_high ^ mask }
+        if down && !was_down && !repeated { self.entered_keys_high = set_bit(self.entered_keys_high, mask) }
+        if !down && was_down { self.released_keys_high = set_bit(self.released_keys_high, mask) }
+    }
+
+    private func set_mouse_button(button:MouseButton, down:bool) {
+        let mask = (1 as uint) << (mouse_button_index(button) as uint)
+        let was_down = (self.current_mouse_buttons & mask) != 0 as uint
+        if down { self.current_mouse_buttons = set_bit(self.current_mouse_buttons, mask) }
+        else if was_down { self.current_mouse_buttons = self.current_mouse_buttons ^ mask }
+        if down && !was_down { self.entered_mouse_buttons = set_bit(self.entered_mouse_buttons, mask) }
+        if !down && was_down { self.released_mouse_buttons = set_bit(self.released_mouse_buttons, mask) }
+    }
+}
+
+public class Input {
+    private static var active:bool = false
+    private var lifetime:SessionLifetime = SessionLifetime()
+    private var current_state:State
+
+    public init(session:Session) {
+        if Input.active {
+            panic("GFX.Input is already active")
+        }
+        self.lifetime = SessionLifetime(value:session)
+        self.current_state = State()
+        Input.active = true
+    }
+
+    drop {
+        Input.active = false
+    }
+
+    public func update() {
+        self.current_state.begin_frame()
+        while true {
+            let pending = Platform.poll()
+            if let raw = pending {
+                self.current_state.handle(raw)
+            } else {
+                return
+            }
+        }
+    }
+
+    public func state() State {
+        return self.current_state
+    }
+
+    public func events() @Event[..] {
+        return self.current_state.events()
+    }
+
+    public func is_quit_requested() bool {
+        return self.current_state.is_quit_requested()
+    }
+
+    public func is_down(key:Key) bool {
+        return self.current_state.is_down(key)
+    }
+
+    public func is_pressed(key:Key) bool {
+        return self.current_state.is_pressed(key)
+    }
+
+    public func is_released(key:Key) bool {
+        return self.current_state.is_released(key)
+    }
+
+    public func is_down(button:MouseButton) bool {
+        return self.current_state.is_down(button)
+    }
+
+    public func is_pressed(button:MouseButton) bool {
+        return self.current_state.is_pressed(button)
+    }
+
+    public func is_released(button:MouseButton) bool {
+        return self.current_state.is_released(button)
+    }
+}
+
+func has_key(low:uint, high:uint, key:Key) bool {
+    let index = key_index(key)
+    if index < 64 {
+        return (low & ((1 as uint) << (index as uint))) != 0 as uint
+    }
+    return (high & ((1 as uint) << ((index - 64) as uint))) != 0 as uint
+}
+
+func has_mouse_button(state:uint, button:MouseButton) bool {
+    return (state & ((1 as uint) << (mouse_button_index(button) as uint))) != 0 as uint
+}
+
+func set_bit(state:uint, mask:uint) uint {
+    if (state & mask) != 0 as uint { return state }
+    return state ^ mask
+}
+
+func mouse_button_from_native(value:uint8) MouseButton? {
+    if value == 1 { return MouseButton.left }
+    if value == 2 { return MouseButton.middle }
+    if value == 3 { return MouseButton.right }
+    if value == 4 { return MouseButton.x1 }
+    if value == 5 { return MouseButton.x2 }
+    return null
+}
+
+func mouse_button_index(button:MouseButton) int {
+    return match button {
+        left => 0
+        right => 1
+        middle => 2
+        x1 => 3
+        x2 => 4
+    }
+}
+
+func modifiers(value:uint16) Modifiers {
+    return Modifiers(
+        shift:(value & 0x0003) != 0,
+        control:(value & 0x00c0) != 0,
+        alt:(value & 0x0300) != 0,
+        system:(value & 0x0c00) != 0,
+        num_lock:(value & 0x1000) != 0,
+        caps_lock:(value & 0x2000) != 0
+    )
+}
+
+func key_from_scancode(value:int32) Key? {
+    if value >= 4 && value <= 29 {
+        return letter_key(value)
+    }
+    if value >= 30 && value <= 38 {
+        return number_key(value)
+    }
+    if value == 39 { return Key.num0 }
+    if value == 40 { return Key.enter }
+    if value == 41 { return Key.escape }
+    if value == 42 { return Key.backspace }
+    if value == 43 { return Key.tab }
+    if value == 44 { return Key.space }
+    if value >= 58 && value <= 69 { return function_key(value) }
+    if value == 75 { return Key.page_up }
+    if value == 78 { return Key.page_down }
+    if value == 79 { return Key.right }
+    if value == 80 { return Key.left }
+    if value == 81 { return Key.down }
+    if value == 82 { return Key.up }
+    if value == 224 { return Key.left_control }
+    if value == 225 { return Key.left_shift }
+    if value == 226 { return Key.left_alt }
+    if value == 228 { return Key.right_control }
+    if value == 229 { return Key.right_shift }
+    if value == 230 { return Key.right_alt }
+    return null
+}
+
+func letter_key(value:int32) Key {
+    if value == 4 { return Key.a }
+    if value == 5 { return Key.b }
+    if value == 6 { return Key.c }
+    if value == 7 { return Key.d }
+    if value == 8 { return Key.e }
+    if value == 9 { return Key.f }
+    if value == 10 { return Key.g }
+    if value == 11 { return Key.h }
+    if value == 12 { return Key.i }
+    if value == 13 { return Key.j }
+    if value == 14 { return Key.k }
+    if value == 15 { return Key.l }
+    if value == 16 { return Key.m }
+    if value == 17 { return Key.n }
+    if value == 18 { return Key.o }
+    if value == 19 { return Key.p }
+    if value == 20 { return Key.q }
+    if value == 21 { return Key.r }
+    if value == 22 { return Key.s }
+    if value == 23 { return Key.t }
+    if value == 24 { return Key.u }
+    if value == 25 { return Key.v }
+    if value == 26 { return Key.w }
+    if value == 27 { return Key.x }
+    if value == 28 { return Key.y }
+    return Key.z
+}
+
+func number_key(value:int32) Key {
+    if value == 30 { return Key.num1 }
+    if value == 31 { return Key.num2 }
+    if value == 32 { return Key.num3 }
+    if value == 33 { return Key.num4 }
+    if value == 34 { return Key.num5 }
+    if value == 35 { return Key.num6 }
+    if value == 36 { return Key.num7 }
+    if value == 37 { return Key.num8 }
+    return Key.num9
+}
+
+func function_key(value:int32) Key {
+    if value == 58 { return Key.f1 }
+    if value == 59 { return Key.f2 }
+    if value == 60 { return Key.f3 }
+    if value == 61 { return Key.f4 }
+    if value == 62 { return Key.f5 }
+    if value == 63 { return Key.f6 }
+    if value == 64 { return Key.f7 }
+    if value == 65 { return Key.f8 }
+    if value == 66 { return Key.f9 }
+    if value == 67 { return Key.f10 }
+    if value == 68 { return Key.f11 }
+    return Key.f12
+}
+
+func key_index(key:Key) int {
+    return match key {
+        escape => 0; space => 1; enter => 2; backspace => 3; tab => 4
+        left_shift => 5; right_shift => 6; left_control => 7; right_control => 8; left_alt => 9; right_alt => 10
+        a => 11; b => 12; c => 13; d => 14; e => 15; f => 16; g => 17; h => 18; i => 19; j => 20; k => 21; l => 22; m => 23
+        n => 24; o => 25; p => 26; q => 27; r => 28; s => 29; t => 30; u => 31; v => 32; w => 33; x => 34; y => 35; z => 36
+        num0 => 37; num1 => 38; num2 => 39; num3 => 40; num4 => 41; num5 => 42; num6 => 43; num7 => 44; num8 => 45; num9 => 46
+        f1 => 47; f2 => 48; f3 => 49; f4 => 50; f5 => 51; f6 => 52; f7 => 53; f8 => 54; f9 => 55; f10 => 56; f11 => 57; f12 => 58
+        up => 59; down => 60; left => 61; right => 62; page_up => 63; page_down => 64
+    }
+}

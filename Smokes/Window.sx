@@ -1,0 +1,48 @@
+use GFX.Session
+use GFX.Window
+
+func main() {
+    let defaults = Window.Settings()
+    assert(defaults.title == "Window")
+    assert(defaults.width == 1280)
+    assert(defaults.height == 720)
+    assert(defaults.resizable)
+    assert(!defaults.fullscreen)
+    assert(!defaults.borderless)
+    assert(defaults.high_pixel_density)
+    assert(!defaults.hidden)
+
+    if true {
+        var session = Session()
+        var window = Window(
+            session,
+            Window.Settings(
+                title:"Silex Window Smoke",
+                width:320,
+                height:240,
+                hidden:true
+            )
+        )
+
+        assert(window.id().value != 0)
+        assert(window.title() == "Silex Window Smoke")
+        assert(window.size() == Window.Size(width:320, height:240))
+        let pixels = window.pixel_size()
+        assert(pixels.width >= 320)
+        assert(pixels.height >= 240)
+
+        window.set_title("Silex Window Ready")
+        assert(window.title() == "Silex Window Ready")
+        window.set_size(400, 300)
+        assert(window.size() == Window.Size(width:400, height:300))
+        window.show()
+        window.hide()
+        assert(!window.is_fullscreen())
+        print("direct window ", window.id().value)
+    }
+
+    var reopened_session = Session()
+    var reopened_window = Window(reopened_session, Window.Settings(hidden:true))
+    assert(reopened_window.id().value != 0)
+    print("reopened window")
+}

@@ -1,0 +1,32 @@
+{
+  "name": "GFX",
+  "version": "0.1.0",
+  "boundary": {
+    "macos-arm64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/macos-arm64/libSDL3.a",
+          "frameworks": [
+            "AudioToolbox",
+            "AVFoundation",
+            "Carbon",
+            "Cocoa",
+            "CoreAudio",
+            "CoreFoundation",
+            "CoreHaptics",
+            "CoreMedia",
+            "CoreMotion",
+            "CoreServices",
+            "CoreVideo",
+            "ForceFeedback",
+            "GameController",
+            "IOKit",
+            "Metal",
+            "QuartzCore",
+            "UniformTypeIdentifiers"
+          ]
+        }
+      }
+    }
+  }
+}

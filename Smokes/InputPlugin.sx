@@ -1,0 +1,32 @@
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Schedule
+use GFX.Input
+use GFX.Input.State as InputState
+use GFX.Plugins.InputPlugin
+
+func observe(input:@InputState) {
+    assert(!input.is_quit_requested())
+    assert(!input.is_down(Input.Key.space))
+    let events = input.events()
+    assert(events.count() == 0)
+}
+
+func run_once(application:Application) int {
+    application.run_schedule(Schedule.startup)
+    application.run_schedule(Schedule.pre_update)
+    application.run_schedule(Schedule.update)
+    application.run_schedule(Schedule.shutdown)
+    return 0
+}
+
+func verify_input_plugin() {
+    var application = Application()
+        ..install(InputPlugin())
+        ..add_system(Schedule.update, observe)
+        ..with_runner(run_once)
+    assert(application.run() == 0)
+}
+
+func main() {
+    verify_input_plugin()
+}

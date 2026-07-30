@@ -1,0 +1,18 @@
+public class Session {
+    private static var active:bool = false
+
+    public init() {
+        if Session.active {
+            panic("GFX.Session is already active")
+        }
+        if !Platform.initialize() {
+            panic("GFX.Session could not initialize the platform runtime")
+        }
+        Session.active = true
+    }
+
+    drop {
+        Platform.shutdown()
+        Session.active = false
+    }
+}

@@ -1,0 +1,39 @@
+use GFX.Bootstrap.Application
+use GFX.Session
+use GFX.Window
+
+func verify_session_transfer() {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(Session())
+
+    var stored_session = resources.remove<Session>()
+    if var session = stored_session {
+        var window = Window(session, Window.Settings(
+            title:"Session transfer",
+            width:320,
+            height:200,
+            hidden:true
+        ))
+        resources.insert(move session)
+        resources.insert(window)
+    } else {
+        panic("missing session")
+    }
+
+    if true {
+        let window:@Window = resources.get<Window>()
+        let size = window.size()
+        assert(size.width == 320)
+        assert(size.height == 200)
+    }
+
+    var removed_window = resources.remove<Window>()
+    assert(removed_window != null)
+    var removed_session = resources.remove<Session>()
+    assert(removed_session != null)
+}
+
+func main() {
+    verify_session_transfer()
+}

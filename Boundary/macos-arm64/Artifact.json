@@ -1,0 +1,8 @@
+{
+  "library": "SDL",
+  "version": "3.4.10",
+  "target": "macos-arm64",
+  "linkage": "static",
+  "sha256": "9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd",
+  "provenance": "Foundation build.zig SDL dependency export"
+}

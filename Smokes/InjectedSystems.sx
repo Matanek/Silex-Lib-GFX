@@ -1,0 +1,42 @@
+use GFX.Bootstrap
+
+struct Time {
+    let delta:int
+}
+
+struct World {
+    var value:int
+}
+
+func update(time:@Time, world:&World) {
+    world.value += time.delta
+}
+
+func observe(first:@Time, second:@Time) {
+    print(first.delta + second.delta)
+}
+
+func no_dependencies() {
+    print("no dependencies")
+}
+
+func run_once(application:Bootstrap.Application) int {
+    application.run_schedule(Bootstrap.Schedule.update)
+    return 0
+}
+
+func main() {
+    var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(Time(delta:2))
+    resources.insert(World(value:40))
+    application.add_system(Bootstrap.Schedule.update, update)
+    application.add_system(Bootstrap.Schedule.update, observe)
+    application.add_after_system(Bootstrap.Schedule.update, no_dependencies)
+    application.with_runner(run_once)
+    application.run()
+    if true {
+        let world:@World = resources.get<World>()
+        print(world.value)
+    }
+}
