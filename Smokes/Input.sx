@@ -1,6 +1,5 @@
 use Interop.C
 use Interop.MacOS
-use GFX.Session
 use GFX.Window
 use GFX.Input
 
@@ -34,9 +33,8 @@ func push_key_event(kind:uint32, window:uint32, scancode:int32, modifiers:uint16
 }
 
 func main() {
-    var session = Session()
-    var window = Window(session, Window.Settings(title:"Silex Input Smoke", hidden:true))
-    var input = Input(session)
+    var window = Window(Window.Settings(title:"Silex Input Smoke", hidden:true))
+    var input = Input()
 
     input.update()
     let window_id = window.id()

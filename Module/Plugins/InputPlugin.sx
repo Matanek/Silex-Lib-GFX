@@ -1,10 +1,8 @@
 use GFX.Bootstrap.Plugin
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
-use GFX.Session
 use GFX.Input
 use GFX.Input.State as InputState
-use GFX.Plugins.SessionPlugin
 
 class ManagedInput {
     internal var input:Input
@@ -15,7 +13,6 @@ public struct InputPlugin:Plugin {
     func id() str { return "GFX.Plugins.InputPlugin" }
 
     func build(application:Application) {
-        application.install(SessionPlugin())
         application.add_system(Schedule.startup, start_input)
         application.add_after_system(Schedule.pre_update, update_input)
         application.add_system(Schedule.shutdown, stop_input)
@@ -24,16 +21,10 @@ public struct InputPlugin:Plugin {
 
 func start_input(application:Application) {
     var resources = application.resources()
-    var stored_session = resources.remove<Session>()
-    if var session = stored_session {
-        var input = Input(session)
-        var state = input.state()
-        resources.insert(move session)
-        resources.insert(state)
-        resources.insert(ManagedInput(input:input))
-        return
-    }
-    panic("GFX.InputPlugin requires GFX.Session")
+    var input = Input()
+    var state = input.state()
+    resources.insert(state)
+    resources.insert(ManagedInput(input:input))
 }
 
 func update_input(managed:&ManagedInput) {

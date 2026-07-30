@@ -1,18 +1,18 @@
-public class Session {
-    private static var active:bool = false
+public static class Session {
+    private static var leases:int = 0
 
-    public init() {
-        if Session.active {
-            panic("GFX.Session is already active")
+    public static func open() {
+        if Session.leases == 0 && !Platform.initialize() {
+            panic("GFX could not initialize the platform runtime")
         }
-        if !Platform.initialize() {
-            panic("GFX.Session could not initialize the platform runtime")
-        }
-        Session.active = true
+        Session.leases++
     }
 
-    drop {
-        Platform.shutdown()
-        Session.active = false
+    public static func close() {
+        assert(Session.leases > 0)
+        Session.leases--
+        if Session.leases == 0 {
+            Platform.shutdown()
+        }
     }
 }

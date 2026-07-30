@@ -1,19 +1,17 @@
 # Own a GFX window
 
 `GFX.Window` is the direct lifetime boundary for one platform window. It keeps
-the session it receives alive and does not depend on `GFX.Bootstrap`:
+the private platform runtime alive and does not depend on `GFX.Bootstrap`:
 
 ```sx
-use GFX.Session
 use GFX.Window
 
 func main() {
-    var session = Session()
     var settings = Window.Settings()
     settings.title = "Silex"
     settings.width = 1280
     settings.height = 720
-    var window = Window(session, settings)
+    var window = Window(settings)
     window.show()
 }
 ```
@@ -23,7 +21,7 @@ all available options before the window is created. A cascade offers the same
 discoverable configuration inline:
 
 ```sx
-var window = Window(session, Window.Settings()
+var window = Window(Window.Settings()
     ..title = "Silex"
     ..width = 1280
     ..height = 720
@@ -41,8 +39,8 @@ address.
 
 ## Use WindowPlugin
 
-`GFX.Plugins.WindowPlugin` installs its `SessionPlugin` dependency, creates the
-same direct `Window` at startup and removes it before the session at shutdown:
+`GFX.Plugins.WindowPlugin` creates the same direct `Window` at startup and
+removes it at shutdown:
 
 ```sx
 use GFX.Bootstrap.Application

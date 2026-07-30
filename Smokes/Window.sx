@@ -1,4 +1,3 @@
-use GFX.Session
 use GFX.Window
 
 func main() {
@@ -19,9 +18,7 @@ func main() {
     assert(defaults.height == 360)
 
     if true {
-        var session = Session()
         var window = Window(
-            session,
             Window.Settings(
                 title:"Silex Window Smoke",
                 width:320,
@@ -47,8 +44,7 @@ func main() {
         print("direct window ", window.id().value)
     }
 
-    var reopened_session = Session()
-    var reopened_window = Window(reopened_session, Window.Settings(hidden:true))
+    var reopened_window = Window(Window.Settings(hidden:true))
     assert(reopened_window.id().value != 0)
     print("reopened window")
 }

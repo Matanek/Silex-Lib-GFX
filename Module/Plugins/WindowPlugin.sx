@@ -2,7 +2,6 @@ use GFX.Bootstrap.Plugin
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Controller
 use GFX.Bootstrap.Schedule
-use GFX.Session
 use GFX.Window
 use GFX.Input
 use GFX.Input.State as InputState
@@ -49,19 +48,14 @@ func start_window(application:Application) {
     var resources = application.resources()
     let stored_configuration = resources.remove<Configuration>()
     if let configuration = stored_configuration {
-        var stored_session = resources.remove<Session>()
-        if var session = stored_session {
-            var window = Window(session, configuration.settings)
-            if !configuration.settings.hidden {
-                window.show()
-                window.raise()
-                window.sync()
-            }
-            resources.insert(move session)
-            resources.insert(window)
-            return
+        var window = Window(configuration.settings)
+        if !configuration.settings.hidden {
+            window.show()
+            window.raise()
+            window.sync()
         }
-        panic("GFX.WindowPlugin requires GFX.Session")
+        resources.insert(window)
+        return
     }
     panic("GFX.WindowPlugin has no window settings")
 }

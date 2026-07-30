@@ -1,0 +1,26 @@
+use GFX.Window
+use GFX.Input
+
+func main() {
+    if true {
+        var window = Window(Window.Settings(
+            title:"Shared runtime",
+            hidden:true
+        ))
+        var input = Input()
+        input.update()
+        assert(window.id().value != 0)
+        print("window then input")
+    }
+
+    if true {
+        var input = Input()
+        var window = Window(Window.Settings(
+            title:"Reopened runtime",
+            hidden:true
+        ))
+        input.update()
+        assert(window.id().value != 0)
+        print("input then window")
+    }
+}

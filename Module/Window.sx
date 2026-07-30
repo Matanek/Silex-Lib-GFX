@@ -20,17 +20,13 @@ public struct Size {
     let height:int
 }
 
-struct SessionLifetime {
-    var value:Session? = null
-}
-
 public class Window {
-    private var lifetime:SessionLifetime = SessionLifetime()
     private let handle:uint
     private var current_title:str
 
-    public init(session:Session, settings:Settings) {
+    public init(settings:Settings = Settings()) {
         validate_size(settings.width, settings.height)
+        Session.open()
         let handle = Platform.create(
             settings.title,
             settings.width,
@@ -44,13 +40,13 @@ public class Window {
         if handle == 0 as uint {
             panic("GFX.Window could not create a platform window")
         }
-        self.lifetime = SessionLifetime(value:session)
         self.handle = handle
         self.current_title = settings.title
     }
 
     drop {
         Platform.destroy(self.handle)
+        Session.close()
     }
 
     public func id() Id {

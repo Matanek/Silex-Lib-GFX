@@ -1,15 +1,13 @@
 # Read input by frame
 
-`GFX.Input` owns one input stream and keeps its platform `Session` alive. Call
+`GFX.Input` owns one input stream and keeps the private platform runtime alive. Call
 `update()` once at the beginning of each frame in a direct application:
 
 ```sx
-use GFX.Session
 use GFX.Input
 
 func main() {
-    var session = Session()
-    var input = Input(session)
+    var input = Input()
     var running = true
 
     while running {
@@ -48,10 +46,9 @@ Create and update it on the main thread.
 ## Use InputPlugin
 
 `GFX.Plugins.InputPlugin` owns and updates the same direct `Input` class, but
-publishes only its read-only `GFX.Input.State` as a resource. It installs
-`SessionPlugin`, creates `Input` at startup, updates it after ordinary
-`Schedule.pre_update` systems and removes its state and private driver before
-the session at shutdown:
+publishes only its read-only `GFX.Input.State` as a resource. It creates
+`Input` at startup, updates it after ordinary `Schedule.pre_update` systems and
+removes its state and private driver at shutdown:
 
 ```sx
 use GFX.Bootstrap.Application

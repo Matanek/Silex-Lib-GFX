@@ -51,10 +51,6 @@ public enum Event {
     mouse_button_released(MouseButtonEvent)
 }
 
-struct SessionLifetime {
-    var value:Session? = null
-}
-
 public class State {
     private let empty_events:Event[]
     private var frame_events:Event[]
@@ -226,20 +222,20 @@ public class State {
 
 public class Input {
     private static var active:bool = false
-    private var lifetime:SessionLifetime = SessionLifetime()
     private var current_state:State
 
-    public init(session:Session) {
+    public init() {
         if Input.active {
             panic("GFX.Input is already active")
         }
-        self.lifetime = SessionLifetime(value:session)
+        Session.open()
         self.current_state = State()
         Input.active = true
     }
 
     drop {
         Input.active = false
+        Session.close()
     }
 
     public func update() {
