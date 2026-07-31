@@ -1,0 +1,107 @@
+use GFX.Bootstrap
+use GFX.Color
+use GFX.GPU
+use GFX.Window
+use GFX.Plugins.GPUPlugin
+use GFX.Plugins.WindowPlugin
+use Interop.C
+use Interop.Boundary
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+let sdl_get_windows = C.function<func(C.MutablePointer<int32>) C.Pointer<uint8> >(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindows"
+)
+
+let sdl_free = C.function<func(C.Pointer<uint8>) void>(
+    library:Boundary.SDL3,
+    name:"SDL_free"
+)
+
+struct Rendered {
+    var frames:int
+}
+
+struct WindowCount {
+    var value:int
+}
+
+func render_once(device:@GPU.Device, surface:@GPU.Surface, rendered:&Rendered, controller:&Bootstrap.Controller) {
+    assert(surface.is_presentable())
+    var commands = device.commands()
+    commands.clear(surface, Color.blue_950())
+    commands.submit()
+    rendered.frames++
+    controller.stop()
+}
+
+func request_close(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func count_windows(count:&WindowCount) {
+    var native_count:int32 = 0
+    let windows = C.address_bits(sdl_get_windows(C.mutable_pointer(native_count)))
+    count.value = native_count as int
+    if windows != 0 as uint { sdl_free(C.pointer_bits(windows)) }
+}
+
+test "install GPU presentation through the Bootstrap" {
+    var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(Rendered(frames:0))
+    application.install(GPUPlugin(GPUPlugin.Settings(
+        window:Window.Settings(
+            title:"GPU plugin test",
+            width:64,
+            height:64,
+            hidden:true
+        ),
+        present_on_start:false,
+        frame_interval_ms:0
+    )))
+    application.add_system(Bootstrap.Schedule.render, render_once)
+    assert(application.run() == 0)
+    let rendered:@Rendered = resources.get<Rendered>()
+    assert(rendered.frames == 1)
+}
+
+test "keep automatic window closing with the GPU plugin" {
+    Bootstrap.Application()
+        ..install(GPUPlugin(GPUPlugin.Settings(
+            window:Window.Settings(
+                title:"GPU close test",
+                width:64,
+                height:64,
+                hidden:true
+            )
+        )))
+        ..add_system(Bootstrap.Schedule.startup, request_close)
+        ..run()
+}
+
+test "reuse an explicitly installed window plugin" {
+    var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(WindowCount(value:0))
+    application.install(WindowPlugin(WindowPlugin.Settings(
+        title:"Configured GPU window",
+        width:64,
+        height:64,
+        hidden:true
+    )))
+    application.install(GPUPlugin())
+    application.add_system(Bootstrap.Schedule.startup, count_windows)
+    application.add_system(Bootstrap.Schedule.startup, request_close)
+    application.run()
+    let count:@WindowCount = resources.get<WindowCount>()
+    assert(count.value == 1)
+}

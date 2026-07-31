@@ -1,0 +1,18 @@
+use GFX.Window
+use GFX.Color
+use GFX.GPU
+
+test "clear a hidden window with direct GPU commands" {
+    var window = Window(Window.Settings(
+        title:"GPU direct test",
+        width:64,
+        height:64,
+        hidden:true
+    ))
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    var surface = device.present(window)
+    var commands = device.commands()
+    commands.clear(surface, Color.indigo_900())
+    commands.submit()
+    device.wait_until_idle()
+}

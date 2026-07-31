@@ -147,6 +147,10 @@ public class Window {
         return Id(value:id(self.handle))
     }
 
+    public func presentation_handle() uint {
+        return self.handle
+    }
+
     public func title() str {
         return self.current_title
     }

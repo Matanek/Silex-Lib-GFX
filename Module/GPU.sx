@@ -1,0 +1,380 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Session
+use GFX.Window
+use GFX.Color
+
+public struct ShaderFormats {
+    var spirv:bool = true
+    var dxbc:bool = true
+    var dxil:bool = true
+    var msl:bool = true
+    var metal_library:bool = true
+}
+
+public struct DeviceSettings {
+    var shader_formats:ShaderFormats? = null
+    var debug:bool = false
+    var driver:str? = null
+}
+
+public enum PresentMode {
+    synchronized
+    immediate
+    mailbox
+}
+
+public enum ColorSpace {
+    standard
+    linear
+    extended_hdr
+    hdr10
+}
+
+public struct SurfaceSettings {
+    var present_mode:PresentMode? = null
+    var color_space:ColorSpace? = null
+}
+
+public class Device {
+    private let handle:uint
+
+    public init(settings:DeviceSettings = DeviceSettings()) {
+        Session.open()
+        let handle = create_device(settings)
+        if handle == 0 as uint {
+            Session.close()
+            panic("GFX.GPU could not create a device")
+        }
+        self.handle = handle
+    }
+
+    drop {
+        sdl_wait_for_gpu_idle(C.pointer_bits(self.handle))
+        sdl_destroy_gpu_device(C.pointer_bits(self.handle))
+        Session.close()
+    }
+
+    public func present(window:Window, settings:SurfaceSettings = SurfaceSettings()) Surface {
+        return Surface(self, window, settings)
+    }
+
+    public func commands() CommandBuffer {
+        let handle = C.address_bits(sdl_acquire_gpu_command_buffer(C.pointer_bits(self.handle)))
+        if handle == 0 as uint {
+            panic("GFX.GPU could not begin recording commands")
+        }
+        return CommandBuffer(self, handle)
+    }
+
+    public func wait_until_idle() {
+        require_gpu_action(sdl_wait_for_gpu_idle(C.pointer_bits(self.handle)) != 0, "wait until idle")
+    }
+
+    internal func native_handle() uint { return self.handle }
+}
+
+public class Surface {
+    private let device_handle:uint
+    private let window_handle:uint
+    private var device_owner:Device? = null
+    private var window_owner:Window? = null
+    private let settings:SurfaceSettings
+
+    internal init(device:Device, window:Window, settings:SurfaceSettings) {
+        let device_handle = device.native_handle()
+        let window_handle = window.presentation_handle()
+        require_gpu_action(
+            sdl_claim_window_for_gpu_device(C.pointer_bits(device_handle), C.pointer_bits(window_handle)) != 0,
+            "attach the device to the window"
+        )
+        if sdl_set_gpu_swapchain_parameters(
+            C.pointer_bits(device_handle),
+            C.pointer_bits(window_handle),
+            color_space_value(resolve_color_space(settings)),
+            present_mode_value(resolve_present_mode(settings))
+        ) == 0 {
+            sdl_release_window_from_gpu_device(C.pointer_bits(device_handle), C.pointer_bits(window_handle))
+            panic("GFX.GPU could not configure window presentation")
+        }
+        self.device_handle = device_handle
+        self.window_handle = window_handle
+        self.device_owner = device
+        self.window_owner = window
+        self.settings = settings
+    }
+
+    drop {
+        sdl_release_window_from_gpu_device(
+            C.pointer_bits(self.device_handle),
+            C.pointer_bits(self.window_handle)
+        )
+        self.window_owner = null
+        self.device_owner = null
+    }
+
+    public func present_mode() PresentMode { return resolve_present_mode(self.settings) }
+    public func color_space() ColorSpace { return resolve_color_space(self.settings) }
+    public func is_presentable() bool {
+        return sdl_get_gpu_swapchain_texture_format(
+            C.pointer_bits(self.device_handle),
+            C.pointer_bits(self.window_handle)
+        ) != 0
+    }
+
+    internal func native_window() uint { return self.window_handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+public class CommandBuffer {
+    private let device_handle:uint
+    private var device_owner:Device? = null
+    private var handle:uint
+    private var render_pass_active:bool
+
+    internal init(device:Device, handle:uint) {
+        self.device_handle = device.native_handle()
+        self.device_owner = device
+        self.handle = handle
+        self.render_pass_active = false
+    }
+
+    drop {
+        if self.handle != 0 as uint {
+            if self.render_pass_active {
+                panic("GFX.GPU dropped commands while a render pass was active")
+            }
+            sdl_cancel_gpu_command_buffer(C.pointer_bits(self.handle))
+            self.handle = 0 as uint
+        }
+    }
+
+    public func render(surface:@Surface, clear:Color = Color.black()) RenderPass? {
+        self.require_recording("begin a render pass")
+        if self.render_pass_active {
+            panic("GFX.GPU cannot begin a render pass while another pass is active")
+        }
+        if surface.owner_handle() != self.device_handle {
+            panic("GFX.GPU cannot render a surface owned by another device")
+        }
+
+        var texture:uint = 0
+        var width:uint32 = 0
+        var height:uint32 = 0
+        require_gpu_action(
+            sdl_wait_and_acquire_gpu_swapchain_texture(
+                C.pointer_bits(self.handle),
+                C.pointer_bits(surface.native_window()),
+                C.mutable_pointer(texture),
+                C.mutable_pointer(width),
+                C.mutable_pointer(height)
+            ) != 0,
+            "acquire the next window image"
+        )
+        if texture == 0 as uint { return null }
+
+        var target:uint[8]
+        let address = C.address_bits(C.mutable_pointer(target))
+        let texture_value = C.store<uint>(address, 0 as uint, texture)
+        let mip_level = C.store<uint32>(address, 8 as uint, 0)
+        let layer = C.store<uint32>(address, 12 as uint, 0)
+        let red = C.store<float32>(address, 16 as uint, clear.r as float32)
+        let green = C.store<float32>(address, 20 as uint, clear.g as float32)
+        let blue = C.store<float32>(address, 24 as uint, clear.b as float32)
+        let alpha = C.store<float32>(address, 28 as uint, clear.a as float32)
+        let load = C.store<int32>(address, 32 as uint, 1)
+        let store = C.store<int32>(address, 36 as uint, 0)
+        let resolve_texture = C.store<uint>(address, 40 as uint, 0 as uint)
+        let resolve_mip = C.store<uint32>(address, 48 as uint, 0)
+        let resolve_layer = C.store<uint32>(address, 52 as uint, 0)
+        let cycle = C.store<uint8>(address, 56 as uint, 0)
+        let cycle_resolve = C.store<uint8>(address, 57 as uint, 0)
+
+        let pass_handle = C.address_bits(sdl_begin_gpu_render_pass(
+            C.pointer_bits(self.handle),
+            C.pointer_bits(address),
+            1,
+            C.pointer_bits(0 as uint)
+        ))
+        if pass_handle == 0 as uint {
+            panic("GFX.GPU could not begin a window render pass")
+        }
+        self.render_pass_active = true
+        return RenderPass(self, pass_handle, width, height)
+    }
+
+    public func clear(surface:@Surface, color:Color) bool {
+        var possible_pass = self.render(surface, color)
+        if var pass = possible_pass {
+            pass.finish()
+            return true
+        }
+        return false
+    }
+
+    public func submit() {
+        self.require_recording("submit commands")
+        if self.render_pass_active {
+            panic("GFX.GPU cannot submit commands while a render pass is active")
+        }
+        let recorded = self.handle
+        self.handle = 0 as uint
+        require_gpu_action(
+            sdl_submit_gpu_command_buffer(C.pointer_bits(recorded)) != 0,
+            "submit commands"
+        )
+    }
+
+    public func cancel() {
+        self.require_recording("cancel commands")
+        if self.render_pass_active {
+            panic("GFX.GPU cannot cancel commands while a render pass is active")
+        }
+        let recorded = self.handle
+        self.handle = 0 as uint
+        require_gpu_action(
+            sdl_cancel_gpu_command_buffer(C.pointer_bits(recorded)) != 0,
+            "cancel commands"
+        )
+    }
+
+    internal func finish_render_pass(handle:uint) {
+        if !self.render_pass_active {
+            return
+        }
+        sdl_end_gpu_render_pass(C.pointer_bits(handle))
+        self.render_pass_active = false
+    }
+
+    private func require_recording(action:str) {
+        if self.handle == 0 as uint {
+            panic("GFX.GPU cannot " + action + " after submission or cancellation")
+        }
+    }
+
+}
+
+public class RenderPass {
+    private var commands:CommandBuffer? = null
+    private var handle:uint
+    private let drawable_width:uint32
+    private let drawable_height:uint32
+
+    internal init(commands:CommandBuffer, handle:uint, width:uint32, height:uint32) {
+        self.commands = move commands
+        self.handle = handle
+        self.drawable_width = width
+        self.drawable_height = height
+    }
+
+    drop { self.finish() }
+
+    public func size() (width:uint32, height:uint32) {
+        return (width:self.drawable_width, height:self.drawable_height)
+    }
+
+    public func finish() {
+        if self.handle == 0 as uint { return }
+        if var commands = self.commands {
+            commands.finish_render_pass(self.handle)
+        }
+        self.commands = null
+        self.handle = 0 as uint
+    }
+}
+
+func create_device(settings:DeviceSettings) uint {
+    var formats = ShaderFormats()
+    if let configured_formats = settings.shader_formats {
+        formats = configured_formats
+    }
+    let flags = shader_format_flags(formats)
+    if flags == 0 { panic("GFX.GPU requires at least one shader format") }
+    if let driver = settings.driver {
+        return C.address_bits(sdl_create_gpu_device(
+            flags,
+            native_bool(settings.debug),
+            C.terminated_pointer(driver)
+        ))
+    }
+    return C.address_bits(sdl_create_gpu_device(
+        flags,
+        native_bool(settings.debug),
+        C.pointer_bits(0 as uint)
+    ))
+}
+
+func resolve_present_mode(settings:SurfaceSettings) PresentMode {
+    if let mode = settings.present_mode { return mode }
+    return PresentMode.synchronized
+}
+
+func resolve_color_space(settings:SurfaceSettings) ColorSpace {
+    if let color_space = settings.color_space { return color_space }
+    return ColorSpace.standard
+}
+
+func shader_format_flags(formats:ShaderFormats) uint32 {
+    var result:uint32 = 0
+    if formats.spirv { result += 1 << 1 }
+    if formats.dxbc { result += 1 << 2 }
+    if formats.dxil { result += 1 << 3 }
+    if formats.msl { result += 1 << 4 }
+    if formats.metal_library { result += 1 << 5 }
+    return result
+}
+
+func present_mode_value(mode:PresentMode) int32 {
+    match mode {
+        synchronized => { return 0 }
+        immediate => { return 1 }
+        mailbox => { return 2 }
+    }
+}
+
+func color_space_value(color_space:ColorSpace) int32 {
+    match color_space {
+        standard => { return 0 }
+        linear => { return 1 }
+        extended_hdr => { return 2 }
+        hdr10 => { return 3 }
+    }
+}
+
+func native_bool(value:bool) int32 {
+    if value { return 1 }
+    return 0
+}
+
+func require_gpu_action(success:bool, action:str) {
+    if !success { panic("GFX.GPU could not " + action + ": " + gpu_error()) }
+}
+
+func gpu_error() str {
+    let address = C.address_bits(sdl_get_error())
+    if address == 0 as uint { return "unknown platform error" }
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 4096 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    return "invalid platform error"
+}
+
+let sdl_create_gpu_device = C.function<func(uint32, int32, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateGPUDevice")
+let sdl_destroy_gpu_device = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_DestroyGPUDevice")
+let sdl_wait_for_gpu_idle = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_WaitForGPUIdle")
+let sdl_claim_window_for_gpu_device = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_ClaimWindowForGPUDevice")
+let sdl_release_window_from_gpu_device = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseWindowFromGPUDevice")
+let sdl_set_gpu_swapchain_parameters = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, int32, int32) int32>(library:Boundary.SDL3, name:"SDL_SetGPUSwapchainParameters")
+let sdl_get_gpu_swapchain_texture_format = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_GetGPUSwapchainTextureFormat")
+let sdl_acquire_gpu_command_buffer = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_AcquireGPUCommandBuffer")
+let sdl_wait_and_acquire_gpu_swapchain_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.MutablePointer<uint>, C.MutablePointer<uint32>, C.MutablePointer<uint32>) int32>(library:Boundary.SDL3, name:"SDL_WaitAndAcquireGPUSwapchainTexture")
+let sdl_begin_gpu_render_pass = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_BeginGPURenderPass")
+let sdl_end_gpu_render_pass = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_EndGPURenderPass")
+let sdl_submit_gpu_command_buffer = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SubmitGPUCommandBuffer")
+let sdl_cancel_gpu_command_buffer = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_CancelGPUCommandBuffer")
+let sdl_get_error = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetError")
