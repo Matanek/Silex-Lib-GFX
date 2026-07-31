@@ -45,20 +45,20 @@ public class Displays {
     }
 
     public func all() Id[] {
-    var count:int32 = 0
-    let address = C.address_bits(sdl_get_displays(C.mutable_pointer(count)))
-    if address == 0 as uint {
-        panic("GFX.Display could not enumerate platform displays")
-    }
+        var count:int32 = 0
+        let address = C.address_bits(sdl_get_displays(C.mutable_pointer(count)))
+        if address == 0 as uint {
+            panic("GFX.Display could not enumerate platform displays")
+        }
 
-    var result:Id[] = []
-    var index = 0
-    while index < count as int {
-        result.append(Id(value:C.load<uint32>(address, (index as uint) * 4)))
-        index++
-    }
-    sdl_free(C.pointer_bits(address))
-    return result
+        var result:Id[] = []
+        var index = 0
+        while index < count as int {
+            result.append(Id(value:C.load<uint32>(address, (index as uint) * 4)))
+            index++
+        }
+        sdl_free(C.pointer_bits(address))
+        return result
     }
 
     public func primary() Id {
@@ -68,43 +68,43 @@ public class Displays {
     }
 
     public func info(display:Id) Info {
-    let name_address = C.address_bits(sdl_get_display_name(display.value))
-    if name_address == 0 as uint { panic("GFX.Display could not query the display name") }
+        let name_address = C.address_bits(sdl_get_display_name(display.value))
+        if name_address == 0 as uint { panic("GFX.Display could not query the display name") }
 
-    let properties = sdl_get_display_properties(display.value)
-    let result = Info(
-        id:display,
-        name:copy_text(name_address),
-        bounds:display_rect(display, false),
-        usable_bounds:display_rect(display, true),
-        natural_orientation:orientation(sdl_get_natural_orientation(display.value)),
-        orientation:orientation(sdl_get_current_orientation(display.value)),
-        content_scale:sdl_get_display_content_scale(display.value),
-        hdr_enabled:sdl_get_boolean_property(
-            properties,
-            C.terminated_pointer("SDL.display.HDR_enabled"),
-            0
-        ) != 0
-    )
-    return result
+        let properties = sdl_get_display_properties(display.value)
+        let result = Info(
+            id:display,
+            name:copy_text(name_address),
+            bounds:display_rect(display, false),
+            usable_bounds:display_rect(display, true),
+            natural_orientation:orientation(sdl_get_natural_orientation(display.value)),
+            orientation:orientation(sdl_get_current_orientation(display.value)),
+            content_scale:sdl_get_display_content_scale(display.value),
+            hdr_enabled:sdl_get_boolean_property(
+                properties,
+                C.terminated_pointer("SDL.display.HDR_enabled"),
+                0
+            ) != 0
+        )
+        return result
     }
 
     public func modes(display:Id) Mode[] {
-    var count:int32 = 0
-    let root = C.address_bits(sdl_get_fullscreen_modes(display.value, C.mutable_pointer(count)))
-    if root == 0 as uint {
-        panic("GFX.Display could not enumerate fullscreen modes")
-    }
+        var count:int32 = 0
+        let root = C.address_bits(sdl_get_fullscreen_modes(display.value, C.mutable_pointer(count)))
+        if root == 0 as uint {
+            panic("GFX.Display could not enumerate fullscreen modes")
+        }
 
-    var result:Mode[] = []
-    var index = 0
-    while index < count as int {
-        let mode_address = C.load<uint>(root, (index as uint) * 8)
-        result.append(read_mode(mode_address))
-        index++
-    }
-    sdl_free(C.pointer_bits(root))
-    return result
+        var result:Mode[] = []
+        var index = 0
+        while index < count as int {
+            let mode_address = C.load<uint>(root, (index as uint) * 8)
+            result.append(read_mode(mode_address))
+            index++
+        }
+        sdl_free(C.pointer_bits(root))
+        return result
     }
 
     public func desktop_mode(display:Id) Mode {
