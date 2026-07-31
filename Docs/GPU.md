@@ -23,6 +23,16 @@ Use `--target linux-x64`, `--target windows-x64`, or
 published SHA-256 checksum before making the archive available. Builds then
 remain offline and applications do not manipulate these native artifacts.
 
+Portable HLSL additionally requires the Silex shader toolchain once per
+machine:
+
+~~~sh
+silex setup
+~~~
+
+Shadercross is used only while Silex compiles the application. It is not linked
+into the application and does not need to be shipped with it.
+
 GFX provides target-matched SDL3 3.4.10 static boundaries for `macos-arm64`,
 `linux-x64`, `windows-x64`, and `windows-arm64`. Applications name only GFX;
 the package manifest owns the archives, Apple frameworks, and Linux or Windows
@@ -91,6 +101,63 @@ pointed storage must remain alive during device creation. Each Vulkan extension
 list accepts at most 64 names. `suspend()` and `resume()` expose the GDK
 lifecycle hooks and should only be used by an Xbox platform integration.
 
+## Write one portable shader program
+
+The normal path starts from HLSL. A graphics program names its vertex and
+fragment entry points; Silex asks Shadercross for the formats needed by the
+selected target and embeds the compiled bytes:
+
+```sx
+let square = GPU.ShaderProgram.hlsl(file:"Shaders/Square.hlsl")
+
+var targets:GPU.ColorTargetFormat[] = []
+targets.append(GPU.ColorTargetFormat(format:surface.format()))
+var pipeline = device.graphics_pipeline(square, GPU.GraphicsPipelineSettings(
+    primitive:GPU.Primitive.triangle_strip,
+    color_targets:targets
+))
+```
+
+The defaults expect `vertex_main` and `fragment_main`. Name other entry points
+when the source uses them:
+
+```sx
+let lighting = GPU.ShaderProgram.hlsl(
+    file:"Shaders/Lighting.hlsl",
+    vertex:"draw_world",
+    fragment:"shade_world"
+)
+```
+
+Small tests and demonstrations may keep HLSL in a compile-time string. An
+immutable `let` bound directly to a literal is also accepted:
+
+```sx
+let source = "float4 vertex_main(uint id : SV_VertexID) : SV_Position { return float4(0.0, 0.0, 0.0, 1.0); } float4 fragment_main() : SV_Target0 { return float4(1.0, 0.0, 0.0, 1.0); }"
+let program = GPU.ShaderProgram.hlsl(source:source)
+```
+
+`source` and `file` are mutually exclusive and must be known while Silex
+compiles the program. Runtime-generated source belongs to the direct API.
+Shadercross diagnostics retain HLSL line and column information; file-based
+programs report the HLSL path directly, including errors originating in quoted
+`#include` files.
+
+Reflection supplies sampler, storage and uniform resource counts to SDL_GPU.
+The developer does not repeat those declarations in `ShaderSettings`.
+
+The explicit path remains available for precompiled binaries, backend-specific
+MSL or any application that intentionally controls the SDL shader format:
+
+```sx
+var vertex = device.shader(
+    GPU.ShaderStage.vertex,
+    GPU.ShaderFormat.msl,
+    msl_source,
+    GPU.ShaderSettings(entry:"vertex_main")
+)
+```
+
 ## Create only the resources the intent requires
 
 Usage descriptions are combinable structures rather than opaque bitmasks:
@@ -147,11 +214,11 @@ compressed and uncompressed formats. `pixel_format()` and `texture_format()`
 translate the host pixel formats that SDL can represent directly as GPU
 textures.
 
-## Describe a pipeline, then draw
+## Control a pipeline directly
 
-Shaders accept either a byte view for compiled SPIR-V, DXBC, DXIL, or Metal
-libraries, or a string for textual MSL. Resource counts remain explicit
-because they are part of the shader contract.
+The low-level path accepts either a byte view for compiled SPIR-V, DXBC, DXIL,
+or Metal libraries, or a string for textual MSL. Resource counts remain
+explicit because this path intentionally exposes the complete shader contract.
 
 ```sx
 var vertex = device.shader(
@@ -224,20 +291,13 @@ and clear/load policy remain available when composition needs finer control.
 
 ## Dispatch compute work
 
-A compute pipeline declares its resource counts and thread-group size.
-Writable resources are named when the pass begins; read-only samplers,
-textures, and buffers are bound inside it.
+A portable compute program obtains its resource counts and thread-group size
+from HLSL reflection. Writable resources are named when the pass begins;
+read-only samplers, textures, and buffers are bound inside it.
 
 ```sx
-var pipeline = device.compute_pipeline(
-    GPU.ShaderFormat.msl,
-    compute_source,
-    GPU.ComputePipelineSettings(
-        entry:"compute_main",
-        read_write_storage_buffers:1,
-        threads_x:64
-    )
-)
+let compute = GPU.ComputeProgram.hlsl(file:"Shaders/Particles.hlsl")
+var pipeline = device.compute_pipeline(compute)
 
 var buffers:GPU.WritableBuffer[] = []
 buffers.append(GPU.WritableBuffer(buffer:particles))
@@ -294,8 +354,9 @@ format queries and conversions, debug labels, and the GDK lifecycle hooks.
 The `SDL_CreateGPURenderer` and `SDL_GPURenderState` family belongs to
 `SDL_render.h`. It is a bridge to SDL's separate high-level 2D Render API and
 is intentionally not part of `GFX.GPU`; a Silex renderer builds directly on
-the GPU passes described here. Likewise, shader cross-compilation belongs to
-the shader toolchain rather than SDL_GPU itself.
+the GPU passes described here. Shader cross-compilation remains owned by the
+Silex toolchain rather than SDL_GPU itself; GFX consumes only its reflected,
+compiled program bundle.
 
 The current GFX boundary ships and executes Metal on `macos-arm64`. D3D12,
 Vulkan, and GDK settings are represented so the public contract does not need

@@ -106,6 +106,58 @@ public struct ComputePipelineSettings {
     var name:str? = null
 }
 
+public struct ShaderProgram {
+    internal let vertex_msl:str?
+    internal let fragment_msl:str?
+    internal let vertex_spirv:str?
+    internal let fragment_spirv:str?
+    internal let vertex_dxil:str?
+    internal let fragment_dxil:str?
+    internal let vertex_entry:str
+    internal let fragment_entry:str
+    internal let vertex_samplers:int
+    internal let vertex_storage_textures:int
+    internal let vertex_storage_buffers:int
+    internal let vertex_uniform_buffers:int
+    internal let fragment_samplers:int
+    internal let fragment_storage_textures:int
+    internal let fragment_storage_buffers:int
+    internal let fragment_uniform_buffers:int
+
+    public static func hlsl(
+        source:str = "",
+        file:str = "",
+        vertex:str = "vertex_main",
+        fragment:str = "fragment_main"
+    ) ShaderProgram {
+        panic("GPU.ShaderProgram.hlsl must be compiled by Silex")
+    }
+}
+
+public struct ComputeProgram {
+    internal let msl:str?
+    internal let spirv:str?
+    internal let dxil:str?
+    internal let entry:str
+    internal let samplers:int
+    internal let read_only_storage_textures:int
+    internal let read_only_storage_buffers:int
+    internal let read_write_storage_textures:int
+    internal let read_write_storage_buffers:int
+    internal let uniform_buffers:int
+    internal let threads_x:int
+    internal let threads_y:int
+    internal let threads_z:int
+
+    public static func hlsl(
+        source:str = "",
+        file:str = "",
+        entry:str = "compute_main"
+    ) ComputeProgram {
+        panic("GPU.ComputeProgram.hlsl must be compiled by Silex")
+    }
+}
+
 public class Shader {
     private let device_handle:uint
     private let handle:uint
@@ -291,6 +343,68 @@ extend Device {
         return GraphicsPipeline(self, vertex, fragment, settings)
     }
 
+    public func graphics_pipeline(program:@ShaderProgram, settings:GraphicsPipelineSettings) GraphicsPipeline {
+        let formats = self.shader_formats()
+        if formats.msl {
+            if let vertex_code = program.vertex_msl {
+                if let fragment_code = program.fragment_msl {
+                    var vertex_bytes = decode_shader(vertex_code)
+                    var fragment_bytes = decode_shader(fragment_code)
+                    return self.graphics_pipeline(
+                        Shader(self, Types.ShaderStage.vertex, Types.ShaderFormat.msl, @vertex_bytes[0:vertex_bytes.count()], shader_settings(
+                            copy program.vertex_entry, copy program.vertex_samplers, copy program.vertex_storage_textures,
+                            copy program.vertex_storage_buffers, copy program.vertex_uniform_buffers
+                        )),
+                        Shader(self, Types.ShaderStage.fragment, Types.ShaderFormat.msl, @fragment_bytes[0:fragment_bytes.count()], shader_settings(
+                            copy program.fragment_entry, copy program.fragment_samplers, copy program.fragment_storage_textures,
+                            copy program.fragment_storage_buffers, copy program.fragment_uniform_buffers
+                        )),
+                        settings
+                    )
+                }
+            }
+        }
+        if formats.dxil {
+            if let vertex_code = program.vertex_dxil {
+                if let fragment_code = program.fragment_dxil {
+                    var vertex_bytes = decode_shader(vertex_code)
+                    var fragment_bytes = decode_shader(fragment_code)
+                    return self.graphics_pipeline(
+                        Shader(self, Types.ShaderStage.vertex, Types.ShaderFormat.dxil, @vertex_bytes[0:vertex_bytes.count()], shader_settings(
+                            copy program.vertex_entry, copy program.vertex_samplers, copy program.vertex_storage_textures,
+                            copy program.vertex_storage_buffers, copy program.vertex_uniform_buffers
+                        )),
+                        Shader(self, Types.ShaderStage.fragment, Types.ShaderFormat.dxil, @fragment_bytes[0:fragment_bytes.count()], shader_settings(
+                            copy program.fragment_entry, copy program.fragment_samplers, copy program.fragment_storage_textures,
+                            copy program.fragment_storage_buffers, copy program.fragment_uniform_buffers
+                        )),
+                        settings
+                    )
+                }
+            }
+        }
+        if formats.spirv {
+            if let vertex_code = program.vertex_spirv {
+                if let fragment_code = program.fragment_spirv {
+                    var vertex_bytes = decode_shader(vertex_code)
+                    var fragment_bytes = decode_shader(fragment_code)
+                    return self.graphics_pipeline(
+                        Shader(self, Types.ShaderStage.vertex, Types.ShaderFormat.spirv, @vertex_bytes[0:vertex_bytes.count()], shader_settings(
+                            copy program.vertex_entry, copy program.vertex_samplers, copy program.vertex_storage_textures,
+                            copy program.vertex_storage_buffers, copy program.vertex_uniform_buffers
+                        )),
+                        Shader(self, Types.ShaderStage.fragment, Types.ShaderFormat.spirv, @fragment_bytes[0:fragment_bytes.count()], shader_settings(
+                            copy program.fragment_entry, copy program.fragment_samplers, copy program.fragment_storage_textures,
+                            copy program.fragment_storage_buffers, copy program.fragment_uniform_buffers
+                        )),
+                        settings
+                    )
+                }
+            }
+        }
+        panic("GFX.GPU device has no shader format compatible with this HLSL program")
+    }
+
     public func compute_pipeline(format:Types.ShaderFormat, code:@uint8[..], settings:ComputePipelineSettings) ComputePipeline {
         return ComputePipeline(self, format, code, settings)
     }
@@ -305,6 +419,78 @@ extend Device {
         }
         return ComputePipeline(self, format, @code[0:code.count()], settings)
     }
+
+    public func compute_pipeline(program:@ComputeProgram, name:str? = null) ComputePipeline {
+        let formats = self.shader_formats()
+        let settings = ComputePipelineSettings(
+            entry:copy program.entry,
+            samplers:copy program.samplers,
+            read_only_storage_textures:copy program.read_only_storage_textures,
+            read_only_storage_buffers:copy program.read_only_storage_buffers,
+            read_write_storage_textures:copy program.read_write_storage_textures,
+            read_write_storage_buffers:copy program.read_write_storage_buffers,
+            uniform_buffers:copy program.uniform_buffers,
+            threads_x:copy program.threads_x,
+            threads_y:copy program.threads_y,
+            threads_z:copy program.threads_z,
+            name:name
+        )
+        if formats.msl {
+            if let code = program.msl {
+                var bytes = decode_shader(code)
+                return ComputePipeline(self, Types.ShaderFormat.msl, @bytes[0:bytes.count()], settings)
+            }
+        }
+        if formats.dxil {
+            if let code = program.dxil {
+                var bytes = decode_shader(code)
+                return ComputePipeline(self, Types.ShaderFormat.dxil, @bytes[0:bytes.count()], settings)
+            }
+        }
+        if formats.spirv {
+            if let code = program.spirv {
+                var bytes = decode_shader(code)
+                return ComputePipeline(self, Types.ShaderFormat.spirv, @bytes[0:bytes.count()], settings)
+            }
+        }
+        panic("GFX.GPU device has no shader format compatible with this HLSL compute program")
+    }
+}
+
+local func shader_settings(
+    entry:str,
+    samplers:int,
+    storage_textures:int,
+    storage_buffers:int,
+    uniform_buffers:int
+) ShaderSettings {
+    return ShaderSettings(
+        entry:entry,
+        samplers:samplers,
+        storage_textures:storage_textures,
+        storage_buffers:storage_buffers,
+        uniform_buffers:uniform_buffers
+    )
+}
+
+local func decode_shader(encoded:str) uint8[] {
+    let count = C.byte_count(encoded)
+    if count % 2 != 0 as uint { panic("GFX.GPU received invalid compiled shader data") }
+    var result:uint8[] = []
+    var index:uint = 0
+    while index < count {
+        let high = hex_nibble(C.byte_at(encoded, index))
+        let low = hex_nibble(C.byte_at(encoded, index + 1))
+        result.append(((high * 16 as uint8) + low) as uint8)
+        index += 2
+    }
+    return result
+}
+
+local func hex_nibble(value:uint8) uint8 {
+    if value >= 48 as uint8 && value <= 57 as uint8 { return value - 48 as uint8 }
+    if value >= 97 as uint8 && value <= 102 as uint8 { return value - 87 as uint8 }
+    panic("GFX.GPU received invalid compiled shader data")
 }
 
 local func validate_counts(values:int[]) {
