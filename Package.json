@@ -1,8 +1,38 @@
 {
   "name": "GFX",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "dependencies": {
     "STD": "^0.5.0"
+  },
+  "artifacts": {
+    "macos-arm64": {
+      "SDL3": {
+        "path": "Boundary/macos-arm64/libSDL3.a",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-macos-arm64.a",
+        "sha256": "9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd"
+      }
+    },
+    "linux-x64": {
+      "SDL3": {
+        "path": "Boundary/linux-x64/libSDL3.a",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-linux-x64.a",
+        "sha256": "307863a80e696052ba4944d62533598889a08068badeec7e2729f096f4f2eada"
+      }
+    },
+    "windows-x64": {
+      "SDL3": {
+        "path": "Boundary/windows-x64/SDL3.lib",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-windows-x64.lib",
+        "sha256": "e8140461894524526b3fe595fa38a7fdbbc15ea51456e3578b33f7dda3007fae"
+      }
+    },
+    "windows-arm64": {
+      "SDL3": {
+        "path": "Boundary/windows-arm64/SDL3.lib",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-windows-arm64.lib",
+        "sha256": "692a2c16dbb0924c2ce54509e2ac1b5c3043f1c3983e9cf1a47cdcc9a13dab19"
+      }
+    }
   },
   "boundary": {
     "macos-arm64": {
@@ -27,6 +57,58 @@
             "Metal",
             "QuartzCore",
             "UniformTypeIdentifiers"
+          ]
+        }
+      }
+    },
+    "linux-x64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/linux-x64/libSDL3.a",
+          "libraries": [
+            "dl",
+            "m",
+            "pthread"
+          ]
+        }
+      }
+    },
+    "windows-x64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/windows-x64/SDL3.lib",
+          "libraries": [
+            "advapi32",
+            "gdi32",
+            "imm32",
+            "ole32",
+            "oleaut32",
+            "setupapi",
+            "shell32",
+            "user32",
+            "uuid",
+            "version",
+            "winmm"
+          ]
+        }
+      }
+    },
+    "windows-arm64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/windows-arm64/SDL3.lib",
+          "libraries": [
+            "advapi32",
+            "gdi32",
+            "imm32",
+            "ole32",
+            "oleaut32",
+            "setupapi",
+            "shell32",
+            "user32",
+            "uuid",
+            "version",
+            "winmm"
           ]
         }
       }

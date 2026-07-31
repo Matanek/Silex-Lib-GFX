@@ -1,0 +1,8 @@
+{
+  "library": "SDL",
+  "version": "3.4.10",
+  "target": "windows-arm64",
+  "linkage": "static",
+  "sha256": "692a2c16dbb0924c2ce54509e2ac1b5c3043f1c3983e9cf1a47cdcc9a13dab19",
+  "provenance": "Foundation Vendors/build.zig source export cross-compiled with Zig 0.16.0"
+}

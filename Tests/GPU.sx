@@ -11,8 +11,21 @@ test "clear a hidden window with direct GPU commands" {
     ))
     var device = GPU.Device(GPU.DeviceSettings(debug:true))
     var surface = device.present(window)
+    assert(surface.supports(surface.present_mode()))
+    assert(surface.supports(surface.color_space()))
+    assert(device.allows_frames_in_flight(2))
+    surface.configure(GPU.SurfaceSettings(
+        present_mode:surface.present_mode(),
+        color_space:surface.color_space()
+    ))
+    surface.wait_until_ready()
     var commands = device.commands()
     commands.clear(surface, Color.indigo_900())
     commands.submit()
+    var optional_frame = device.commands()
+    if var pass = optional_frame.try_render(surface, Color.blue_950()) { pass.finish() }
+    optional_frame.submit()
+    var canceled = device.commands()
+    canceled.cancel()
     device.wait_until_idle()
 }

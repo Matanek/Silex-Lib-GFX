@@ -1,0 +1,827 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Color
+use GFX.GPU.Types
+use GFX.GPU.Device
+use GFX.GPU.Device.Surface
+use GFX.GPU.Device.gpu_error
+use GFX.GPU.Device.require_gpu_action
+use GFX.GPU.Resources.Buffer
+use GFX.GPU.Resources.Texture
+use GFX.GPU.Resources.Sampler
+use GFX.GPU.Resources.TransferBuffer
+use GFX.GPU.Pipelines.GraphicsPipeline
+use GFX.GPU.Pipelines.ComputePipeline
+
+public struct ColorTarget {
+    var texture:Texture? = null
+    var mip_level:int = 0
+    var layer:int = 0
+    var clear:Color = Color(r:0.0, g:0.0, b:0.0, a:1.0)
+    var load:Types.Load? = null
+    var store:Types.Store? = null
+    var resolve:Texture? = null
+    var resolve_mip_level:int = 0
+    var resolve_layer:int = 0
+    var cycle:bool = true
+    var cycle_resolve:bool = true
+}
+
+public struct DepthTarget {
+    var texture:Texture? = null
+    var clear_depth:float = 1.0
+    var depth_load:Types.Load? = null
+    var depth_store:Types.Store? = null
+    var stencil_load:Types.Load? = null
+    var stencil_store:Types.Store? = null
+    var clear_stencil:uint8 = 0
+    var mip_level:int = 0
+    var layer:int = 0
+    var cycle:bool = true
+}
+
+public struct TextureLocation {
+    var texture:Texture? = null
+    var mip_level:int = 0
+    var layer:int = 0
+    var x:int = 0
+    var y:int = 0
+    var z:int = 0
+}
+
+public struct TextureRegion {
+    var texture:Texture? = null
+    var mip_level:int = 0
+    var layer:int = 0
+    var x:int = 0
+    var y:int = 0
+    var z:int = 0
+    var width:int = 1
+    var height:int = 1
+    var depth:int = 1
+}
+
+public struct WritableTexture {
+    var texture:Texture? = null
+    var mip_level:int = 0
+    var layer:int = 0
+    var cycle:bool = false
+}
+
+public struct WritableBuffer {
+    var buffer:Buffer? = null
+    var cycle:bool = false
+}
+
+public struct BlitRegion {
+    var texture:Texture? = null
+    var mip_level:int = 0
+    var layer:int = 0
+    var x:int = 0
+    var y:int = 0
+    var width:int = 1
+    var height:int = 1
+}
+
+public class Fence {
+    private let device_handle:uint
+    private var handle:uint
+    private var device_owner:Device? = null
+
+    internal init(device:Device, handle:uint) {
+        self.device_handle = device.native_handle()
+        self.handle = handle
+        self.device_owner = device
+    }
+
+    drop { self.release() }
+
+    public func is_ready() bool {
+        if self.handle == 0 as uint { return true }
+        return sdl_query_gpu_fence(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle)) != 0
+    }
+
+    public func wait() {
+        if self.handle == 0 as uint { return }
+        var fences:uint[1]
+        fences[0] = self.handle
+        require_gpu_action(sdl_wait_for_gpu_fences(
+            C.pointer_bits(self.device_handle), 1, C.pointer_bits(C.address_bits(C.mutable_pointer(fences))), 1
+        ) != 0, "wait for submitted GPU work")
+    }
+
+    public func release() {
+        if self.handle == 0 as uint { return }
+        sdl_release_gpu_fence(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        self.handle = 0 as uint
+        self.device_owner = null
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+public class CommandBuffer {
+    private let device_handle:uint
+    private var device_owner:Device? = null
+    private var handle:uint
+    private var pass_active:bool
+
+    internal init(device:Device, handle:uint) {
+        self.device_handle = device.native_handle()
+        self.device_owner = device
+        self.handle = handle
+        self.pass_active = false
+    }
+
+    drop {
+        if self.handle != 0 as uint {
+            if self.pass_active { panic("GFX.GPU dropped commands while a pass was active") }
+            sdl_cancel_gpu_command_buffer(C.pointer_bits(self.handle))
+            self.handle = 0 as uint
+        }
+    }
+
+    public func render(surface:@Surface, clear:Color = Color.black()) RenderPass? {
+        self.require_available("begin a window render pass")
+        self.require_owner(surface.owner_handle())
+        var texture:uint = 0
+        var width:uint32 = 0
+        var height:uint32 = 0
+        require_gpu_action(sdl_wait_and_acquire_gpu_swapchain_texture(
+            C.pointer_bits(self.handle), C.pointer_bits(surface.native_window()),
+            C.mutable_pointer(texture), C.mutable_pointer(width), C.mutable_pointer(height)
+        ) != 0, "acquire the next window image")
+        if texture == 0 as uint { return null }
+        var target:uint[8]
+        encode_color_target_handle(texture, clear, C.address_bits(C.mutable_pointer(target)))
+        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, 0 as uint, width, height)
+    }
+
+    public func try_render(surface:@Surface, clear:Color = Color.black()) RenderPass? {
+        self.require_available("try to begin a window render pass")
+        self.require_owner(surface.owner_handle())
+        var texture:uint = 0
+        var width:uint32 = 0
+        var height:uint32 = 0
+        require_gpu_action(sdl_acquire_gpu_swapchain_texture(
+            C.pointer_bits(self.handle), C.pointer_bits(surface.native_window()),
+            C.mutable_pointer(texture), C.mutable_pointer(width), C.mutable_pointer(height)
+        ) != 0, "try to acquire the next window image")
+        if texture == 0 as uint { return null }
+        var target:uint[8]
+        encode_color_target_handle(texture, clear, C.address_bits(C.mutable_pointer(target)))
+        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, 0 as uint, width, height)
+    }
+
+    public func clear(surface:@Surface, color:Color = Color.black()) bool {
+        if var pass = self.render(surface, color) {
+            pass.finish()
+            return true
+        }
+        return false
+    }
+
+    public func render(target:ColorTarget) RenderPass {
+        var targets:ColorTarget[] = []
+        targets.append(target)
+        return self.render(targets)
+    }
+
+    public func render(targets:ColorTarget[], depth:DepthTarget? = null) RenderPass {
+        self.require_available("begin a render pass")
+        if targets.count() == 0 && depth == null { panic("GFX.GPU render pass requires a color or depth target") }
+        if targets.count() > 8 { panic("GFX.GPU render pass supports at most eight color targets") }
+        var native_targets:uint[64]
+        var index = 0
+        while index < targets.count() {
+            var configured = targets[index]
+            self.require_owner(required_texture(configured.texture).owner_handle())
+            require_nonnegative(configured.mip_level, "color target mip level")
+            require_nonnegative(configured.layer, "color target layer")
+            require_nonnegative(configured.resolve_mip_level, "resolve target mip level")
+            require_nonnegative(configured.resolve_layer, "resolve target layer")
+            if var resolve = configured.resolve { self.require_owner(resolve.owner_handle()) }
+            encode_color_target(targets[index], C.address_bits(C.mutable_pointer(native_targets)) + (index * 64) as uint)
+            index++
+        }
+        var native_depth:uint[4]
+        var depth_address:uint = 0
+        if var configured = depth {
+            self.require_owner(required_texture(configured.texture).owner_handle())
+            require_nonnegative(configured.mip_level, "depth target mip level")
+            require_nonnegative(configured.layer, "depth target layer")
+            depth_address = C.address_bits(C.mutable_pointer(native_depth))
+            encode_depth_target(configured, depth_address)
+        }
+        let handle = C.address_bits(sdl_begin_gpu_render_pass(
+            C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(native_targets))),
+            targets.count() as uint32, C.pointer_bits(depth_address)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not begin a render pass: " + gpu_error()) }
+        self.pass_active = true
+        return RenderPass(self, handle, 0, 0)
+    }
+
+    public func copy() CopyPass {
+        self.require_available("begin a copy pass")
+        let handle = C.address_bits(sdl_begin_gpu_copy_pass(C.pointer_bits(self.handle)))
+        if handle == 0 as uint { panic("GFX.GPU could not begin a copy pass: " + gpu_error()) }
+        self.pass_active = true
+        return CopyPass(self, handle)
+    }
+
+    public func compute(textures:WritableTexture[] = [], buffers:WritableBuffer[] = []) ComputePass {
+        self.require_available("begin a compute pass")
+        if textures.count() > 8 || buffers.count() > 8 { panic("GFX.GPU compute pass supports at most eight writable resources of each kind") }
+        var native_textures:uint[24]
+        var native_buffers:uint[16]
+        var index = 0
+        while index < textures.count() {
+            var configured = required_texture(textures[index].texture)
+            self.require_owner(configured.owner_handle())
+            require_nonnegative(textures[index].mip_level, "writable texture mip level")
+            require_nonnegative(textures[index].layer, "writable texture layer")
+            let address = C.address_bits(C.mutable_pointer(native_textures)) + (index * 24) as uint
+            let texture = C.store<uint>(address, 0 as uint, configured.native_handle())
+            let mip = C.store<uint32>(address, 8 as uint, textures[index].mip_level as uint32)
+            let layer = C.store<uint32>(address, 12 as uint, textures[index].layer as uint32)
+            let cycle = C.store<uint8>(address, 16 as uint, Types.native_bool(textures[index].cycle) as uint8)
+            index++
+        }
+        index = 0
+        while index < buffers.count() {
+            var configured = required_buffer(buffers[index].buffer)
+            self.require_owner(configured.owner_handle())
+            let address = C.address_bits(C.mutable_pointer(native_buffers)) + (index * 16) as uint
+            let buffer = C.store<uint>(address, 0 as uint, configured.native_handle())
+            let cycle = C.store<uint8>(address, 8 as uint, Types.native_bool(buffers[index].cycle) as uint8)
+            index++
+        }
+        let handle = C.address_bits(sdl_begin_gpu_compute_pass(
+            C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(native_textures))),
+            textures.count() as uint32, C.pointer_bits(C.address_bits(C.mutable_pointer(native_buffers))), buffers.count() as uint32
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not begin a compute pass: " + gpu_error()) }
+        self.pass_active = true
+        return ComputePass(self, handle)
+    }
+
+    public func vertex_uniform(slot:int, bytes:@uint8[..]) { self.uniform(0, slot, bytes) }
+    public func fragment_uniform(slot:int, bytes:@uint8[..]) { self.uniform(1, slot, bytes) }
+    public func compute_uniform(slot:int, bytes:@uint8[..]) { self.uniform(2, slot, bytes) }
+
+    public func label(value:str) {
+        self.require_recording("insert a debug label")
+        sdl_insert_gpu_debug_label(C.pointer_bits(self.handle), C.terminated_pointer(value))
+    }
+
+    public func begin_debug_group(value:str) {
+        self.require_recording("begin a debug group")
+        sdl_push_gpu_debug_group(C.pointer_bits(self.handle), C.terminated_pointer(value))
+    }
+
+    public func end_debug_group() {
+        self.require_recording("end a debug group")
+        sdl_pop_gpu_debug_group(C.pointer_bits(self.handle))
+    }
+
+    public func generate_mipmaps(texture:@Texture) {
+        self.require_available("generate texture mipmaps")
+        self.require_owner(texture.owner_handle())
+        sdl_generate_mipmaps_for_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(texture.native_handle()))
+    }
+
+    public func blit(
+        source:BlitRegion,
+        destination:BlitRegion,
+        filter:Types.Filter = Types.Filter.linear,
+        load:Types.Load = Types.Load.discard,
+        clear:Color = Color.black(),
+        flip:Types.Flip = Types.Flip.none,
+        cycle:bool = true
+    ) {
+        self.require_available("blit a texture")
+        var source_texture = required_texture(source.texture)
+        var destination_texture = required_texture(destination.texture)
+        self.require_owner(source_texture.owner_handle())
+        self.require_owner(destination_texture.owner_handle())
+        require_blit_region(source)
+        require_blit_region(destination)
+        var info:uint[12]
+        let address = C.address_bits(C.mutable_pointer(info))
+        encode_blit_region(source, address)
+        encode_blit_region(destination, address + 32)
+        let stored_load = C.store<int32>(address, 64 as uint, load.raw_value as int32)
+        encode_color(clear, address + 68)
+        let stored_flip = C.store<int32>(address, 84 as uint, flip.raw_value as int32)
+        let stored_filter = C.store<int32>(address, 88 as uint, filter.raw_value as int32)
+        let stored_cycle = C.store<uint8>(address, 92 as uint, Types.native_bool(cycle) as uint8)
+        sdl_blit_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(address))
+    }
+
+    public func submit() {
+        self.require_available("submit commands")
+        let recorded = self.handle
+        self.handle = 0 as uint
+        require_gpu_action(sdl_submit_gpu_command_buffer(C.pointer_bits(recorded)) != 0, "submit commands")
+    }
+
+    public func submit_and_track() Fence {
+        self.require_available("submit commands")
+        let recorded = self.handle
+        self.handle = 0 as uint
+        let fence = C.address_bits(sdl_submit_gpu_command_buffer_and_acquire_fence(C.pointer_bits(recorded)))
+        if fence == 0 as uint { panic("GFX.GPU could not submit commands with a fence: " + gpu_error()) }
+        if var device = self.device_owner { return Fence(device, fence) }
+        panic("GFX.GPU commands have no device")
+    }
+
+    public func cancel() {
+        self.require_available("cancel commands")
+        let recorded = self.handle
+        self.handle = 0 as uint
+        require_gpu_action(sdl_cancel_gpu_command_buffer(C.pointer_bits(recorded)) != 0, "cancel commands")
+    }
+
+    internal func finish_render(handle:uint) { if self.pass_active { sdl_end_gpu_render_pass(C.pointer_bits(handle)); self.pass_active = false } }
+    internal func finish_copy(handle:uint) { if self.pass_active { sdl_end_gpu_copy_pass(C.pointer_bits(handle)); self.pass_active = false } }
+    internal func finish_compute(handle:uint) { if self.pass_active { sdl_end_gpu_compute_pass(C.pointer_bits(handle)); self.pass_active = false } }
+    internal func require_resource(owner:uint) { self.require_owner(owner) }
+    internal func native_device() uint { return self.device_handle }
+
+    private func begin_render(targets:uint, count:uint32, depth:uint, width:uint32, height:uint32) RenderPass {
+        let handle = C.address_bits(sdl_begin_gpu_render_pass(
+            C.pointer_bits(self.handle), C.pointer_bits(targets), count, C.pointer_bits(depth)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not begin a window render pass: " + gpu_error()) }
+        self.pass_active = true
+        return RenderPass(self, handle, width, height)
+    }
+
+    private func uniform(stage:int, slot:int, bytes:@uint8[..]) {
+        self.require_recording("push uniform data")
+        if slot < 0 || slot >= 4 || bytes.count() == 0 { panic("GFX.GPU uniform slot must be between 0 and 3 and bytes cannot be empty") }
+        var compact = C.string(bytes)
+        if stage == 0 { sdl_push_gpu_vertex_uniform_data(C.pointer_bits(self.handle), slot as uint32, C.pointer(compact), bytes.count() as uint32); return }
+        if stage == 1 { sdl_push_gpu_fragment_uniform_data(C.pointer_bits(self.handle), slot as uint32, C.pointer(compact), bytes.count() as uint32); return }
+        sdl_push_gpu_compute_uniform_data(C.pointer_bits(self.handle), slot as uint32, C.pointer(compact), bytes.count() as uint32)
+    }
+
+    private func require_owner(owner:uint) { if owner != self.device_handle { panic("GFX.GPU resource belongs to another device") } }
+    private func require_recording(action:str) { if self.handle == 0 as uint { panic("GFX.GPU cannot " + action + " after submission or cancellation") } }
+    private func require_available(action:str) { self.require_recording(action); if self.pass_active { panic("GFX.GPU cannot " + action + " while a pass is active") } }
+}
+
+public class RenderPass {
+    private var commands:CommandBuffer? = null
+    private var handle:uint
+    private let device_handle:uint
+    private let drawable_width:uint32
+    private let drawable_height:uint32
+
+    internal init(commands:CommandBuffer, handle:uint, width:uint32, height:uint32) {
+        self.commands = commands
+        self.handle = handle
+        self.device_handle = commands.native_device()
+        self.drawable_width = width
+        self.drawable_height = height
+    }
+
+    drop { self.finish() }
+    public func size() (width:uint32, height:uint32) { return (width:self.drawable_width, height:self.drawable_height) }
+
+    public func bind(pipeline:@GraphicsPipeline) {
+        self.require_owner(pipeline.owner_handle())
+        sdl_bind_gpu_graphics_pipeline(C.pointer_bits(self.handle), C.pointer_bits(pipeline.native_handle()))
+    }
+
+    public func vertex_buffer(slot:int, buffer:@Buffer, offset:int = 0) {
+        self.require_owner(buffer.owner_handle())
+        require_slot(slot, 16, "vertex buffer")
+        require_range(buffer.size(), offset, 0, "vertex buffer binding")
+        var binding:uint[2]
+        let address = C.address_bits(C.mutable_pointer(binding))
+        let stored_buffer = C.store<uint>(address, 0 as uint, buffer.native_handle())
+        let stored_offset = C.store<uint32>(address, 8 as uint, offset as uint32)
+        sdl_bind_gpu_vertex_buffers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
+    }
+
+    public func index_buffer(buffer:@Buffer, type:Types.IndexType = Types.IndexType.thirty_two_bits, offset:int = 0) {
+        self.require_owner(buffer.owner_handle())
+        require_range(buffer.size(), offset, 0, "index buffer binding")
+        var binding:uint[2]
+        let address = C.address_bits(C.mutable_pointer(binding))
+        let stored_buffer = C.store<uint>(address, 0 as uint, buffer.native_handle())
+        let stored_offset = C.store<uint32>(address, 8 as uint, offset as uint32)
+        sdl_bind_gpu_index_buffer(C.pointer_bits(self.handle), C.pointer_bits(address), type.raw_value as int32)
+    }
+
+    public func vertex_sampler(slot:int, texture:@Texture, sampler:@Sampler) { self.sampler(0, slot, texture, sampler) }
+    public func fragment_sampler(slot:int, texture:@Texture, sampler:@Sampler) { self.sampler(1, slot, texture, sampler) }
+    public func vertex_storage_texture(slot:int, texture:@Texture) { self.storage_texture(0, slot, texture) }
+    public func fragment_storage_texture(slot:int, texture:@Texture) { self.storage_texture(1, slot, texture) }
+    public func vertex_storage_buffer(slot:int, buffer:@Buffer) { self.storage_buffer(0, slot, buffer) }
+    public func fragment_storage_buffer(slot:int, buffer:@Buffer) { self.storage_buffer(1, slot, buffer) }
+
+    public func viewport(x:float, y:float, width:float, height:float, minimum_depth:float = 0.0, maximum_depth:float = 1.0) {
+        if width < 0.0 || height < 0.0 || minimum_depth < 0.0 || maximum_depth > 1.0 || minimum_depth > maximum_depth {
+            panic("GFX.GPU viewport dimensions and depth range are invalid")
+        }
+        var storage:uint[3]
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let x_value = C.store<float32>(address, 0 as uint, x as float32)
+        let y_value = C.store<float32>(address, 4 as uint, y as float32)
+        let width_value = C.store<float32>(address, 8 as uint, width as float32)
+        let height_value = C.store<float32>(address, 12 as uint, height as float32)
+        let minimum = C.store<float32>(address, 16 as uint, minimum_depth as float32)
+        let maximum = C.store<float32>(address, 20 as uint, maximum_depth as float32)
+        sdl_set_gpu_viewport(C.pointer_bits(self.handle), C.pointer_bits(address))
+    }
+
+    public func scissor(x:int, y:int, width:int, height:int) {
+        if width < 0 || height < 0 { panic("GFX.GPU scissor dimensions cannot be negative") }
+        var storage:int32[4]
+        storage[0] = x as int32; storage[1] = y as int32; storage[2] = width as int32; storage[3] = height as int32
+        sdl_set_gpu_scissor(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage))))
+    }
+
+    public func blend_constant(color:Color) {
+        sdl_set_gpu_blend_constants(C.pointer_bits(self.handle), color.r as float32, color.g as float32, color.b as float32, color.a as float32)
+    }
+    public func stencil_reference(value:uint8) { sdl_set_gpu_stencil_reference(C.pointer_bits(self.handle), value as uint32) }
+
+    public func draw(vertices:int, instances:int = 1, first_vertex:int = 0, first_instance:int = 0) {
+        require_draw_range(vertices, instances, first_vertex, first_instance)
+        sdl_draw_gpu_primitives(C.pointer_bits(self.handle), vertices as uint32, instances as uint32, first_vertex as uint32, first_instance as uint32)
+    }
+    public func draw_indexed(indices:int, instances:int = 1, first_index:int = 0, vertex_offset:int = 0, first_instance:int = 0) {
+        require_draw_range(indices, instances, first_index, first_instance)
+        sdl_draw_gpu_indexed_primitives(C.pointer_bits(self.handle), indices as uint32, instances as uint32, first_index as uint32, vertex_offset as int32, first_instance as uint32)
+    }
+    public func draw_indirect(buffer:@Buffer, offset:int = 0, count:int = 1) {
+        self.require_owner(buffer.owner_handle())
+        require_indirect_range(buffer.size(), offset, count, 16, "indirect draw")
+        sdl_draw_gpu_primitives_indirect(C.pointer_bits(self.handle), C.pointer_bits(buffer.native_handle()), offset as uint32, count as uint32)
+    }
+    public func draw_indexed_indirect(buffer:@Buffer, offset:int = 0, count:int = 1) {
+        self.require_owner(buffer.owner_handle())
+        require_indirect_range(buffer.size(), offset, count, 20, "indexed indirect draw")
+        sdl_draw_gpu_indexed_primitives_indirect(C.pointer_bits(self.handle), C.pointer_bits(buffer.native_handle()), offset as uint32, count as uint32)
+    }
+
+    public func finish() {
+        if self.handle == 0 as uint { return }
+        if var commands = self.commands { commands.finish_render(self.handle) }
+        self.commands = null
+        self.handle = 0 as uint
+    }
+
+    private func sampler(stage:int, slot:int, texture:@Texture, sampler:@Sampler) {
+        self.require_owner(texture.owner_handle())
+        self.require_owner(sampler.owner_handle())
+        require_slot(slot, 16, "sampler")
+        var binding:uint[2]
+        binding[0] = texture.native_handle(); binding[1] = sampler.native_handle()
+        let address = C.address_bits(C.mutable_pointer(binding))
+        if stage == 0 { sdl_bind_gpu_vertex_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1); return }
+        sdl_bind_gpu_fragment_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
+    }
+    private func storage_texture(stage:int, slot:int, texture:@Texture) {
+        self.require_owner(texture.owner_handle())
+        require_slot(slot, 8, "storage texture")
+        var handles:uint[1]; handles[0] = texture.native_handle()
+        let address = C.address_bits(C.mutable_pointer(handles))
+        if stage == 0 { sdl_bind_gpu_vertex_storage_textures(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1); return }
+        sdl_bind_gpu_fragment_storage_textures(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
+    }
+    private func storage_buffer(stage:int, slot:int, buffer:@Buffer) {
+        self.require_owner(buffer.owner_handle())
+        require_slot(slot, 8, "storage buffer")
+        var handles:uint[1]; handles[0] = buffer.native_handle()
+        let address = C.address_bits(C.mutable_pointer(handles))
+        if stage == 0 { sdl_bind_gpu_vertex_storage_buffers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1); return }
+        sdl_bind_gpu_fragment_storage_buffers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
+    }
+    private func require_owner(owner:uint) {
+        if owner != self.device_handle { panic("GFX.GPU resource belongs to another device") }
+    }
+}
+
+public class CopyPass {
+    private var commands:CommandBuffer? = null
+    private var handle:uint
+    private let device_handle:uint
+    internal init(commands:CommandBuffer, handle:uint) { self.commands = commands; self.handle = handle; self.device_handle = commands.native_device() }
+    drop { self.finish() }
+
+    public func upload(source:@TransferBuffer, destination:@Buffer, size:int, source_offset:int = 0, destination_offset:int = 0, cycle:bool = true) {
+        self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
+        if source.direction() != Types.TransferDirection.upload { panic("GFX.GPU buffer upload requires an upload transfer buffer") }
+        require_range(source.size(), source_offset, size, "buffer upload source")
+        require_range(destination.size(), destination_offset, size, "buffer upload destination")
+        var source_info:uint[2]; var destination_info:uint[2]
+        encode_transfer_location(source, source_offset, C.address_bits(C.mutable_pointer(source_info)))
+        encode_buffer_region(destination, destination_offset, size, C.address_bits(C.mutable_pointer(destination_info)))
+        sdl_upload_to_gpu_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), Types.native_bool(cycle))
+    }
+    public func download(source:@Buffer, destination:@TransferBuffer, size:int, source_offset:int = 0, destination_offset:int = 0) {
+        self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
+        if destination.direction() != Types.TransferDirection.download { panic("GFX.GPU buffer download requires a download transfer buffer") }
+        require_range(source.size(), source_offset, size, "buffer download source")
+        require_range(destination.size(), destination_offset, size, "buffer download destination")
+        var source_info:uint[2]; var destination_info:uint[2]
+        encode_buffer_region(source, source_offset, size, C.address_bits(C.mutable_pointer(source_info)))
+        encode_transfer_location(destination, destination_offset, C.address_bits(C.mutable_pointer(destination_info)))
+        sdl_download_from_gpu_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))))
+    }
+    public func copy(source:@Buffer, destination:@Buffer, size:int, source_offset:int = 0, destination_offset:int = 0, cycle:bool = true) {
+        self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
+        require_range(source.size(), source_offset, size, "buffer copy source")
+        require_range(destination.size(), destination_offset, size, "buffer copy destination")
+        var source_info:uint[2]; var destination_info:uint[2]
+        encode_buffer_location(source, source_offset, C.address_bits(C.mutable_pointer(source_info)))
+        encode_buffer_location(destination, destination_offset, C.address_bits(C.mutable_pointer(destination_info)))
+        sdl_copy_gpu_buffer_to_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), size as uint32, Types.native_bool(cycle))
+    }
+    public func upload(source:@TransferBuffer, destination:TextureRegion, pixels_per_row:int, rows_per_layer:int, source_offset:int = 0, cycle:bool = true) {
+        self.require_owner(source.owner_handle()); self.require_owner(required_texture(destination.texture).owner_handle())
+        if source.direction() != Types.TransferDirection.upload { panic("GFX.GPU texture upload requires an upload transfer buffer") }
+        require_range(source.size(), source_offset, 0, "texture upload source")
+        require_texture_region(destination)
+        require_positive(pixels_per_row, "texture upload pixels per row")
+        require_positive(rows_per_layer, "texture upload rows per layer")
+        var transfer:uint[3]; var region:uint[5]
+        encode_texture_transfer(source, source_offset, pixels_per_row, rows_per_layer, C.address_bits(C.mutable_pointer(transfer)))
+        encode_texture_region(destination, C.address_bits(C.mutable_pointer(region)))
+        sdl_upload_to_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(transfer))), C.pointer_bits(C.address_bits(C.mutable_pointer(region))), Types.native_bool(cycle))
+    }
+    public func download(source:TextureRegion, destination:@TransferBuffer, pixels_per_row:int, rows_per_layer:int, destination_offset:int = 0) {
+        self.require_owner(required_texture(source.texture).owner_handle()); self.require_owner(destination.owner_handle())
+        if destination.direction() != Types.TransferDirection.download { panic("GFX.GPU texture download requires a download transfer buffer") }
+        require_range(destination.size(), destination_offset, 0, "texture download destination")
+        require_texture_region(source)
+        require_positive(pixels_per_row, "texture download pixels per row")
+        require_positive(rows_per_layer, "texture download rows per layer")
+        var region:uint[5]; var transfer:uint[3]
+        encode_texture_region(source, C.address_bits(C.mutable_pointer(region)))
+        encode_texture_transfer(destination, destination_offset, pixels_per_row, rows_per_layer, C.address_bits(C.mutable_pointer(transfer)))
+        sdl_download_from_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(region))), C.pointer_bits(C.address_bits(C.mutable_pointer(transfer))))
+    }
+    public func copy(source:TextureLocation, destination:TextureLocation, width:int, height:int, depth:int = 1, cycle:bool = true) {
+        self.require_owner(required_texture(source.texture).owner_handle()); self.require_owner(required_texture(destination.texture).owner_handle())
+        require_texture_location(source)
+        require_texture_location(destination)
+        require_positive(width, "texture copy width")
+        require_positive(height, "texture copy height")
+        require_positive(depth, "texture copy depth")
+        var source_info:uint[4]; var destination_info:uint[4]
+        encode_texture_location(source, C.address_bits(C.mutable_pointer(source_info)))
+        encode_texture_location(destination, C.address_bits(C.mutable_pointer(destination_info)))
+        sdl_copy_gpu_texture_to_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), width as uint32, height as uint32, depth as uint32, Types.native_bool(cycle))
+    }
+    public func finish() {
+        if self.handle == 0 as uint { return }
+        if var commands = self.commands { commands.finish_copy(self.handle) }
+        self.commands = null
+        self.handle = 0 as uint
+    }
+    private func require_owner(owner:uint) {
+        if owner != self.device_handle { panic("GFX.GPU resource belongs to another device") }
+    }
+}
+
+public class ComputePass {
+    private var commands:CommandBuffer? = null
+    private var handle:uint
+    private let device_handle:uint
+    internal init(commands:CommandBuffer, handle:uint) { self.commands = commands; self.handle = handle; self.device_handle = commands.native_device() }
+    drop { self.finish() }
+    public func bind(pipeline:@ComputePipeline) { self.require_owner(pipeline.owner_handle()); sdl_bind_gpu_compute_pipeline(C.pointer_bits(self.handle), C.pointer_bits(pipeline.native_handle())) }
+    public func sampler(slot:int, texture:@Texture, sampler:@Sampler) {
+        self.require_owner(texture.owner_handle()); self.require_owner(sampler.owner_handle())
+        require_slot(slot, 16, "compute sampler")
+        var binding:uint[2]; binding[0] = texture.native_handle(); binding[1] = sampler.native_handle()
+        sdl_bind_gpu_compute_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(C.address_bits(C.mutable_pointer(binding))), 1)
+    }
+    public func storage_texture(slot:int, texture:@Texture) {
+        self.require_owner(texture.owner_handle())
+        require_slot(slot, 8, "compute storage texture")
+        var handles:uint[1]; handles[0] = texture.native_handle()
+        sdl_bind_gpu_compute_storage_textures(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(C.address_bits(C.mutable_pointer(handles))), 1)
+    }
+    public func storage_buffer(slot:int, buffer:@Buffer) {
+        self.require_owner(buffer.owner_handle())
+        require_slot(slot, 8, "compute storage buffer")
+        var handles:uint[1]; handles[0] = buffer.native_handle()
+        sdl_bind_gpu_compute_storage_buffers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(C.address_bits(C.mutable_pointer(handles))), 1)
+    }
+    public func dispatch(x:int, y:int = 1, z:int = 1) {
+        require_positive(x, "compute group count x"); require_positive(y, "compute group count y"); require_positive(z, "compute group count z")
+        sdl_dispatch_gpu_compute(C.pointer_bits(self.handle), x as uint32, y as uint32, z as uint32)
+    }
+    public func dispatch_indirect(buffer:@Buffer, offset:int = 0) {
+        self.require_owner(buffer.owner_handle())
+        require_range(buffer.size(), offset, 12, "indirect compute dispatch")
+        sdl_dispatch_gpu_compute_indirect(C.pointer_bits(self.handle), C.pointer_bits(buffer.native_handle()), offset as uint32)
+    }
+    public func finish() {
+        if self.handle == 0 as uint { return }
+        if var commands = self.commands { commands.finish_compute(self.handle) }
+        self.commands = null
+        self.handle = 0 as uint
+    }
+    private func require_owner(owner:uint) {
+        if owner != self.device_handle { panic("GFX.GPU resource belongs to another device") }
+    }
+}
+
+extend Device {
+    public func commands() CommandBuffer {
+        let handle = C.address_bits(sdl_acquire_gpu_command_buffer(C.pointer_bits(self.native_handle())))
+        if handle == 0 as uint { panic("GFX.GPU could not begin recording commands: " + gpu_error()) }
+        return CommandBuffer(self, handle)
+    }
+
+    public func wait_until_all(fences:@Fence[..]) { self.wait_for(fences, true) }
+    public func wait_until_any(fences:@Fence[..]) { self.wait_for(fences, false) }
+
+    private func wait_for(fences:@Fence[..], all:bool) {
+        if fences.count() == 0 { return }
+        if fences.count() > 64 { panic("GFX.GPU can wait for at most 64 fences at once") }
+        var handles:uint[64]
+        var index = 0
+        for fence in fences {
+            if fence.owner_handle() != self.native_handle() { panic("GFX.GPU fence belongs to another device") }
+            if fence.native_handle() == 0 as uint { panic("GFX.GPU cannot wait for a released fence") }
+            handles[index] = fence.native_handle()
+            index++
+        }
+        require_gpu_action(sdl_wait_for_gpu_fences(
+            C.pointer_bits(self.native_handle()), Types.native_bool(all),
+            C.pointer_bits(C.address_bits(C.mutable_pointer(handles))), fences.count() as uint32
+        ) != 0, "wait for submitted GPU work")
+    }
+}
+
+local func require_slot(slot:int, count:int, resource:str) {
+    if slot < 0 || slot >= count { panic("GFX.GPU " + resource + " slot is outside the supported range") }
+}
+
+local func require_nonnegative(value:int, field:str) {
+    if value < 0 { panic("GFX.GPU " + field + " cannot be negative") }
+}
+
+local func require_positive(value:int, field:str) {
+    if value <= 0 { panic("GFX.GPU " + field + " must be positive") }
+}
+
+local func require_range(capacity:int, offset:int, count:int, operation:str) {
+    if offset < 0 || count < 0 || offset > capacity || count > capacity - offset {
+        panic("GFX.GPU " + operation + " is outside its buffer")
+    }
+}
+
+local func require_draw_range(count:int, instances:int, first:int, first_instance:int) {
+    if count < 0 || instances < 0 || first < 0 || first_instance < 0 {
+        panic("GFX.GPU draw counts and first locations cannot be negative")
+    }
+}
+
+local func require_indirect_range(capacity:int, offset:int, count:int, stride:int, operation:str) {
+    if count < 0 { panic("GFX.GPU " + operation + " count cannot be negative") }
+    require_range(capacity, offset, count * stride, operation)
+}
+
+local func require_texture_location(value:TextureLocation) {
+    require_nonnegative(value.mip_level, "texture mip level")
+    require_nonnegative(value.layer, "texture layer")
+    require_nonnegative(value.x, "texture x")
+    require_nonnegative(value.y, "texture y")
+    require_nonnegative(value.z, "texture z")
+}
+
+local func require_texture_region(value:TextureRegion) {
+    require_nonnegative(value.mip_level, "texture mip level")
+    require_nonnegative(value.layer, "texture layer")
+    require_nonnegative(value.x, "texture x")
+    require_nonnegative(value.y, "texture y")
+    require_nonnegative(value.z, "texture z")
+    require_positive(value.width, "texture region width")
+    require_positive(value.height, "texture region height")
+    require_positive(value.depth, "texture region depth")
+}
+
+local func require_blit_region(value:BlitRegion) {
+    require_nonnegative(value.mip_level, "blit mip level")
+    require_nonnegative(value.layer, "blit layer")
+    require_nonnegative(value.x, "blit x")
+    require_nonnegative(value.y, "blit y")
+    require_positive(value.width, "blit width")
+    require_positive(value.height, "blit height")
+}
+
+local func encode_color_target_handle(texture:uint, clear:Color, address:uint) {
+    let target = C.store<uint>(address, 0 as uint, texture)
+    let mip = C.store<uint32>(address, 8 as uint, 0); let layer = C.store<uint32>(address, 12 as uint, 0)
+    encode_color(clear, address + 16)
+    let load = C.store<int32>(address, 32 as uint, Types.Load.clear.raw_value as int32)
+    let store = C.store<int32>(address, 36 as uint, Types.Store.preserve.raw_value as int32)
+    let resolve = C.store<uint>(address, 40 as uint, 0 as uint)
+    let resolve_mip = C.store<uint32>(address, 48 as uint, 0); let resolve_layer = C.store<uint32>(address, 52 as uint, 0)
+    let cycle = C.store<uint8>(address, 56 as uint, 0); let cycle_resolve = C.store<uint8>(address, 57 as uint, 0)
+}
+local func encode_color_target(value:ColorTarget, address:uint) {
+    let texture = C.store<uint>(address, 0 as uint, required_texture(value.texture).native_handle())
+    let mip = C.store<uint32>(address, 8 as uint, value.mip_level as uint32); let layer = C.store<uint32>(address, 12 as uint, value.layer as uint32)
+    encode_color(value.clear, address + 16)
+    let load = C.store<int32>(address, 32 as uint, load_value(value.load, Types.Load.clear)); let store = C.store<int32>(address, 36 as uint, store_value(value.store, Types.Store.preserve))
+    var resolve:uint = 0; if var resolved = value.resolve { resolve = resolved.native_handle() }
+    let resolve_texture = C.store<uint>(address, 40 as uint, resolve)
+    let resolve_mip = C.store<uint32>(address, 48 as uint, value.resolve_mip_level as uint32); let resolve_layer = C.store<uint32>(address, 52 as uint, value.resolve_layer as uint32)
+    let cycle = C.store<uint8>(address, 56 as uint, Types.native_bool(value.cycle) as uint8); let cycle_resolve = C.store<uint8>(address, 57 as uint, Types.native_bool(value.cycle_resolve) as uint8)
+}
+local func encode_depth_target(value:DepthTarget, address:uint) {
+    let texture = C.store<uint>(address, 0 as uint, required_texture(value.texture).native_handle()); let depth = C.store<float32>(address, 8 as uint, value.clear_depth as float32)
+    let load = C.store<int32>(address, 12 as uint, load_value(value.depth_load, Types.Load.clear)); let store = C.store<int32>(address, 16 as uint, store_value(value.depth_store, Types.Store.discard))
+    let stencil_load = C.store<int32>(address, 20 as uint, load_value(value.stencil_load, Types.Load.discard)); let stencil_store = C.store<int32>(address, 24 as uint, store_value(value.stencil_store, Types.Store.discard))
+    let cycle = C.store<uint8>(address, 28 as uint, Types.native_bool(value.cycle) as uint8); let clear = C.store<uint8>(address, 29 as uint, value.clear_stencil)
+    let mip = C.store<uint8>(address, 30 as uint, value.mip_level as uint8); let layer = C.store<uint8>(address, 31 as uint, value.layer as uint8)
+}
+local func encode_color(value:Color, address:uint) { let r=C.store<float32>(address,0 as uint,value.r as float32); let g=C.store<float32>(address,4 as uint,value.g as float32); let b=C.store<float32>(address,8 as uint,value.b as float32); let a=C.store<float32>(address,12 as uint,value.a as float32) }
+local func encode_transfer_location(value:@TransferBuffer, offset:int, address:uint) { let handle=C.store<uint>(address,0 as uint,value.native_handle()); let position=C.store<uint32>(address,8 as uint,offset as uint32) }
+local func encode_buffer_location(value:@Buffer, offset:int, address:uint) { let handle=C.store<uint>(address,0 as uint,value.native_handle()); let position=C.store<uint32>(address,8 as uint,offset as uint32) }
+local func encode_buffer_region(value:@Buffer, offset:int, size:int, address:uint) { encode_buffer_location(value,offset,address); let count=C.store<uint32>(address,12 as uint,size as uint32) }
+local func encode_texture_transfer(value:@TransferBuffer, offset:int, pixels:int, rows:int, address:uint) { let handle=C.store<uint>(address,0 as uint,value.native_handle()); let position=C.store<uint32>(address,8 as uint,offset as uint32); let row=C.store<uint32>(address,12 as uint,pixels as uint32); let layer=C.store<uint32>(address,16 as uint,rows as uint32) }
+local func load_value(value:Types.Load?, fallback:Types.Load) int32 {
+    if let selected = value { return selected.raw_value as int32 }
+    return fallback.raw_value as int32
+}
+local func store_value(value:Types.Store?, fallback:Types.Store) int32 {
+    if let selected = value { return selected.raw_value as int32 }
+    return fallback.raw_value as int32
+}
+local func required_texture(value:Texture?) Texture {
+    if var selected = value { return selected }
+    panic("GFX.GPU texture is required")
+}
+local func required_buffer(value:Buffer?) Buffer {
+    if var selected = value { return selected }
+    panic("GFX.GPU buffer is required")
+}
+local func encode_texture_location(value:TextureLocation, address:uint) { let handle=C.store<uint>(address,0 as uint,required_texture(value.texture).native_handle()); let mip=C.store<uint32>(address,8 as uint,value.mip_level as uint32); let layer=C.store<uint32>(address,12 as uint,value.layer as uint32); let x=C.store<uint32>(address,16 as uint,value.x as uint32); let y=C.store<uint32>(address,20 as uint,value.y as uint32); let z=C.store<uint32>(address,24 as uint,value.z as uint32) }
+local func encode_texture_region(value:TextureRegion, address:uint) { let handle=C.store<uint>(address,0 as uint,required_texture(value.texture).native_handle()); let mip=C.store<uint32>(address,8 as uint,value.mip_level as uint32); let layer=C.store<uint32>(address,12 as uint,value.layer as uint32); let x=C.store<uint32>(address,16 as uint,value.x as uint32); let y=C.store<uint32>(address,20 as uint,value.y as uint32); let z=C.store<uint32>(address,24 as uint,value.z as uint32); let width=C.store<uint32>(address,28 as uint,value.width as uint32); let height=C.store<uint32>(address,32 as uint,value.height as uint32); let depth=C.store<uint32>(address,36 as uint,value.depth as uint32) }
+local func encode_blit_region(value:BlitRegion, address:uint) { let handle=C.store<uint>(address,0 as uint,required_texture(value.texture).native_handle()); let mip=C.store<uint32>(address,8 as uint,value.mip_level as uint32); let layer=C.store<uint32>(address,12 as uint,value.layer as uint32); let x=C.store<uint32>(address,16 as uint,value.x as uint32); let y=C.store<uint32>(address,20 as uint,value.y as uint32); let width=C.store<uint32>(address,24 as uint,value.width as uint32); let height=C.store<uint32>(address,28 as uint,value.height as uint32) }
+
+let sdl_acquire_gpu_command_buffer = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_AcquireGPUCommandBuffer")
+let sdl_wait_and_acquire_gpu_swapchain_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.MutablePointer<uint>, C.MutablePointer<uint32>, C.MutablePointer<uint32>) int32>(library:Boundary.SDL3, name:"SDL_WaitAndAcquireGPUSwapchainTexture")
+let sdl_acquire_gpu_swapchain_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.MutablePointer<uint>, C.MutablePointer<uint32>, C.MutablePointer<uint32>) int32>(library:Boundary.SDL3, name:"SDL_AcquireGPUSwapchainTexture")
+let sdl_begin_gpu_render_pass = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_BeginGPURenderPass")
+let sdl_end_gpu_render_pass = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_EndGPURenderPass")
+let sdl_begin_gpu_copy_pass = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_BeginGPUCopyPass")
+let sdl_end_gpu_copy_pass = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_EndGPUCopyPass")
+let sdl_begin_gpu_compute_pass = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_BeginGPUComputePass")
+let sdl_end_gpu_compute_pass = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_EndGPUComputePass")
+let sdl_submit_gpu_command_buffer = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SubmitGPUCommandBuffer")
+let sdl_submit_gpu_command_buffer_and_acquire_fence = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_SubmitGPUCommandBufferAndAcquireFence")
+let sdl_cancel_gpu_command_buffer = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_CancelGPUCommandBuffer")
+let sdl_query_gpu_fence = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_QueryGPUFence")
+let sdl_wait_for_gpu_fences = C.function<func(C.Pointer<uint8>, int32, C.Pointer<uint8>, uint32) int32>(library:Boundary.SDL3, name:"SDL_WaitForGPUFences")
+let sdl_release_gpu_fence = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseGPUFence")
+let sdl_push_gpu_vertex_uniform_data = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_PushGPUVertexUniformData")
+let sdl_push_gpu_fragment_uniform_data = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_PushGPUFragmentUniformData")
+let sdl_push_gpu_compute_uniform_data = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_PushGPUComputeUniformData")
+let sdl_insert_gpu_debug_label = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_InsertGPUDebugLabel")
+let sdl_push_gpu_debug_group = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_PushGPUDebugGroup")
+let sdl_pop_gpu_debug_group = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_PopGPUDebugGroup")
+let sdl_generate_mipmaps_for_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_GenerateMipmapsForGPUTexture")
+let sdl_blit_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_BlitGPUTexture")
+let sdl_bind_gpu_graphics_pipeline = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_BindGPUGraphicsPipeline")
+let sdl_set_gpu_viewport = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_SetGPUViewport")
+let sdl_set_gpu_scissor = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_SetGPUScissor")
+let sdl_set_gpu_blend_constants = C.function<func(C.Pointer<uint8>, float32, float32, float32, float32) void>(library:Boundary.SDL3, name:"SDL_SetGPUBlendConstants")
+let sdl_set_gpu_stencil_reference = C.function<func(C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_SetGPUStencilReference")
+let sdl_bind_gpu_vertex_buffers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUVertexBuffers")
+let sdl_bind_gpu_index_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, int32) void>(library:Boundary.SDL3, name:"SDL_BindGPUIndexBuffer")
+let sdl_bind_gpu_vertex_samplers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUVertexSamplers")
+let sdl_bind_gpu_fragment_samplers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUFragmentSamplers")
+let sdl_bind_gpu_vertex_storage_textures = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUVertexStorageTextures")
+let sdl_bind_gpu_fragment_storage_textures = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUFragmentStorageTextures")
+let sdl_bind_gpu_vertex_storage_buffers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUVertexStorageBuffers")
+let sdl_bind_gpu_fragment_storage_buffers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUFragmentStorageBuffers")
+let sdl_draw_gpu_primitives = C.function<func(C.Pointer<uint8>, uint32, uint32, uint32, uint32) void>(library:Boundary.SDL3, name:"SDL_DrawGPUPrimitives")
+let sdl_draw_gpu_indexed_primitives = C.function<func(C.Pointer<uint8>, uint32, uint32, uint32, int32, uint32) void>(library:Boundary.SDL3, name:"SDL_DrawGPUIndexedPrimitives")
+let sdl_draw_gpu_primitives_indirect = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32, uint32) void>(library:Boundary.SDL3, name:"SDL_DrawGPUPrimitivesIndirect")
+let sdl_draw_gpu_indexed_primitives_indirect = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32, uint32) void>(library:Boundary.SDL3, name:"SDL_DrawGPUIndexedPrimitivesIndirect")
+let sdl_upload_to_gpu_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, int32) void>(library:Boundary.SDL3, name:"SDL_UploadToGPUBuffer")
+let sdl_download_from_gpu_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_DownloadFromGPUBuffer")
+let sdl_copy_gpu_buffer_to_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, uint32, int32) void>(library:Boundary.SDL3, name:"SDL_CopyGPUBufferToBuffer")
+let sdl_upload_to_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, int32) void>(library:Boundary.SDL3, name:"SDL_UploadToGPUTexture")
+let sdl_download_from_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_DownloadFromGPUTexture")
+let sdl_copy_gpu_texture_to_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, uint32, uint32, uint32, int32) void>(library:Boundary.SDL3, name:"SDL_CopyGPUTextureToTexture")
+let sdl_bind_gpu_compute_pipeline = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_BindGPUComputePipeline")
+let sdl_bind_gpu_compute_samplers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUComputeSamplers")
+let sdl_bind_gpu_compute_storage_textures = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUComputeStorageTextures")
+let sdl_bind_gpu_compute_storage_buffers = C.function<func(C.Pointer<uint8>, uint32, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_BindGPUComputeStorageBuffers")
+let sdl_dispatch_gpu_compute = C.function<func(C.Pointer<uint8>, uint32, uint32, uint32) void>(library:Boundary.SDL3, name:"SDL_DispatchGPUCompute")
+let sdl_dispatch_gpu_compute_indirect = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint32) void>(library:Boundary.SDL3, name:"SDL_DispatchGPUComputeIndirect")

@@ -1,1 +1,4 @@
 .silex/
+.DS_Store
+Boundary/**/*.a
+Boundary/**/*.lib

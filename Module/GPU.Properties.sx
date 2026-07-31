@@ -1,0 +1,95 @@
+use Interop.C
+use Interop.Boundary
+
+internal class Properties {
+    private let handle:uint32
+
+    internal init() {
+        let handle = sdl_create_properties()
+        if handle == 0 { panic("GFX.GPU could not create native properties: " + property_error()) }
+        self.handle = handle
+    }
+
+    drop { sdl_destroy_properties(self.handle) }
+
+    internal func boolean(name:str, value:bool) {
+        require_property(sdl_set_boolean_property(
+            self.handle, C.terminated_pointer(name), native_bool(value)
+        ) != 0, name)
+    }
+
+    internal func number(name:str, value:int) {
+        require_property(sdl_set_number_property(
+            self.handle, C.terminated_pointer(name), value
+        ) != 0, name)
+    }
+
+    internal func decimal(name:str, value:float) {
+        require_property(sdl_set_float_property(
+            self.handle, C.terminated_pointer(name), value as float32
+        ) != 0, name)
+    }
+
+    internal func text(name:str, value:str) {
+        require_property(sdl_set_string_property(
+            self.handle, C.terminated_pointer(name), C.terminated_pointer(value)
+        ) != 0, name)
+    }
+
+    internal func pointer(name:str, address:uint) {
+        require_property(sdl_set_pointer_property(
+            self.handle, C.terminated_pointer(name), C.pointer_bits(address)
+        ) != 0, name)
+    }
+
+    internal func native_handle() uint32 { return self.handle }
+}
+
+internal func property_text(properties:uint32, name:str) str? {
+    let address = C.address_bits(sdl_get_string_property(
+        properties, C.terminated_pointer(name), C.pointer_bits(0 as uint)
+    ))
+    if address == 0 as uint { return null }
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 4096 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    panic("GFX.GPU received an invalid native property string")
+}
+
+local func require_property(success:bool, name:str) {
+    if !success { panic("GFX.GPU could not configure '" + name + "': " + property_error()) }
+}
+
+local func property_error() str {
+    let address = C.address_bits(sdl_get_error())
+    if address == 0 as uint { return "unknown SDL error" }
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 4096 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    return "invalid SDL error"
+}
+
+local func native_bool(value:bool) int32 {
+    if value { return 1 }
+    return 0
+}
+
+let sdl_create_properties = C.function<func() uint32>(library:Boundary.SDL3, name:"SDL_CreateProperties")
+let sdl_destroy_properties = C.function<func(uint32) void>(library:Boundary.SDL3, name:"SDL_DestroyProperties")
+let sdl_set_boolean_property = C.function<func(uint32, C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetBooleanProperty")
+let sdl_set_number_property = C.function<func(uint32, C.Pointer<uint8>, int) int32>(library:Boundary.SDL3, name:"SDL_SetNumberProperty")
+let sdl_set_float_property = C.function<func(uint32, C.Pointer<uint8>, float32) int32>(library:Boundary.SDL3, name:"SDL_SetFloatProperty")
+let sdl_set_string_property = C.function<func(uint32, C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetStringProperty")
+let sdl_set_pointer_property = C.function<func(uint32, C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetPointerProperty")
+let sdl_get_string_property = C.function<func(uint32, C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetStringProperty")
+let sdl_get_error = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetError")

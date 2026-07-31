@@ -1,0 +1,9 @@
+{
+  "library": "SDL",
+  "version": "3.4.10",
+  "target": "linux-x64",
+  "linkage": "static",
+  "sha256": "307863a80e696052ba4944d62533598889a08068badeec7e2729f096f4f2eada",
+  "provenance": "Foundation Vendors/build.zig source export cross-compiled with Zig 0.16.0",
+  "profile": "X11 and Vulkan enabled; Wayland, OpenGL, D-Bus IME, udev and optional host audio/camera backends disabled for the hermetic cross-build"
+}

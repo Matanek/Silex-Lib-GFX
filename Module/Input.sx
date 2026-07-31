@@ -8,29 +8,29 @@ use GFX.Input.Pointer
 use GFX.Input.Events
 use GFX.Input.Native
 
-public use GFX.Input.Keyboard.Key as Key
-public use GFX.Input.Keyboard.Modifiers as Modifiers
-public use GFX.Input.Keyboard.KeyboardId as KeyboardId
-public use GFX.Input.Pointer.MouseButton as MouseButton
-public use GFX.Input.Pointer.MouseId as MouseId
-public use GFX.Input.Events.Event as Event
-public use GFX.Input.Events.Timestamp as Timestamp
-public use GFX.Input.Events.KeyEvent as KeyEvent
-public use GFX.Input.Events.MouseButtonEvent as MouseButtonEvent
-public use GFX.Input.Events.JoystickId as JoystickId
-public use GFX.Input.Events.GamepadId as GamepadId
-public use GFX.Input.Events.GamepadAxis as GamepadAxis
-public use GFX.Input.Events.GamepadButton as GamepadButton
-public use GFX.Input.Events.Hat as Hat
-public use GFX.Input.Events.PowerState as PowerState
-public use GFX.Input.Events.JoystickKind as JoystickKind
-public use GFX.Input.Events.GamepadKind as GamepadKind
-public use GFX.Input.Events.TouchId as TouchId
-public use GFX.Input.Events.FingerId as FingerId
-public use GFX.Input.Events.PenId as PenId
-public use GFX.Input.Events.PenAxis as PenAxis
-public use GFX.Input.Events.SensorId as SensorId
-public use GFX.Input.Events.SensorType as SensorType
+public use GFX.Input.Keyboard.Key
+public use GFX.Input.Keyboard.Modifiers
+public use GFX.Input.Keyboard.KeyboardId
+public use GFX.Input.Pointer.MouseButton
+public use GFX.Input.Pointer.MouseId
+public use GFX.Input.Events.Event
+public use GFX.Input.Events.Timestamp
+public use GFX.Input.Events.KeyEvent
+public use GFX.Input.Events.MouseButtonEvent
+public use GFX.Input.Events.JoystickId
+public use GFX.Input.Events.GamepadId
+public use GFX.Input.Events.GamepadAxis
+public use GFX.Input.Events.GamepadButton
+public use GFX.Input.Events.Hat
+public use GFX.Input.Events.PowerState
+public use GFX.Input.Events.JoystickKind
+public use GFX.Input.Events.GamepadKind
+public use GFX.Input.Events.TouchId
+public use GFX.Input.Events.FingerId
+public use GFX.Input.Events.PenId
+public use GFX.Input.Events.PenAxis
+public use GFX.Input.Events.SensorId
+public use GFX.Input.Events.SensorType
 
 public class State {
     let empty_events:Event[]

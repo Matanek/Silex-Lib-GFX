@@ -9,7 +9,7 @@ use GFX.Input
 use GFX.Input.State as InputState
 use GFX.Plugins.InputPlugin
 
-public use GFX.Window.Settings as Settings
+public use GFX.Window.Settings
 
 public enum CloseBehavior {
     automatic
