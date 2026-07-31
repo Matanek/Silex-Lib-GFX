@@ -1,7 +1,7 @@
 use Interop.C
 use Interop.Boundary
 
-public static class Session {
+internal static class Session {
     private static var leases:int = 0
 
     public static func open() {

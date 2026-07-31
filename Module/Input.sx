@@ -33,48 +33,48 @@ public use GFX.Input.Events.SensorId as SensorId
 public use GFX.Input.Events.SensorType as SensorType
 
 public class State {
-    private let empty_events:Event[]
-    private var frame_events:Event[]
-    private var has_frame_events:bool
-    private var quit_requested:bool
-    private var current_keys:Key[]
-    private var entered_keys:Key[]
-    private var released_keys:Key[]
-    private var current_mouse_buttons:MouseButton[]
-    private var entered_mouse_buttons:MouseButton[]
-    private var released_mouse_buttons:MouseButton[]
-    private var current_modifiers:Modifiers
-    private var keyboard_focus:Window.Id?
-    private var mouse_focus:Window.Id?
-    private var mouse_position:Math.Vec2
-    private var global_mouse_position:Math.Vec2
-    private var mouse_delta:Math.Vec2
-    private var mouse_wheel:Math.Vec2
-    private var text_input:str
-    private var text_editing:str
-    private var text_candidates:str[]
-    private var selected_candidate:int
-    private var keyboards:KeyboardId[]
-    private var mice:MouseId[]
-    private var joysticks:Events.JoystickId[]
-    private var gamepads:Events.GamepadId[]
-    private var keyboard_details:Events.KeyboardInfo[]
-    private var mouse_details:Events.MouseInfo[]
-    private var joystick_details:Events.JoystickInfo[]
-    private var gamepad_details:Events.GamepadInfo[]
-    private var joystick_axes:Events.JoystickAxisEvent[]
-    private var joystick_balls:Events.JoystickBallEvent[]
-    private var joystick_hats:Events.JoystickHatEvent[]
-    private var joystick_buttons:Events.JoystickButtonEvent[]
-    private var joystick_batteries:Events.JoystickBatteryEvent[]
-    private var gamepad_axes:Events.GamepadAxisEvent[]
-    private var gamepad_buttons:Events.GamepadButtonEvent[]
-    private var gamepad_touches:Events.GamepadTouchEvent[]
-    private var gamepad_sensors:Events.GamepadSensorEvent[]
-    private var touch_devices:Events.TouchId[]
-    private var touches:Events.TouchEvent[]
-    private var pens:Events.PenState[]
-    private var sensors:Events.SensorEvent[]
+    let empty_events:Event[]
+    var frame_events:Event[]
+    var has_frame_events:bool
+    var quit_requested:bool
+    var current_keys:Key[]
+    var entered_keys:Key[]
+    var released_keys:Key[]
+    var current_mouse_buttons:MouseButton[]
+    var entered_mouse_buttons:MouseButton[]
+    var released_mouse_buttons:MouseButton[]
+    var current_modifiers:Modifiers
+    var keyboard_focus:Window.Id?
+    var mouse_focus:Window.Id?
+    var mouse_position:Math.Vec2
+    var global_mouse_position:Math.Vec2
+    var mouse_delta:Math.Vec2
+    var mouse_wheel:Math.Vec2
+    var text_input:str
+    var text_editing:str
+    var text_candidates:str[]
+    var selected_candidate:int
+    var keyboards:KeyboardId[]
+    var mice:MouseId[]
+    var joysticks:Events.JoystickId[]
+    var gamepads:Events.GamepadId[]
+    var keyboard_details:Events.KeyboardInfo[]
+    var mouse_details:Events.MouseInfo[]
+    var joystick_details:Events.JoystickInfo[]
+    var gamepad_details:Events.GamepadInfo[]
+    var joystick_axes:Events.JoystickAxisEvent[]
+    var joystick_balls:Events.JoystickBallEvent[]
+    var joystick_hats:Events.JoystickHatEvent[]
+    var joystick_buttons:Events.JoystickButtonEvent[]
+    var joystick_batteries:Events.JoystickBatteryEvent[]
+    var gamepad_axes:Events.GamepadAxisEvent[]
+    var gamepad_buttons:Events.GamepadButtonEvent[]
+    var gamepad_touches:Events.GamepadTouchEvent[]
+    var gamepad_sensors:Events.GamepadSensorEvent[]
+    var touch_devices:Events.TouchId[]
+    var touches:Events.TouchEvent[]
+    var pens:Events.PenState[]
+    var sensors:Events.SensorEvent[]
 
     internal init() {
         self.empty_events = []
@@ -283,7 +283,7 @@ public class State {
         self.handle(event)
     }
 
-    private func append(event:Event) {
+    func append(event:Event) {
         if !self.has_frame_events {
             self.frame_events = [event]
             self.has_frame_events = true
@@ -292,7 +292,7 @@ public class State {
         self.frame_events.append(event)
     }
 
-    private func set_key(key:Key, down:bool, repeated:bool) {
+    func set_key(key:Key, down:bool, repeated:bool) {
         let was_down = contains_key(self.current_keys, key)
         if down && !was_down { self.current_keys.append(key) }
         if !down && was_down { self.current_keys = keys_without(self.current_keys, key) }
@@ -300,42 +300,42 @@ public class State {
         if !down && was_down { self.released_keys.append(key) }
     }
 
-    private func set_mouse_button(button:MouseButton, down:bool) {
+    func set_mouse_button(button:MouseButton, down:bool) {
         let was_down = contains_mouse_button(self.current_mouse_buttons, button)
         if down && !was_down { self.current_mouse_buttons.append(button); self.entered_mouse_buttons.append(button) }
         if !down && was_down { self.current_mouse_buttons = mouse_buttons_without(self.current_mouse_buttons, button); self.released_mouse_buttons.append(button) }
     }
 
-    private func add_keyboard(id:KeyboardId) {
+    func add_keyboard(id:KeyboardId) {
         for current in self.keyboards { if current == id { return } }
         self.keyboards.append(id)
         self.keyboard_details.append(Native.keyboard_info(id))
     }
 
-    private func remove_keyboard(id:KeyboardId) {
+    func remove_keyboard(id:KeyboardId) {
         self.keyboards = keyboards_without(self.keyboards, id)
         self.keyboard_details = keyboard_infos_without(self.keyboard_details, id)
     }
 
-    private func add_mouse(id:MouseId) {
+    func add_mouse(id:MouseId) {
         for current in self.mice { if current == id { return } }
         self.mice.append(id)
         self.mouse_details.append(Native.mouse_info(id))
     }
 
-    private func remove_mouse(id:MouseId) {
+    func remove_mouse(id:MouseId) {
         self.mice = mice_without(self.mice, id)
         self.mouse_details = mouse_infos_without(self.mouse_details, id)
     }
 
-    private func add_joystick(id:Events.JoystickId) {
+    func add_joystick(id:Events.JoystickId) {
         for gamepad in self.gamepads { if gamepad.value == id.value { return } }
         for current in self.joysticks { if current == id { return } }
         self.joysticks.append(id)
         self.joystick_details.append(Native.joystick_info(id))
     }
 
-    private func remove_joystick(id:Events.JoystickId) {
+    func remove_joystick(id:Events.JoystickId) {
         self.joysticks = joysticks_without(self.joysticks, id)
         self.joystick_axes = joystick_axes_without(self.joystick_axes, id)
         self.joystick_balls = joystick_balls_without(self.joystick_balls, id)
@@ -345,14 +345,14 @@ public class State {
         self.joystick_details = joystick_infos_without(self.joystick_details, id)
     }
 
-    private func add_gamepad(id:Events.GamepadId) {
+    func add_gamepad(id:Events.GamepadId) {
         for current in self.gamepads { if current == id { return } }
         self.gamepads.append(id)
         self.gamepad_details.append(Native.gamepad_info(id))
         self.remove_joystick(Events.JoystickId(value:id.value))
     }
 
-    private func remove_gamepad(id:Events.GamepadId) {
+    func remove_gamepad(id:Events.GamepadId) {
         self.gamepads = gamepads_without(self.gamepads, id)
         self.gamepad_axes = gamepad_axes_without(self.gamepad_axes, id)
         self.gamepad_buttons = gamepad_buttons_without(self.gamepad_buttons, id)
@@ -361,7 +361,7 @@ public class State {
         self.gamepad_details = gamepad_infos_without(self.gamepad_details, id)
     }
 
-    private func set_joystick_axis(value:Events.JoystickAxisEvent) {
+    func set_joystick_axis(value:Events.JoystickAxisEvent) {
         if self.is_gamepad_device(value.joystick.value) { return }
         self.add_joystick(value.joystick)
         var index = 0
@@ -372,7 +372,7 @@ public class State {
         self.joystick_axes.append(value)
     }
 
-    private func set_joystick_ball(value:Events.JoystickBallEvent) {
+    func set_joystick_ball(value:Events.JoystickBallEvent) {
         if self.is_gamepad_device(value.joystick.value) { return }
         self.add_joystick(value.joystick)
         var index = 0
@@ -392,7 +392,7 @@ public class State {
         self.joystick_balls.append(value)
     }
 
-    private func set_joystick_hat(value:Events.JoystickHatEvent) {
+    func set_joystick_hat(value:Events.JoystickHatEvent) {
         if self.is_gamepad_device(value.joystick.value) { return }
         self.add_joystick(value.joystick)
         var index = 0
@@ -403,7 +403,7 @@ public class State {
         self.joystick_hats.append(value)
     }
 
-    private func set_joystick_button(value:Events.JoystickButtonEvent) {
+    func set_joystick_button(value:Events.JoystickButtonEvent) {
         if self.is_gamepad_device(value.joystick.value) { return }
         self.add_joystick(value.joystick)
         var index = 0
@@ -414,7 +414,7 @@ public class State {
         self.joystick_buttons.append(value)
     }
 
-    private func set_joystick_battery(value:Events.JoystickBatteryEvent) {
+    func set_joystick_battery(value:Events.JoystickBatteryEvent) {
         if self.is_gamepad_device(value.joystick.value) { return }
         self.add_joystick(value.joystick)
         var index = 0
@@ -425,12 +425,12 @@ public class State {
         self.joystick_batteries.append(value)
     }
 
-    private func is_gamepad_device(id:uint32) bool {
+    func is_gamepad_device(id:uint32) bool {
         for gamepad in self.gamepads { if gamepad.value == id { return true } }
         return false
     }
 
-    private func set_gamepad_axis(value:Events.GamepadAxisEvent) {
+    func set_gamepad_axis(value:Events.GamepadAxisEvent) {
         self.add_gamepad(value.gamepad)
         var index = 0
         while index < self.gamepad_axes.count() {
@@ -440,7 +440,7 @@ public class State {
         self.gamepad_axes.append(value)
     }
 
-    private func set_gamepad_button(value:Events.GamepadButtonEvent) {
+    func set_gamepad_button(value:Events.GamepadButtonEvent) {
         self.add_gamepad(value.gamepad)
         var index = 0
         while index < self.gamepad_buttons.count() {
@@ -450,7 +450,7 @@ public class State {
         self.gamepad_buttons.append(value)
     }
 
-    private func set_gamepad_touch(value:Events.GamepadTouchEvent) {
+    func set_gamepad_touch(value:Events.GamepadTouchEvent) {
         self.add_gamepad(value.gamepad)
         var index = 0
         while index < self.gamepad_touches.count() {
@@ -460,9 +460,9 @@ public class State {
         self.gamepad_touches.append(value)
     }
 
-    private func remove_gamepad_touch(value:Events.GamepadTouchEvent) { self.gamepad_touches = gamepad_touches_without_finger(self.gamepad_touches, value) }
+    func remove_gamepad_touch(value:Events.GamepadTouchEvent) { self.gamepad_touches = gamepad_touches_without_finger(self.gamepad_touches, value) }
 
-    private func set_gamepad_sensor(value:Events.GamepadSensorEvent) {
+    func set_gamepad_sensor(value:Events.GamepadSensorEvent) {
         self.add_gamepad(value.gamepad)
         var index = 0
         while index < self.gamepad_sensors.count() {
@@ -472,7 +472,7 @@ public class State {
         self.gamepad_sensors.append(value)
     }
 
-    private func set_touch(value:Events.TouchEvent) {
+    func set_touch(value:Events.TouchEvent) {
         var index = 0
         while index < self.touches.count() {
             if self.touches[index].touch == value.touch && self.touches[index].finger == value.finger { self.touches[index] = value; return }
@@ -481,40 +481,40 @@ public class State {
         self.touches.append(value)
     }
 
-    private func remove_touch(value:Events.TouchEvent) { self.touches = touches_without(self.touches, value.touch, value.finger) }
+    func remove_touch(value:Events.TouchEvent) { self.touches = touches_without(self.touches, value.touch, value.finger) }
 
-    private func ensure_pen(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) {
+    func ensure_pen(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) {
         for pen in self.pens { if pen.pen == id { return } }
         self.pens.append(empty_pen(id, window, timestamp))
     }
 
-    private func remove_pen(id:Events.PenId) { self.pens = pens_without(self.pens, id) }
+    func remove_pen(id:Events.PenId) { self.pens = pens_without(self.pens, id) }
 
-    private func update_pen_motion(value:Events.PenEvent) {
+    func update_pen_motion(value:Events.PenEvent) {
         let index = self.pen_index(value.pen, value.window, value.timestamp)
         let old = self.pens[index]
         self.pens[index] = pen_with_input(old, value.window, value.state, value.position, old.eraser, value.timestamp)
     }
 
-    private func update_pen_touch(value:Events.PenTouchEvent) {
+    func update_pen_touch(value:Events.PenTouchEvent) {
         let index = self.pen_index(value.pen, value.window, value.timestamp)
         let old = self.pens[index]
         self.pens[index] = pen_with_input(old, value.window, value.state, value.position, value.eraser, value.timestamp)
     }
 
-    private func update_pen_button(value:Events.PenButtonEvent) {
+    func update_pen_button(value:Events.PenButtonEvent) {
         let index = self.pen_index(value.pen, value.window, value.timestamp)
         let old = self.pens[index]
         self.pens[index] = pen_with_input(old, value.window, value.state, value.position, old.eraser, value.timestamp)
     }
 
-    private func update_pen_axis(value:Events.PenAxisEvent) {
+    func update_pen_axis(value:Events.PenAxisEvent) {
         let index = self.pen_index(value.pen, value.window, value.timestamp)
         let old = pen_with_input(self.pens[index], value.window, value.state, value.position, self.pens[index].eraser, value.timestamp)
         self.pens[index] = pen_with_axis(old, value.axis, value.value)
     }
 
-    private func pen_index(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) int {
+    func pen_index(id:Events.PenId, window:Window.Id, timestamp:Events.Timestamp) int {
         var index = 0
         while index < self.pens.count() {
             if self.pens[index].pen == id { return index }
@@ -524,7 +524,7 @@ public class State {
         return self.pens.count() - 1
     }
 
-    private func set_sensor(value:Events.SensorEvent) {
+    func set_sensor(value:Events.SensorEvent) {
         var index = 0
         while index < self.sensors.count() {
             if self.sensors[index].sensor == value.sensor { self.sensors[index] = value; return }
@@ -535,9 +535,9 @@ public class State {
 }
 
 public class Input {
-    private static var active:bool = false
-    private var current_state:State
-    private var lifecycle_watcher:Native.Watcher?
+    static var active:bool = false
+    var current_state:State
+    var lifecycle_watcher:Native.Watcher?
 
     public init() {
         if Input.active {
