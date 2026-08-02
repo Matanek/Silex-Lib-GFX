@@ -1,0 +1,242 @@
+use GFX.Bootstrap
+use GFX.Camera
+use GFX.Assets
+use GFX.Color
+use GFX.ECS
+use GFX.Geometry
+use GFX.Material
+use GFX.Mesh
+use GFX.Rendering
+use GFX.Sprite
+use GFX.Transform
+use GFX.Window
+use STD.Math
+use GFX.Plugins.GPUPlugin
+use GFX.Plugins.RenderingPlugin
+use GFX.Plugins.Rendering2DPlugin
+use GFX.Plugins.Rendering3DPlugin
+
+struct Probe {
+    var frames:int
+    var passes:int
+    var passes_3d:int
+    var post_process_passes:int
+    var passes_2d:int
+    var cameras_2d:int
+    var cameras_3d:int
+    var meshes_3d:int
+    var sprites_2d:int
+    var sprites_3d:int
+    var first_uploads:int
+    var second_uploads:int
+    var third_uploads:int
+    var frame_graph_passes:int
+    var frame_graph_resources:int
+    var frame_graph_transient_slots:int
+}
+
+struct SceneHandles {
+    var mesh:Assets.MeshHandle
+    var image:Assets.ImageHandle
+
+    func mesh_handle() Assets.MeshHandle { return self.mesh }
+    func image_handle() Assets.ImageHandle { return self.image }
+}
+
+struct TwoDProbe {
+    var passes:int
+    var resources:int
+    var transient_slots:int
+}
+
+func create_cameras(world:&ECS.World) {
+    var camera_2d = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Camera.Camera2D())
+    world.spawn(camera_2d)
+
+    var inactive_camera_2d = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Camera.Camera2D(false))
+    world.spawn(inactive_camera_2d)
+
+    var camera_3d = ECS.EntityRecipe()
+        ..with(Transform.Transform3D(Math.Vec3(0.0, 0.0, 5.0)))
+        ..with(Camera.Camera3D())
+    world.spawn(camera_3d)
+}
+
+func create_scene(
+    world:&ECS.World,
+    meshes:&Assets.Meshes,
+    images:&Assets.Images,
+    handles:&SceneHandles
+) {
+    let cube = meshes.add(Geometry.Cube.make())
+    let white = images.add(Assets.Image.solid(Color.white()))
+    handles.mesh = cube
+    handles.image = white
+
+    var mesh = ECS.EntityRecipe()
+        ..with(Transform.Transform3D())
+        ..with(Mesh.Mesh3D(cube))
+        ..with(Mesh.Material3D(Material.Simple(Color.indigo_500())))
+    world.spawn(mesh)
+
+    var sprite_2d = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Sprite.Sprite2D(white, Math.Vec2(16.0)))
+    world.spawn(sprite_2d)
+
+    var sprite_3d = ECS.EntityRecipe()
+        ..with(Transform.Transform3D(Math.Vec3(0.0, 0.0, -2.0)))
+        ..with(Sprite.Sprite3D(white))
+    world.spawn(sprite_3d)
+}
+
+func inspect_renderer(
+    renderer:@Rendering.Renderer,
+    probe:&Probe,
+    meshes:&Assets.Meshes,
+    images:&Assets.Images,
+    handles:@SceneHandles,
+    window:&Window,
+    controller:&Bootstrap.Controller
+) {
+    let stats = renderer.stats()
+    probe.frames = stats.frames()
+    probe.passes = stats.passes()
+    probe.passes_3d = stats.passes_3d()
+    probe.post_process_passes = stats.post_process_passes()
+    probe.passes_2d = stats.passes_2d()
+    probe.cameras_2d = stats.cameras_2d()
+    probe.cameras_3d = stats.cameras_3d()
+    probe.meshes_3d = stats.meshes_3d()
+    probe.sprites_2d = stats.sprites_2d()
+    probe.sprites_3d = stats.sprites_3d()
+    probe.frame_graph_passes = stats.frame_graph_passes()
+    probe.frame_graph_resources = stats.frame_graph_resources()
+    probe.frame_graph_transient_slots = stats.frame_graph_transient_slots()
+    if stats.frames() == 1 {
+        probe.first_uploads = stats.gpu_uploads()
+        window.resize(Math.Vec2(96.0, 80.0))
+    }
+    if stats.frames() == 2 {
+        probe.second_uploads = stats.gpu_uploads()
+        meshes.replace(handles.mesh_handle(), Geometry.Plane.make())
+        images.replace(handles.image_handle(), Assets.Image.solid(Color.red_500()))
+    }
+    if stats.frames() == 3 {
+        probe.third_uploads = stats.gpu_uploads()
+        controller.stop()
+    }
+}
+
+func create_2d_camera(world:&ECS.World) {
+    var camera = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Camera.Camera2D())
+    world.spawn(camera)
+}
+
+func inspect_2d_renderer(
+    renderer:@Rendering.Renderer,
+    probe:&TwoDProbe,
+    controller:&Bootstrap.Controller
+) {
+    let stats = renderer.stats()
+    probe.passes = stats.frame_graph_passes()
+    probe.resources = stats.frame_graph_resources()
+    probe.transient_slots = stats.frame_graph_transient_slots()
+    controller.stop()
+}
+
+test "compose retained 3D post-process and 2D through the FrameGraph" {
+    var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(Probe(
+        frames:0,
+        passes:0,
+        passes_3d:0,
+        post_process_passes:0,
+        passes_2d:0,
+        cameras_2d:0,
+        cameras_3d:0,
+        meshes_3d:0,
+        sprites_2d:0,
+        sprites_3d:0,
+        first_uploads:0,
+        second_uploads:0,
+        third_uploads:0,
+        frame_graph_passes:0,
+        frame_graph_resources:0,
+        frame_graph_transient_slots:0
+    ))
+    resources.insert(SceneHandles(mesh:Assets.MeshHandle(), image:Assets.ImageHandle()))
+    application.install(RenderingPlugin(RenderingPlugin.Settings(
+        gpu:GPUPlugin.Settings(
+            window:Window.Settings(
+                title:"Rendering pipelines test",
+                width:64,
+                height:64,
+                hidden:true
+            ),
+            present_on_start:false,
+            frame_interval_ms:0
+        )
+    )))
+    application.install(Rendering2DPlugin())
+    application.install(Rendering3DPlugin())
+    application.add_system(Bootstrap.Schedule.startup, create_cameras)
+    application.add_system(Bootstrap.Schedule.startup, create_scene)
+    application.add_after_system(Bootstrap.Schedule.render, inspect_renderer)
+    assert(application.run() == 0)
+
+    assert(application.has_plugin("GFX.Plugins.RenderingPlugin"))
+    assert(application.has_plugin("GFX.Plugins.Rendering3DPlugin"))
+    assert(application.has_plugin("GFX.Plugins.Rendering2DPlugin"))
+    let probe:@Probe = resources.get<Probe>()
+    assert(probe.frames == 3)
+    assert(probe.passes == 3)
+    assert(probe.passes_3d == 1)
+    assert(probe.post_process_passes == 1)
+    assert(probe.passes_2d == 1)
+    assert(probe.cameras_2d == 1)
+    assert(probe.cameras_3d == 1)
+    assert(probe.meshes_3d == 1)
+    assert(probe.sprites_2d == 1)
+    assert(probe.sprites_3d == 1)
+    assert(probe.first_uploads == 3)
+    assert(probe.second_uploads == 0)
+    assert(probe.third_uploads == 2)
+    assert(probe.frame_graph_passes == 3)
+    assert(probe.frame_graph_resources == 2)
+    assert(probe.frame_graph_transient_slots == 1)
+}
+
+test "render a 2D-only graph without allocating depth" {
+    var application = Bootstrap.Application()
+    var resources = application.resources()
+    resources.insert(TwoDProbe(passes:0, resources:0, transient_slots:0))
+    application.install(RenderingPlugin(RenderingPlugin.Settings(
+        gpu:GPUPlugin.Settings(
+            window:Window.Settings(
+                title:"2D FrameGraph test",
+                width:64,
+                height:64,
+                hidden:true
+            ),
+            present_on_start:false,
+            frame_interval_ms:0
+        )
+    )))
+    application.install(Rendering2DPlugin())
+    application.add_system(Bootstrap.Schedule.startup, create_2d_camera)
+    application.add_after_system(Bootstrap.Schedule.render, inspect_2d_renderer)
+    assert(application.run() == 0)
+
+    let probe:@TwoDProbe = resources.get<TwoDProbe>()
+    assert(probe.passes == 1)
+    assert(probe.resources == 1)
+    assert(probe.transient_slots == 0)
+}

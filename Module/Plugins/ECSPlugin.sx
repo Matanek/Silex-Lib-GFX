@@ -1,0 +1,19 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Schedule
+use GFX.ECS
+
+public struct ECSPlugin:Plugin {
+    func id() str { return "GFX.Plugins.ECSPlugin" }
+
+    func build(application:Application) {
+        application.resources().insert(ECS.World())
+        application.add_system(Schedule.shutdown, stop_ecs)
+    }
+}
+
+func stop_ecs(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<ECS.World>()
+    assert(removed != null)
+}

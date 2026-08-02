@@ -1,0 +1,65 @@
+use GFX.GPU
+
+internal enum ResourceOrigin:int {
+    created = 0
+    imported = 1
+}
+
+internal enum ResourceAccess:int {
+    read = 0
+    write = 1
+    read_write = 2
+}
+
+internal struct ResourceHandle {
+    internal let index:int
+
+    internal init() { self.index = -1 }
+    internal init(index:int) { self.index = index }
+    internal func is_valid() bool { return self.index >= 0 }
+}
+
+internal struct TextureDescriptor {
+    internal let format:GPU.TextureFormat
+    internal let usage:GPU.TextureUsage
+
+    internal init() {
+        self.format = GPU.TextureFormat.invalid
+        self.usage = GPU.TextureUsage()
+    }
+
+    internal init(format:GPU.TextureFormat, usage:GPU.TextureUsage) {
+        self.format = format
+        self.usage = usage
+    }
+}
+
+internal struct Resource {
+    internal let name:str
+    internal let origin:ResourceOrigin
+    internal let transient:bool
+    internal let texture:TextureDescriptor
+    internal var first_pass:int
+    internal var last_pass:int
+    internal var alias_group:int
+
+    internal init(name:str, origin:ResourceOrigin, transient:bool, texture:TextureDescriptor) {
+        self.name = name
+        self.origin = origin
+        self.transient = transient
+        self.texture = texture
+        self.first_pass = -1
+        self.last_pass = -1
+        self.alias_group = -1
+    }
+}
+
+internal struct ResourceUsage {
+    internal let resource:ResourceHandle
+    internal let access:ResourceAccess
+
+    internal init(resource:ResourceHandle, access:ResourceAccess) {
+        self.resource = resource
+        self.access = access
+    }
+}

@@ -1,0 +1,26 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.GPU
+use GFX.Rendering
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Rendering.Stats as Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+use GFX.Plugins.RenderingPlugin
+use GFX.Plugins.Sprite2DPlugin
+
+public struct Rendering2DPlugin:Plugin {
+    func id() str { return "GFX.Plugins.Rendering2DPlugin" }
+
+    func build(application:Application) {
+        application.install(RenderingPlugin())
+        application.install(Sprite2DPlugin())
+        var resources = application.resources()
+        var renderer = resources.get_mut<Rendering.Renderer>()
+        renderer.add_2d_pass("GFX.Rendering2D.Scene", render_scene_2d)
+    }
+}
+
+func render_scene_2d(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame, cache:&GPUCache, stats:&Stats) {
+    cache.render_sprites_2d(pass, cameras, scene)
+}
+use GFX.Camera.Frame.Frame as CameraFrame

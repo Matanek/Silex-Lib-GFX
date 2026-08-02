@@ -556,7 +556,13 @@ public class Input {
     }
 
     public func update() {
-        self.current_state.begin_frame()
+        var state = self.current_state
+        self.update_state(state)
+        self.current_state = state
+    }
+
+    internal func update_state(state:&State) {
+        state.begin_frame()
         var watched:Event[] = []
         if let watcher = self.lifecycle_watcher {
             watched = watcher.take()
@@ -564,9 +570,9 @@ public class Input {
         while true {
             let pending = Native.poll_event()
             if let event = pending {
-                self.current_state.handle(event)
+                state.handle(event)
             } else {
-                for event in watched { self.current_state.handle_watched(event) }
+                for event in watched { state.handle_watched(event) }
                 return
             }
         }

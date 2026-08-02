@@ -1,0 +1,39 @@
+use GFX.Assets.ImageHandle as ImageHandle
+use GFX.Color
+use STD.Math
+
+public struct Sprite2D {
+    var image:ImageHandle
+    var size:Math.Vec2
+    var pivot:Math.Vec2
+    var color:Color
+    var layer:int
+    var depth:float
+    var visible:bool
+
+    public init(
+        image:ImageHandle = ImageHandle(),
+        size:Math.Vec2 = Math.Vec2(1.0),
+        pivot:Math.Vec2 = Math.Vec2(0.5),
+        color:Color = Color.white(),
+        layer:int = 0,
+        depth:float = 0.0,
+        visible:bool = true
+    ) {
+        self.image = image
+        self.size = size
+        self.pivot = pivot
+        self.color = color
+        self.layer = layer
+        self.depth = depth
+        self.visible = visible
+    }
+
+    internal func asset() ImageHandle { return self.image }
+    internal func sprite_size() Math.Vec2 { return self.size }
+    internal func sprite_pivot() Math.Vec2 { return self.pivot }
+    internal func tint() Color { return self.color }
+    internal func render_layer() int { return self.layer }
+    internal func render_depth() float { return self.depth }
+    internal func is_visible() bool { return self.visible }
+}

@@ -1,0 +1,46 @@
+use GFX.ECS
+
+struct Position {
+    var x:int
+}
+
+struct Label {
+    let value:str
+}
+
+func move_position(position:&Position) {
+    position.x += 2
+}
+
+test "store typed components on stable entities" {
+    var world = ECS.World()
+    var first_recipe = ECS.EntityRecipe()
+        ..with(Position(x:40))
+        ..with(Label(value:"first"))
+    var second_recipe = ECS.EntityRecipe()
+        ..with(Position(x:7))
+
+    let first = world.spawn(first_recipe)
+    let second = world.spawn(second_recipe)
+
+    assert(world.is_alive(first))
+    let initial_entities = world.entities()
+    assert(initial_entities.count() == 2)
+    assert(world.has<Position>(first))
+    assert(world.has<Label>(first))
+    assert(!world.has<Label>(second))
+    world.update<Position>(first, move_position)
+    let position:@Position = world.get<Position>(first)
+    assert(position.x == 42)
+    let removed = world.remove<Label>(first)
+    assert(removed != null)
+    assert(!world.has<Label>(first))
+
+    world.insert(first, Label(value:"updated"))
+    assert(world.get<Label>(first).value == "updated")
+
+    world.destroy(second)
+    assert(!world.is_alive(second))
+    let remaining_entities = world.entities()
+    assert(remaining_entities.count() == 1)
+}

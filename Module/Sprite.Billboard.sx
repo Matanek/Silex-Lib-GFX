@@ -1,0 +1,5 @@
+public enum Billboard {
+    none
+    face_camera
+    face_camera_y
+}

@@ -1,0 +1,141 @@
+use GFX.Color
+use GFX.Geometry
+use Interop.C
+use STD.Math
+
+internal func vertices(mesh:@Geometry.Mesh) uint8[] {
+    let source = mesh.vertices()
+    var bytes = zeroes(source.count() * 48)
+    var index = 0
+    while index < source.count() {
+        let vertex = source[index]
+        let offset = index * 48
+        store_vec3(bytes, offset, vertex.position)
+        store_vec3(bytes, offset + 12, vertex.normal)
+        store_vec2(bytes, offset + 24, vertex.uv)
+        store_color(bytes, offset + 32, vertex.color)
+        index++
+    }
+    return bytes
+}
+
+internal func indices(mesh:@Geometry.Mesh) uint8[] {
+    let source = mesh.indices()
+    var bytes = zeroes(source.count() * 4)
+    var index = 0
+    while index < source.count() {
+        store_uint32(bytes, index * 4, source[index])
+        index++
+    }
+    return bytes
+}
+
+internal func mesh_uniform(mvp:Math.Mat4, color:Color) uint8[] {
+    var bytes = zeroes(80)
+    store_mat4(bytes, 0, mvp)
+    store_color(bytes, 64, color)
+    return bytes
+}
+
+internal func sprite_uniform(
+    model:Math.Mat4,
+    view:Math.Mat4,
+    projection:Math.Mat4,
+    size:Math.Vec2,
+    pivot:Math.Vec2,
+    color:Color,
+    depth:float,
+    billboard:int
+) uint8[] {
+    var bytes = zeroes(240)
+    store_mat4(bytes, 0, model)
+    store_mat4(bytes, 64, view)
+    store_mat4(bytes, 128, projection)
+    store_vec2(bytes, 192, size)
+    store_vec2(bytes, 200, pivot)
+    store_color(bytes, 208, color)
+    store_float(bytes, 224, depth)
+    store_float(bytes, 228, billboard as float)
+    return bytes
+}
+
+internal func quad_vertices() uint8[] {
+    var bytes = zeroes(64)
+    store_vec2(bytes, 0, Math.Vec2(0.0, 0.0)); store_vec2(bytes, 8, Math.Vec2(0.0, 1.0))
+    store_vec2(bytes, 16, Math.Vec2(1.0, 0.0)); store_vec2(bytes, 24, Math.Vec2(1.0, 1.0))
+    store_vec2(bytes, 32, Math.Vec2(1.0, 1.0)); store_vec2(bytes, 40, Math.Vec2(1.0, 0.0))
+    store_vec2(bytes, 48, Math.Vec2(0.0, 1.0)); store_vec2(bytes, 56, Math.Vec2(0.0, 0.0))
+    return bytes
+}
+
+internal func quad_indices() uint8[] {
+    var bytes = zeroes(24)
+    let values:uint32[] = [0, 1, 2, 0, 2, 3]
+    var index = 0
+    while index < values.count() {
+        store_uint32(bytes, index * 4, values[index])
+        index++
+    }
+    return bytes
+}
+
+internal func zeroes(count:int) uint8[] {
+    var bytes:uint8[] = []
+    var index = 0
+    while index < count { bytes.append(0 as uint8); index++ }
+    return bytes
+}
+
+internal func store_mat4(bytes:&uint8[], offset:int, value:Math.Mat4) {
+    store_vec4(bytes, offset, value.x)
+    store_vec4(bytes, offset + 16, value.y)
+    store_vec4(bytes, offset + 32, value.z)
+    store_vec4(bytes, offset + 48, value.w)
+}
+
+internal func store_color(bytes:&uint8[], offset:int, value:Color) {
+    store_float(bytes, offset, value.r)
+    store_float(bytes, offset + 4, value.g)
+    store_float(bytes, offset + 8, value.b)
+    store_float(bytes, offset + 12, value.a)
+}
+
+internal func store_vec4(bytes:&uint8[], offset:int, value:Math.Vec4) {
+    store_float(bytes, offset, value.x)
+    store_float(bytes, offset + 4, value.y)
+    store_float(bytes, offset + 8, value.z)
+    store_float(bytes, offset + 12, value.w)
+}
+
+internal func store_vec3(bytes:&uint8[], offset:int, value:Math.Vec3) {
+    store_float(bytes, offset, value.x)
+    store_float(bytes, offset + 4, value.y)
+    store_float(bytes, offset + 8, value.z)
+}
+
+internal func store_vec2(bytes:&uint8[], offset:int, value:Math.Vec2) {
+    store_float(bytes, offset, value.x)
+    store_float(bytes, offset + 4, value.y)
+}
+
+internal func store_float(bytes:&uint8[], offset:int, value:float) {
+    var scalar:float32[1]
+    scalar[0] = value as float32
+    let address = C.address_bits(C.mutable_pointer(scalar))
+    var index = 0
+    while index < 4 {
+        bytes[offset + index] = C.load<uint8>(address, index as uint)
+        index++
+    }
+}
+
+internal func store_uint32(bytes:&uint8[], offset:int, value:uint32) {
+    var scalar:uint32[1]
+    scalar[0] = value
+    let address = C.address_bits(C.mutable_pointer(scalar))
+    var index = 0
+    while index < 4 {
+        bytes[offset + index] = C.load<uint8>(address, index as uint)
+        index++
+    }
+}

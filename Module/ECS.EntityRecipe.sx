@@ -1,0 +1,27 @@
+use GFX.Bootstrap.Resources
+
+public class EntityRecipe {
+    private var spawned:bool
+    private var component_store:Resources
+
+    public init() {
+        self.spawned = false
+        self.component_store = Resources()
+    }
+
+    public func with<T>(component:T) EntityRecipe {
+        if self.spawned {
+            panic("GFX.ECS cannot change an entity recipe after it was spawned")
+        }
+        self.component_store.insert(component)
+        return self
+    }
+
+    internal func take_components() Resources {
+        if self.spawned {
+            panic("GFX.ECS entity recipe was already spawned")
+        }
+        self.spawned = true
+        return self.component_store
+    }
+}

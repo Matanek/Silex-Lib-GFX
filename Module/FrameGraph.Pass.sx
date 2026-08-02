@@ -1,0 +1,40 @@
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.GPU
+use GFX.FrameGraph.Resource.ResourceUsage as ResourceUsage
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Rendering.Stats as Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+
+internal enum PassPhase:int {
+    three_d = 0
+    post_process = 1
+    two_d = 2
+}
+
+internal struct PassHandle {
+    internal let index:int
+
+    internal init() { self.index = -1 }
+    internal init(index:int) { self.index = index }
+    internal func is_valid() bool { return self.index >= 0 }
+}
+
+internal struct Pass {
+    internal let name:str
+    internal let phase:PassPhase
+    internal let execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)
+    internal var usages:ResourceUsage[]
+    internal var dependencies:PassHandle[]
+
+    internal init(
+        name:str,
+        phase:PassPhase,
+        execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)
+    ) {
+        self.name = name
+        self.phase = phase
+        self.execute = execute
+        self.usages = []
+        self.dependencies = []
+    }
+}

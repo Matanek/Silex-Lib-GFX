@@ -1,0 +1,11 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.Plugins.TransformPlugin
+
+public struct CameraPlugin:Plugin {
+    func id() str { return "GFX.Plugins.CameraPlugin" }
+
+    func build(application:Application) {
+        application.install(TransformPlugin())
+    }
+}

@@ -1,0 +1,493 @@
+use GFX.Assets
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.Color
+use GFX.GPU
+use GFX.GPU.Commands
+use GFX.GPU.Pipelines
+use GFX.GPU.Resources
+use GFX.Rendering.Packing
+use GFX.Rendering.Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+use GFX.Scene.Frame.MeshDraw as MeshDraw
+use STD.Math
+
+internal struct MeshEntry {
+    internal let index:int
+    internal let generation:int
+    internal var revision:int
+    internal var vertex_slot:int
+    internal var index_slot:int
+    internal var index_count:int
+}
+
+internal struct ImageEntry {
+    internal let index:int
+    internal let generation:int
+    internal var revision:int
+    internal var texture_slot:int
+}
+
+internal struct SpriteCommand {
+    internal let view:Math.Mat4
+    internal let projection:Math.Mat4
+    internal let model:Math.Mat4
+    internal let handle:Assets.ImageHandle
+    internal let size:Math.Vec2
+    internal let pivot:Math.Vec2
+    internal let color:Color
+    internal let depth:float
+    internal let billboard:int
+}
+
+internal class BufferSlot {
+    private var resource:GPU.Buffer? = null
+    private var handle:uint = 0
+    private var owner:uint = 0
+    private var byte_count:int = 0
+
+    internal init(resource:GPU.Buffer) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.byte_count = resource.size()
+        self.resource = resource
+    }
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.owner }
+    internal func size() int { return self.byte_count }
+    internal func update(resource:GPU.Buffer) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.byte_count = resource.size()
+        self.resource = resource
+    }
+}
+
+internal class TextureSlot {
+    private var resource:GPU.Texture? = null
+    private var handle:uint = 0
+    private var owner:uint = 0
+
+    internal init(resource:GPU.Texture) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.owner }
+    internal func update(resource:GPU.Texture) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+}
+
+internal class PipelineSlot {
+    private var resource:GPU.GraphicsPipeline? = null
+    private var handle:uint = 0
+    private var owner:uint = 0
+
+    internal init(resource:GPU.GraphicsPipeline) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.owner }
+    internal func update(resource:GPU.GraphicsPipeline) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+}
+
+internal class SamplerSlot {
+    private var resource:GPU.Sampler? = null
+    private var handle:uint = 0
+    private var owner:uint = 0
+
+    internal init(resource:GPU.Sampler) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.owner }
+    internal func update(resource:GPU.Sampler) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+}
+
+internal class GPUCache {
+    private var meshes:MeshEntry[]
+    private var images:ImageEntry[]
+    private var mesh_buffers:BufferSlot[]
+    private var image_textures:TextureSlot[]
+    private var pipelines:PipelineSlot[]
+    private var samplers:SamplerSlot[]
+    private var mesh_pipeline_slot:int
+    private var sprite_2d_pipeline_slot:int
+    private var sprite_3d_pipeline_slot:int
+    private var sprite_sampler_slot:int
+    private var quad_vertex_slot:int
+    private var quad_index_slot:int
+    private var color_format:GPU.TextureFormat?
+
+    internal init() {
+        self.meshes = []
+        self.images = []
+        self.mesh_buffers = []
+        self.image_textures = []
+        self.pipelines = []
+        self.samplers = []
+        self.mesh_pipeline_slot = -1
+        self.sprite_2d_pipeline_slot = -1
+        self.sprite_3d_pipeline_slot = -1
+        self.sprite_sampler_slot = -1
+        self.quad_vertex_slot = -1
+        self.quad_index_slot = -1
+        self.color_format = null
+    }
+
+    internal func prepare(
+        device:@GPU.Device,
+        format:GPU.TextureFormat,
+        scene:@SceneFrame,
+        stats:&Stats
+    ) {
+        self.ensure_pipelines(device, format)
+        self.ensure_quad(device, stats)
+        for draw in scene.mesh_draws() { self.ensure_mesh(device, draw, stats) }
+        for draw in scene.sprite_2d_draws() { self.ensure_image(device, draw.handle, draw.revision, draw.image, stats) }
+        for draw in scene.sprite_3d_draws() { self.ensure_image(device, draw.handle, draw.revision, draw.image, stats) }
+    }
+
+    internal func render_meshes(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame) {
+        if self.mesh_pipeline_slot >= 0 {
+            var pipeline = self.pipelines[self.mesh_pipeline_slot]
+            pass.bind_native(pipeline.native_handle(), pipeline.owner_handle())
+            for camera in cameras.all_3d() {
+                let view_projection = camera.projection.multiply(camera.view)
+                for draw in scene.mesh_draws() {
+                    let entry_index = self.find_mesh(draw.handle)
+                    if entry_index >= 0 {
+                        let cached = self.meshes[entry_index]
+                        var vertex = self.mesh_buffers[cached.vertex_slot]
+                        var indices = self.mesh_buffers[cached.index_slot]
+                        let uniforms = Packing.mesh_uniform(
+                            view_projection.multiply(draw.model),
+                            draw.material.color
+                        )
+                        pass.vertex_uniform(0, @uniforms[0:uniforms.count()])
+                        pass.vertex_buffer_native(0, vertex.native_handle(), vertex.owner_handle(), vertex.size())
+                        pass.index_buffer_native(indices.native_handle(), indices.owner_handle(), indices.size())
+                        pass.draw_indexed(cached.index_count)
+                    }
+                }
+            }
+        }
+    }
+
+    internal func render_sprites_3d(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame) {
+        if self.sprite_3d_pipeline_slot >= 0 {
+            var pipeline = self.pipelines[self.sprite_3d_pipeline_slot]
+            pass.bind_native(pipeline.native_handle(), pipeline.owner_handle())
+            for camera in cameras.all_3d() {
+                for draw in scene.sprite_3d_draws() {
+                    self.draw_sprite(pass, SpriteCommand(
+                        view:camera.view,
+                        projection:camera.projection,
+                        model:draw.model,
+                        handle:draw.handle,
+                        size:draw.size,
+                        pivot:draw.pivot,
+                        color:draw.color,
+                        depth:0.0,
+                        billboard:draw.billboard
+                    ))
+                }
+            }
+        }
+    }
+
+    internal func render_sprites_2d(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame) {
+        if self.sprite_2d_pipeline_slot >= 0 {
+            var pipeline = self.pipelines[self.sprite_2d_pipeline_slot]
+            pass.bind_native(pipeline.native_handle(), pipeline.owner_handle())
+            for camera in cameras.all_2d() {
+                for draw in scene.sprite_2d_draws() {
+                    self.draw_sprite(pass, SpriteCommand(
+                        view:camera.view,
+                        projection:camera.projection,
+                        model:draw.model,
+                        handle:draw.handle,
+                        size:draw.size,
+                        pivot:draw.pivot,
+                        color:draw.color,
+                        depth:draw.depth,
+                        billboard:0
+                    ))
+                }
+            }
+        }
+    }
+
+    private func draw_sprite(pass:@GPU.RenderPass, draw:SpriteCommand) {
+        let entry_index = self.find_image(draw.handle)
+        if entry_index >= 0 && self.quad_vertex_slot >= 0 && self.quad_index_slot >= 0 {
+            let cached = self.images[entry_index]
+            var texture = self.image_textures[cached.texture_slot]
+            if self.sprite_sampler_slot >= 0 {
+                var sampler = self.samplers[self.sprite_sampler_slot]
+                var vertex = self.mesh_buffers[self.quad_vertex_slot]
+                var indices = self.mesh_buffers[self.quad_index_slot]
+                let uniforms = Packing.sprite_uniform(
+                    draw.model,
+                    draw.view,
+                    draw.projection,
+                    draw.size,
+                    draw.pivot,
+                    draw.color,
+                    draw.depth,
+                    draw.billboard
+                )
+                pass.vertex_uniform(0, @uniforms[0:uniforms.count()])
+                pass.fragment_sampler_native(0, texture.native_handle(), texture.owner_handle(), sampler.native_handle(), sampler.owner_handle())
+                pass.vertex_buffer_native(0, vertex.native_handle(), vertex.owner_handle(), vertex.size())
+                pass.index_buffer_native(indices.native_handle(), indices.owner_handle(), indices.size())
+                pass.draw_indexed(6)
+            }
+        }
+    }
+
+    private func ensure_pipelines(device:@GPU.Device, format:GPU.TextureFormat) {
+        var rebuild = self.color_format == null
+        if let current = self.color_format { rebuild = current != format }
+        if !rebuild { return }
+        var mesh_buffers:GPU.VertexBufferLayout[] = []
+        mesh_buffers.append(GPU.VertexBufferLayout(slot:0, pitch:48))
+        var mesh_attributes:GPU.VertexAttribute[] = []
+        mesh_attributes.append(GPU.VertexAttribute(location:0, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:0))
+        mesh_attributes.append(GPU.VertexAttribute(location:1, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:12))
+        mesh_attributes.append(GPU.VertexAttribute(location:2, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:24))
+        mesh_attributes.append(GPU.VertexAttribute(location:3, buffer_slot:0, format:GPU.VertexFormat.float_32x4, offset:32))
+        var targets:GPU.ColorTargetFormat[] = []
+        targets.append(GPU.ColorTargetFormat(format:format))
+        var mesh_pipeline = device.graphics_pipeline(
+            GPU.ShaderProgram.hlsl(file:"../Shaders/RetainedMesh.hlsl"),
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:mesh_buffers,
+                attributes:mesh_attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.back),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less_or_equal,
+                    depth_test:true,
+                    depth_write:true
+                ),
+                color_targets:targets,
+                depth_stencil_format:GPU.TextureFormat.depth16,
+                name:"GFX retained mesh pipeline"
+            )
+        )
+
+        var sprite_buffers:GPU.VertexBufferLayout[] = []
+        sprite_buffers.append(GPU.VertexBufferLayout(slot:0, pitch:16))
+        var sprite_attributes:GPU.VertexAttribute[] = []
+        sprite_attributes.append(GPU.VertexAttribute(location:0, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:0))
+        sprite_attributes.append(GPU.VertexAttribute(location:1, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:8))
+        var sprite_targets:GPU.ColorTargetFormat[] = []
+        sprite_targets.append(GPU.ColorTargetFormat(
+            format:format,
+            blend:GPU.BlendState(
+                source_color:GPU.BlendFactor.source_alpha,
+                destination_color:GPU.BlendFactor.one_minus_source_alpha,
+                source_alpha:GPU.BlendFactor.one,
+                destination_alpha:GPU.BlendFactor.one_minus_source_alpha,
+                enabled:true
+            )
+        ))
+        let sprite_program = GPU.ShaderProgram.hlsl(file:"../Shaders/RetainedSprite.hlsl")
+        var sprite_3d_pipeline = device.graphics_pipeline(
+            sprite_program,
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:sprite_buffers,
+                attributes:sprite_attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less_or_equal,
+                    depth_test:true,
+                    depth_write:false
+                ),
+                color_targets:sprite_targets,
+                depth_stencil_format:GPU.TextureFormat.depth16,
+                name:"GFX retained 3D sprite pipeline"
+            )
+        )
+        var sprite_2d_pipeline = device.graphics_pipeline(
+            sprite_program,
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:sprite_buffers,
+                attributes:sprite_attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                depth_stencil:GPU.DepthStencilState(depth_test:false, depth_write:false),
+                color_targets:sprite_targets,
+                depth_stencil_format:GPU.TextureFormat.depth16,
+                name:"GFX retained 2D sprite pipeline"
+            )
+        )
+        var sprite_sampler = device.sampler(GPU.SamplerSettings(
+            min_filter:GPU.Filter.linear,
+            mag_filter:GPU.Filter.linear,
+            address_u:GPU.AddressMode.clamp_to_edge,
+            address_v:GPU.AddressMode.clamp_to_edge,
+            name:"GFX retained sprite sampler"
+        ))
+        self.mesh_pipeline_slot = store_pipeline(self.pipelines, self.mesh_pipeline_slot, mesh_pipeline)
+        self.sprite_3d_pipeline_slot = store_pipeline(self.pipelines, self.sprite_3d_pipeline_slot, sprite_3d_pipeline)
+        self.sprite_2d_pipeline_slot = store_pipeline(self.pipelines, self.sprite_2d_pipeline_slot, sprite_2d_pipeline)
+        if self.sprite_sampler_slot < 0 {
+            self.samplers.append(SamplerSlot(sprite_sampler))
+            self.sprite_sampler_slot = self.samplers.count() - 1
+        } else {
+            self.samplers[self.sprite_sampler_slot].update(sprite_sampler)
+        }
+        self.color_format = format
+    }
+
+    private func ensure_quad(device:@GPU.Device, stats:&Stats) {
+        if self.quad_vertex_slot >= 0 && self.quad_index_slot >= 0 { return }
+        let vertices = Packing.quad_vertices()
+        let indices = Packing.quad_indices()
+        var vertex_upload = device.upload_buffer(vertices.count(), "GFX sprite quad vertex upload")
+        var index_upload = device.upload_buffer(indices.count(), "GFX sprite quad index upload")
+        vertex_upload.write(@vertices[0:vertices.count()])
+        index_upload.write(@indices[0:indices.count()])
+        var vertex = device.buffer(GPU.BufferSettings(size:vertices.count(), usage:GPU.BufferUsage.vertex(), name:"GFX sprite quad vertices"))
+        var index_buffer = device.buffer(GPU.BufferSettings(size:indices.count(), usage:GPU.BufferUsage.index(), name:"GFX sprite quad indices"))
+        var commands = device.commands()
+        var transfer = commands.copy()
+        transfer.upload(vertex_upload, vertex, vertices.count())
+        transfer.upload(index_upload, index_buffer, indices.count())
+        transfer.finish()
+        commands.submit()
+        self.mesh_buffers.append(BufferSlot(vertex))
+        self.quad_vertex_slot = self.mesh_buffers.count() - 1
+        self.mesh_buffers.append(BufferSlot(index_buffer))
+        self.quad_index_slot = self.mesh_buffers.count() - 1
+        stats.record_upload()
+    }
+
+    private func ensure_mesh(device:@GPU.Device, draw:MeshDraw, stats:&Stats) {
+        var entry_index = self.find_mesh(draw.handle)
+        if entry_index >= 0 && self.meshes[entry_index].revision == draw.revision { return }
+        if entry_index < 0 {
+            self.meshes.append(MeshEntry(
+                index:draw.handle.index(),
+                generation:draw.handle.generation(),
+                revision:0,
+                vertex_slot:-1,
+                index_slot:-1,
+                index_count:0
+            ))
+            entry_index = self.meshes.count() - 1
+        }
+            let vertices = Packing.vertices(draw.geometry)
+            let indices = Packing.indices(draw.geometry)
+            var vertex_upload = device.upload_buffer(vertices.count(), "GFX mesh vertex upload")
+            var index_upload = device.upload_buffer(indices.count(), "GFX mesh index upload")
+            vertex_upload.write(@vertices[0:vertices.count()])
+            index_upload.write(@indices[0:indices.count()])
+            var vertex = device.buffer(GPU.BufferSettings(size:vertices.count(), usage:GPU.BufferUsage.vertex(), name:"GFX mesh vertices"))
+            var index_buffer = device.buffer(GPU.BufferSettings(size:indices.count(), usage:GPU.BufferUsage.index(), name:"GFX mesh indices"))
+            var commands = device.commands()
+            var transfer = commands.copy()
+            transfer.upload(vertex_upload, vertex, vertices.count())
+            transfer.upload(index_upload, index_buffer, indices.count())
+            transfer.finish()
+            commands.submit()
+        if self.meshes[entry_index].vertex_slot < 0 {
+            self.mesh_buffers.append(BufferSlot(vertex))
+            self.meshes[entry_index].vertex_slot = self.mesh_buffers.count() - 1
+            self.mesh_buffers.append(BufferSlot(index_buffer))
+            self.meshes[entry_index].index_slot = self.mesh_buffers.count() - 1
+        } else {
+            self.mesh_buffers[self.meshes[entry_index].vertex_slot].update(vertex)
+            self.mesh_buffers[self.meshes[entry_index].index_slot].update(index_buffer)
+        }
+        self.meshes[entry_index].index_count = draw.geometry.index_count()
+        self.meshes[entry_index].revision = draw.revision
+        stats.record_upload()
+    }
+
+    private func ensure_image(device:@GPU.Device, handle:Assets.ImageHandle, revision:int, image:Assets.Image, stats:&Stats) {
+        var entry_index = self.find_image(handle)
+        if entry_index >= 0 && self.images[entry_index].revision == revision { return }
+        if entry_index < 0 {
+            self.images.append(ImageEntry(
+                index:handle.index(),
+                generation:handle.generation(),
+                revision:0,
+                texture_slot:-1
+            ))
+            entry_index = self.images.count() - 1
+        }
+            var texture = device.texture(GPU.TextureSettings(
+                format:GPU.TextureFormat.rgba8_unorm,
+                width:image.width(),
+                height:image.height(),
+                usage:GPU.TextureUsage.for_sampling(),
+                name:"GFX image asset"
+            ))
+            let pixels = image.pixels()
+            var upload = device.upload_buffer(pixels.count(), "GFX image upload")
+            upload.write(@pixels[0:pixels.count()])
+            var commands = device.commands()
+            var transfer = commands.copy()
+            transfer.upload(
+                upload,
+                GPU.TextureRegion(texture:texture, width:image.width(), height:image.height()),
+                image.width(),
+                image.height()
+            )
+            transfer.finish()
+            commands.submit()
+        if self.images[entry_index].texture_slot < 0 {
+            self.image_textures.append(TextureSlot(texture))
+            self.images[entry_index].texture_slot = self.image_textures.count() - 1
+        } else {
+            self.image_textures[self.images[entry_index].texture_slot].update(texture)
+        }
+        self.images[entry_index].revision = revision
+        stats.record_upload()
+    }
+
+    private func find_mesh(handle:Assets.MeshHandle) int {
+        var index = 0
+        while index < self.meshes.count() {
+            let entry = self.meshes[index]
+            if entry.index == handle.index() && entry.generation == handle.generation() { return index }
+            index++
+        }
+        return -1
+    }
+
+    private func find_image(handle:Assets.ImageHandle) int {
+        var index = 0
+        while index < self.images.count() {
+            let entry = self.images[index]
+            if entry.index == handle.index() && entry.generation == handle.generation() { return index }
+            index++
+        }
+        return -1
+    }
+}
+
+internal func store_pipeline(pipelines:&PipelineSlot[], slot:int, pipeline:GPU.GraphicsPipeline) int {
+    if slot < 0 {
+        pipelines.append(PipelineSlot(pipeline))
+        return pipelines.count() - 1
+    }
+    pipelines[slot].update(pipeline)
+    return slot
+}

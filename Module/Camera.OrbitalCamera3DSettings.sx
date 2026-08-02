@@ -1,0 +1,27 @@
+use GFX.Camera.OrbitalCamera3DControls
+use STD.Math
+
+public struct OrbitalCamera3DSettings {
+    var target:Math.Vec3 = Math.Vec3()
+    var distance:float = 8.0
+    var yaw:float = 0.0
+    var pitch:float = -0.31415927
+    var min_distance:float = 1.0
+    var max_distance:float = 80.0
+    var min_pitch:float = -1.5009832
+    var max_pitch:float = 1.5009832
+    var zoom_speed:float = 8.0
+    var scroll_zoom_speed:float = 0.9
+    var orbit_sensitivity:float = 0.006
+    var pan_sensitivity:float = 0.0016
+    var pan_response:float = 18.0
+    var zoom_response:float = 16.0
+    var orbit_response:float = 20.0
+    var max_delta_time:float = 0.05
+    var vertical_fov_radians:float = 0.62831855
+    var near_plane:float = 0.1
+    var far_plane:float = 400.0
+    var order:int = 0
+    var active:bool = true
+    var controls:OrbitalCamera3DControls? = null
+}

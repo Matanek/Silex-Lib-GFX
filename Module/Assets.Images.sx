@@ -1,0 +1,70 @@
+use GFX.Assets.Image as Image
+use GFX.Assets.ImageHandle as ImageHandle
+
+internal class ImageEntry {
+    internal var image:Image
+    internal var generation:int
+    internal var revision:int
+    internal var active:bool
+
+    internal init(image:Image) {
+        self.image = image
+        self.generation = 1
+        self.revision = 1
+        self.active = true
+    }
+}
+
+public class Images {
+    private var entries:ImageEntry[]
+
+    public init() { self.entries = [] }
+
+    public func add(image:Image) ImageHandle {
+        var entries = self.entries
+        entries.append(ImageEntry(image))
+        self.entries = entries
+        return ImageHandle(entries.count() - 1, 1)
+    }
+
+    public func contains(handle:ImageHandle) bool {
+        if !handle.is_valid() || handle.asset_index >= self.entries.count() { return false }
+        var entry = self.entries[handle.asset_index]
+        return entry.active && entry.generation == handle.asset_generation
+    }
+
+    public func get(handle:ImageHandle) @Image {
+        self.require(handle)
+        return self.entries[handle.asset_index].image
+    }
+
+    internal func snapshot(handle:ImageHandle) Image {
+        self.require(handle)
+        return self.entries[handle.asset_index].image
+    }
+
+    public func replace(handle:ImageHandle, image:Image) {
+        var entry = self.require(handle)
+        entry.image = image
+        entry.revision++
+    }
+
+    public func remove(handle:ImageHandle) bool {
+        if !self.contains(handle) { return false }
+        var entry = self.entries[handle.asset_index]
+        entry.active = false
+        entry.generation++
+        entry.revision++
+        return true
+    }
+
+    public func revision(handle:ImageHandle) int {
+        if !self.contains(handle) { return 0 }
+        return self.entries[handle.asset_index].revision
+    }
+
+    private func require(handle:ImageHandle) ImageEntry {
+        if !self.contains(handle) { panic("GFX.Assets image handle is stale or invalid") }
+        return self.entries[handle.asset_index]
+    }
+}

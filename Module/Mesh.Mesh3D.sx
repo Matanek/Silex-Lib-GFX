@@ -1,0 +1,14 @@
+use GFX.Assets.MeshHandle as MeshHandle
+
+public struct Mesh3D {
+    var mesh:MeshHandle
+    var visible:bool
+
+    public init(mesh:MeshHandle = MeshHandle(), visible:bool = true) {
+        self.mesh = mesh
+        self.visible = visible
+    }
+
+    internal func asset() MeshHandle { return self.mesh }
+    internal func is_visible() bool { return self.visible }
+}

@@ -1,0 +1,43 @@
+use GFX.Bootstrap.Resources
+
+internal class Record {
+    private let current_generation:int
+    private var alive:bool
+    private var component_store:Resources
+
+    internal init(generation:int, components:Resources) {
+        self.current_generation = generation
+        self.alive = true
+        self.component_store = components
+    }
+
+    internal func generation() int { return self.current_generation }
+    internal func is_alive() bool { return self.alive }
+
+    internal func insert<T>(component:T) {
+        self.component_store.insert(component)
+    }
+
+    internal func has<T>() bool {
+        return self.component_store.has<T>()
+    }
+
+    internal func get<T>() @T {
+        return self.component_store.get<T>()
+    }
+
+    internal func update<T>(callback:func(&T)) {
+        var component:&T = self.component_store.get_mut<T>()
+        callback(component)
+    }
+
+    internal func remove<T>() T? {
+        return self.component_store.remove<T>()
+    }
+
+    internal func destroy() {
+        if !self.alive { return }
+        self.component_store.clear()
+        self.alive = false
+    }
+}

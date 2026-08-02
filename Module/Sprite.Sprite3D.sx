@@ -1,0 +1,40 @@
+use GFX.Assets.ImageHandle as ImageHandle
+use GFX.Color
+use GFX.Sprite.Billboard as Billboard
+use STD.Math
+
+public struct Sprite3D {
+    var image:ImageHandle
+    var size:Math.Vec2
+    var pivot:Math.Vec2
+    var color:Color
+    var billboard:Billboard
+    var visible:bool
+
+    public init(
+        image:ImageHandle = ImageHandle(),
+        size:Math.Vec2 = Math.Vec2(1.0),
+        pivot:Math.Vec2 = Math.Vec2(0.5),
+        color:Color = Color.white(),
+        billboard:Billboard = Billboard.face_camera,
+        visible:bool = true
+    ) {
+        self.image = image
+        self.size = size
+        self.pivot = pivot
+        self.color = color
+        self.billboard = billboard
+        self.visible = visible
+    }
+
+    internal func asset() ImageHandle { return self.image }
+    internal func sprite_size() Math.Vec2 { return self.size }
+    internal func sprite_pivot() Math.Vec2 { return self.pivot }
+    internal func tint() Color { return self.color }
+    internal func billboard_mode() int {
+        if self.billboard == Billboard.none { return 0 }
+        if self.billboard == Billboard.face_camera_y { return 2 }
+        return 1
+    }
+    internal func is_visible() bool { return self.visible }
+}

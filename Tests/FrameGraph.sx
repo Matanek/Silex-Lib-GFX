@@ -1,0 +1,67 @@
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.FrameGraph.Graph.Graph as Graph
+use GFX.FrameGraph.Pass.PassPhase as PassPhase
+use GFX.FrameGraph.Resource.TextureDescriptor as TextureDescriptor
+use GFX.GPU
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Rendering.Stats as Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+
+func no_op(
+    pass:@GPU.RenderPass,
+    cameras:@CameraFrame,
+    scene:@SceneFrame,
+    cache:&GPUCache,
+    stats:&Stats
+) {
+    let size = pass.size()
+}
+
+test "compile dependencies and alias non-overlapping transient textures" {
+    var graph = Graph()
+    let texture = TextureDescriptor(
+        GPU.TextureFormat.depth16,
+        GPU.TextureUsage.as_depth_target()
+    )
+    let first = graph.create_texture("First depth", texture)
+    let second = graph.create_texture("Second depth", texture)
+
+    let consumer = graph.add_pass("Consumer", PassPhase.post_process, no_op)
+    graph.read(consumer, first)
+    let producer = graph.add_pass("Producer", PassPhase.three_d, no_op)
+    graph.write(producer, first)
+    let later = graph.add_pass("Later", PassPhase.two_d, no_op)
+    graph.write(later, second)
+
+    assert(graph.compile())
+    assert(graph.plan_count() == 3)
+    assert(graph.plan_name(0) == "Producer")
+    assert(graph.plan_name(1) == "Consumer")
+    assert(graph.plan_name(2) == "Later")
+    assert(graph.resource_count() == 2)
+    assert(graph.transient_slot_count() == 1)
+}
+
+test "diagnose dependency cycles" {
+    var graph = Graph()
+    let first = graph.add_pass("First", PassPhase.three_d, no_op)
+    let second = graph.add_pass("Second", PassPhase.three_d, no_op)
+    graph.depends(first, second)
+    graph.depends(second, first)
+
+    assert(!graph.compile())
+    assert(graph.error_message() == "pass dependencies contain a cycle")
+}
+
+test "diagnose a created texture read without a writer" {
+    var graph = Graph()
+    let texture = graph.create_texture(
+        "Uninitialized",
+        TextureDescriptor(GPU.TextureFormat.depth16, GPU.TextureUsage.as_depth_target())
+    )
+    let consumer = graph.add_pass("Consumer", PassPhase.three_d, no_op)
+    graph.read(consumer, texture)
+
+    assert(!graph.compile())
+    assert(graph.error_message() == "created resource is read before any pass writes it: Uninitialized")
+}

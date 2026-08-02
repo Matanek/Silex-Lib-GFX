@@ -1,0 +1,85 @@
+use GFX.Assets
+use GFX.Color
+use GFX.Geometry
+use GFX.Material
+use GFX.Mesh
+use GFX.Sprite
+use GFX.ECS
+use GFX.Transform
+use GFX.Scene.Frame.from_world as collect_scene_frame
+use STD.Math
+
+test "build geometry and revisioned scene assets" {
+    let cube = Geometry.Cube.make(Math.Vec3(2.0, 4.0, 6.0))
+    assert(cube.vertex_count() == 24)
+    assert(cube.index_count() == 36)
+    assert(cube.triangle_count() == 12)
+
+    var meshes = Assets.Meshes()
+    let handle = meshes.add(cube)
+    assert(handle.is_valid())
+    assert(meshes.contains(handle))
+    assert(meshes.revision(handle) == 1)
+    meshes.replace(handle, Geometry.Plane.make())
+    assert(meshes.revision(handle) == 2)
+    assert(meshes.get(handle).triangle_count() == 2)
+
+    let component = Mesh.Mesh3D(handle)
+    let material = Mesh.Material3D(Material.Simple(Color.red_500()))
+    assert(component.mesh.is_valid())
+    assert(material.material.color == Color.red_500())
+    assert(meshes.remove(handle))
+    assert(!meshes.contains(handle))
+}
+
+test "build image-backed 2D and 3D sprites" {
+    var images = Assets.Images()
+    let image = images.add(Assets.Image.solid(Color.white()))
+    assert(images.contains(image))
+    assert(images.get(image).width() == 1)
+    assert(images.get(image).height() == 1)
+
+    let sprite_2d = Sprite.Sprite2D(image, Math.Vec2(32.0, 16.0))
+    let sprite_3d = Sprite.Sprite3D(image, Math.Vec2(2.0), Math.Vec2(0.5), Color.white(), Sprite.Billboard.face_camera)
+    assert(sprite_2d.image.is_valid())
+    assert(sprite_2d.size == Math.Vec2(32.0, 16.0))
+    assert(sprite_3d.image.is_valid())
+    assert(sprite_3d.billboard == Sprite.Billboard.face_camera)
+}
+
+test "collect renderable meshes and sorted sprites" {
+    var meshes = Assets.Meshes()
+    var images = Assets.Images()
+    let mesh = meshes.add(Geometry.Cube.make())
+    let image = images.add(Assets.Image.solid())
+    var world = ECS.World()
+
+    var mesh_entity = ECS.EntityRecipe()
+        ..with(Transform.Transform3D())
+        ..with(Mesh.Mesh3D(mesh))
+        ..with(Mesh.Material3D())
+    world.spawn(mesh_entity)
+
+    var later_sprite = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Sprite.Sprite2D(image, Math.Vec2(1.0), Math.Vec2(0.5), Color.white(), 5))
+    world.spawn(later_sprite)
+
+    var earlier_sprite = ECS.EntityRecipe()
+        ..with(Transform.Transform2D())
+        ..with(Sprite.Sprite2D(image, Math.Vec2(1.0), Math.Vec2(0.5), Color.white(), -2))
+    world.spawn(earlier_sprite)
+
+    var sprite_3d = ECS.EntityRecipe()
+        ..with(Transform.Transform3D())
+        ..with(Sprite.Sprite3D(image))
+    world.spawn(sprite_3d)
+
+    let frame = collect_scene_frame(world, meshes, images)
+    assert(frame.mesh_count() == 1)
+    assert(frame.sprite_2d_count() == 2)
+    assert(frame.sprite_3d_count() == 1)
+    let layer = frame.first_sprite_2d_layer()
+    assert(layer != null)
+    if let value = layer { assert(value == -2) }
+}

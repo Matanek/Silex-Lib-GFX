@@ -1,0 +1,55 @@
+use STD.Math
+use GFX.Transform.Transform2D
+
+public struct Camera2D {
+    var active:bool
+    var zoom:float
+    var viewport_size:Math.Vec2
+    var order:int
+
+    public init(
+        active:bool = true,
+        zoom:float = 1.0,
+        viewport_size:Math.Vec2 = Math.Vec2(),
+        order:int = 0
+    ) {
+        self.active = active
+        self.zoom = zoom
+        self.viewport_size = viewport_size
+        self.order = order
+    }
+
+    public func view(transform:@Transform2D) Math.Mat4 {
+        return transform.view_matrix()
+    }
+
+    public func is_active() bool { return self.active }
+
+    public func render_order() int { return self.order }
+
+    public func projection(fallback:Math.Vec2) Math.Mat4 {
+        let viewport = self.viewport(fallback)
+        var zoom = self.zoom
+        if zoom <= 0.0 { zoom = 1.0 }
+        let half_width = viewport.x * 0.5 / zoom
+        let half_height = viewport.y * 0.5 / zoom
+        return Math.Mat4.orthographic(
+            -half_width,
+            half_width,
+            half_height,
+            -half_height,
+            -1.0,
+            1.0
+        )
+    }
+
+    public func viewport(fallback:Math.Vec2) Math.Vec2 {
+        var width = self.viewport_size.x
+        var height = self.viewport_size.y
+        if width <= 0.0 { width = fallback.x }
+        if height <= 0.0 { height = fallback.y }
+        if width <= 0.0 { width = 1.0 }
+        if height <= 0.0 { height = 1.0 }
+        return Math.Vec2(width, height)
+    }
+}

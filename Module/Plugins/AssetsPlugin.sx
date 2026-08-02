@@ -1,0 +1,22 @@
+use GFX.Assets
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Schedule
+
+public struct AssetsPlugin:Plugin {
+    func id() str { return "GFX.Plugins.AssetsPlugin" }
+
+    func build(application:Application) {
+        application.resources().insert(Assets.Meshes())
+        application.resources().insert(Assets.Images())
+        application.add_system(Schedule.shutdown, stop_assets)
+    }
+}
+
+func stop_assets(application:Application) {
+    var resources = application.resources()
+    var images = resources.remove<Assets.Images>()
+    var meshes = resources.remove<Assets.Meshes>()
+    assert(images != null)
+    assert(meshes != null)
+}

@@ -1,0 +1,57 @@
+use STD.Math
+use GFX.Camera
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.Camera.Frame.from_world as collect_camera_frame
+use GFX.ECS
+use GFX.Transform
+
+func add_camera_2d(world:&ECS.World, order:int, active:bool) {
+    var recipe = ECS.EntityRecipe()
+        ..with(Transform.Transform2D(Math.Vec2(order as float, 0.0)))
+        ..with(Camera.Camera2D(active, 1.0, Math.Vec2(), order))
+    world.spawn(recipe)
+}
+
+func add_camera_3d(world:&ECS.World, order:int, active:bool) {
+    var recipe = ECS.EntityRecipe()
+        ..with(Transform.Transform3D(Math.Vec3(0.0, 1.0, 5.0)))
+        ..with(Camera.Camera3D(
+            active,
+            Math.radians(60.0),
+            0.1,
+            1000.0,
+            order
+        ))
+    world.spawn(recipe)
+}
+
+test "collect active cameras in rendering order" {
+    var world = ECS.World()
+    add_camera_2d(world, 20, true)
+    add_camera_2d(world, -5, true)
+    add_camera_2d(world, -10, false)
+    add_camera_3d(world, 3, true)
+    add_camera_3d(world, -2, false)
+
+    let frame = collect_camera_frame(world, Math.Vec2(1280.0, 720.0))
+    assert(frame.count_2d() == 2)
+    assert(frame.count_3d() == 1)
+    let first_2d_order = frame.first_2d_order()
+    assert(first_2d_order != null)
+    if let order = first_2d_order { assert(order == -5) }
+    let first_3d_order = frame.first_3d_order()
+    assert(first_3d_order != null)
+    if let order = first_3d_order { assert(order == 3) }
+    let projection = frame.first_2d_projection()
+    assert(projection != null)
+    if let matrix = projection {
+        assert(matrix.x.x > 0.0)
+        assert(matrix.y.y < 0.0)
+    }
+    let view = frame.first_3d_view()
+    assert(view != null)
+    if let matrix = view {
+        let camera_origin = matrix.multiply(Math.Vec4(0.0, 1.0, 5.0, 1.0))
+        assert(camera_origin.nearly_equal(Math.Vec4(0.0, 0.0, 0.0, 1.0), 0.0001))
+    }
+}

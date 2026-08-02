@@ -38,6 +38,8 @@ public struct DepthTarget {
     var mip_level:int = 0
     var layer:int = 0
     var cycle:bool = true
+    internal var native_texture:uint = 0
+    internal var native_owner:uint = 0
 }
 
 public struct TextureLocation {
@@ -142,7 +144,7 @@ public class CommandBuffer {
         }
     }
 
-    public func render(surface:@Surface, clear:Color = Color.black()) RenderPass? {
+    public func render(surface:@Surface, clear:Color = Color.black(), depth:DepthTarget? = null) RenderPass? {
         self.require_available("begin a window render pass")
         self.require_owner(surface.owner_handle())
         var texture:uint = 0
@@ -155,10 +157,17 @@ public class CommandBuffer {
         if texture == 0 as uint { return null }
         var target:uint[8]
         encode_color_target_handle(texture, clear, C.address_bits(C.mutable_pointer(target)))
-        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, 0 as uint, width, height)
+        var native_depth:uint[4]
+        var depth_address:uint = 0
+        if var configured = depth {
+            self.require_owner(depth_owner(configured))
+            depth_address = C.address_bits(C.mutable_pointer(native_depth))
+            encode_depth_target(configured, depth_address)
+        }
+        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, depth_address, width, height)
     }
 
-    public func try_render(surface:@Surface, clear:Color = Color.black()) RenderPass? {
+    public func try_render(surface:@Surface, clear:Color = Color.black(), depth:DepthTarget? = null) RenderPass? {
         self.require_available("try to begin a window render pass")
         self.require_owner(surface.owner_handle())
         var texture:uint = 0
@@ -171,7 +180,14 @@ public class CommandBuffer {
         if texture == 0 as uint { return null }
         var target:uint[8]
         encode_color_target_handle(texture, clear, C.address_bits(C.mutable_pointer(target)))
-        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, 0 as uint, width, height)
+        var native_depth:uint[4]
+        var depth_address:uint = 0
+        if var configured = depth {
+            self.require_owner(depth_owner(configured))
+            depth_address = C.address_bits(C.mutable_pointer(native_depth))
+            encode_depth_target(configured, depth_address)
+        }
+        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, depth_address, width, height)
     }
 
     public func clear(surface:@Surface, color:Color = Color.black()) bool {
@@ -348,6 +364,7 @@ public class CommandBuffer {
     internal func finish_copy(handle:uint) { if self.pass_active { sdl_end_gpu_copy_pass(C.pointer_bits(handle)); self.pass_active = false } }
     internal func finish_compute(handle:uint) { if self.pass_active { sdl_end_gpu_compute_pass(C.pointer_bits(handle)); self.pass_active = false } }
     internal func require_resource(owner:uint) { self.require_owner(owner) }
+    internal func native_handle() uint { return self.handle }
     internal func native_device() uint { return self.device_handle }
 
     private func begin_render(targets:uint, count:uint32, depth:uint, width:uint32, height:uint32) RenderPass {
@@ -377,6 +394,7 @@ public class RenderPass {
     private var commands:CommandBuffer? = null
     private var handle:uint
     private let device_handle:uint
+    private let command_handle:uint
     private let drawable_width:uint32
     private let drawable_height:uint32
 
@@ -384,6 +402,7 @@ public class RenderPass {
         self.commands = commands
         self.handle = handle
         self.device_handle = commands.native_device()
+        self.command_handle = commands.native_handle()
         self.drawable_width = width
         self.drawable_height = height
     }
@@ -392,37 +411,60 @@ public class RenderPass {
     public func size() (width:uint32, height:uint32) { return (width:self.drawable_width, height:self.drawable_height) }
 
     public func bind(pipeline:@GraphicsPipeline) {
-        self.require_owner(pipeline.owner_handle())
-        sdl_bind_gpu_graphics_pipeline(C.pointer_bits(self.handle), C.pointer_bits(pipeline.native_handle()))
+        self.bind_native(pipeline.native_handle(), pipeline.owner_handle())
+    }
+
+    internal func bind_native(pipeline:uint, owner:uint) {
+        self.require_owner(owner)
+        sdl_bind_gpu_graphics_pipeline(C.pointer_bits(self.handle), C.pointer_bits(pipeline))
     }
 
     public func vertex_buffer(slot:int, buffer:@Buffer, offset:int = 0) {
-        self.require_owner(buffer.owner_handle())
+        self.vertex_buffer_native(slot, buffer.native_handle(), buffer.owner_handle(), buffer.size(), offset)
+    }
+
+    internal func vertex_buffer_native(slot:int, buffer:uint, owner:uint, size:int, offset:int = 0) {
+        self.require_owner(owner)
         require_slot(slot, 16, "vertex buffer")
-        require_range(buffer.size(), offset, 0, "vertex buffer binding")
+        require_range(size, offset, 0, "vertex buffer binding")
         var binding:uint[2]
         let address = C.address_bits(C.mutable_pointer(binding))
-        let stored_buffer = C.store<uint>(address, 0 as uint, buffer.native_handle())
+        let stored_buffer = C.store<uint>(address, 0 as uint, buffer)
         let stored_offset = C.store<uint32>(address, 8 as uint, offset as uint32)
         sdl_bind_gpu_vertex_buffers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
     }
 
     public func index_buffer(buffer:@Buffer, type:Types.IndexType = Types.IndexType.thirty_two_bits, offset:int = 0) {
-        self.require_owner(buffer.owner_handle())
-        require_range(buffer.size(), offset, 0, "index buffer binding")
+        self.index_buffer_native(buffer.native_handle(), buffer.owner_handle(), buffer.size(), type, offset)
+    }
+
+    internal func index_buffer_native(buffer:uint, owner:uint, size:int, type:Types.IndexType = Types.IndexType.thirty_two_bits, offset:int = 0) {
+        self.require_owner(owner)
+        require_range(size, offset, 0, "index buffer binding")
         var binding:uint[2]
         let address = C.address_bits(C.mutable_pointer(binding))
-        let stored_buffer = C.store<uint>(address, 0 as uint, buffer.native_handle())
+        let stored_buffer = C.store<uint>(address, 0 as uint, buffer)
         let stored_offset = C.store<uint32>(address, 8 as uint, offset as uint32)
         sdl_bind_gpu_index_buffer(C.pointer_bits(self.handle), C.pointer_bits(address), type.raw_value as int32)
     }
 
     public func vertex_sampler(slot:int, texture:@Texture, sampler:@Sampler) { self.sampler(0, slot, texture, sampler) }
     public func fragment_sampler(slot:int, texture:@Texture, sampler:@Sampler) { self.sampler(1, slot, texture, sampler) }
+    internal func fragment_sampler_native(slot:int, texture:uint, texture_owner:uint, sampler:uint, sampler_owner:uint) {
+        self.sampler_native(1, slot, texture, texture_owner, sampler, sampler_owner)
+    }
     public func vertex_storage_texture(slot:int, texture:@Texture) { self.storage_texture(0, slot, texture) }
     public func fragment_storage_texture(slot:int, texture:@Texture) { self.storage_texture(1, slot, texture) }
     public func vertex_storage_buffer(slot:int, buffer:@Buffer) { self.storage_buffer(0, slot, buffer) }
     public func fragment_storage_buffer(slot:int, buffer:@Buffer) { self.storage_buffer(1, slot, buffer) }
+
+    public func vertex_uniform(slot:int, bytes:@uint8[..]) {
+        self.uniform(0, slot, bytes)
+    }
+
+    public func fragment_uniform(slot:int, bytes:@uint8[..]) {
+        self.uniform(1, slot, bytes)
+    }
 
     public func viewport(x:float, y:float, width:float, height:float, minimum_depth:float = 0.0, maximum_depth:float = 1.0) {
         if width < 0.0 || height < 0.0 || minimum_depth < 0.0 || maximum_depth > 1.0 || minimum_depth > maximum_depth {
@@ -478,11 +520,14 @@ public class RenderPass {
     }
 
     private func sampler(stage:int, slot:int, texture:@Texture, sampler:@Sampler) {
-        self.require_owner(texture.owner_handle())
-        self.require_owner(sampler.owner_handle())
+        self.sampler_native(stage, slot, texture.native_handle(), texture.owner_handle(), sampler.native_handle(), sampler.owner_handle())
+    }
+    private func sampler_native(stage:int, slot:int, texture:uint, texture_owner:uint, sampler:uint, sampler_owner:uint) {
+        self.require_owner(texture_owner)
+        self.require_owner(sampler_owner)
         require_slot(slot, 16, "sampler")
         var binding:uint[2]
-        binding[0] = texture.native_handle(); binding[1] = sampler.native_handle()
+        binding[0] = texture; binding[1] = sampler
         let address = C.address_bits(C.mutable_pointer(binding))
         if stage == 0 { sdl_bind_gpu_vertex_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1); return }
         sdl_bind_gpu_fragment_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
@@ -505,6 +550,29 @@ public class RenderPass {
     }
     private func require_owner(owner:uint) {
         if owner != self.device_handle { panic("GFX.GPU resource belongs to another device") }
+    }
+
+    private func uniform(stage:int, slot:int, bytes:@uint8[..]) {
+        if self.handle == 0 as uint { panic("GFX.GPU cannot push a uniform after a render pass has finished") }
+        if slot < 0 || slot >= 4 || bytes.count() == 0 {
+            panic("GFX.GPU uniform slot must be between 0 and 3 and bytes cannot be empty")
+        }
+        var compact = C.string(bytes)
+        if stage == 0 {
+            sdl_push_gpu_vertex_uniform_data(
+                C.pointer_bits(self.command_handle),
+                slot as uint32,
+                C.pointer(compact),
+                bytes.count() as uint32
+            )
+            return
+        }
+        sdl_push_gpu_fragment_uniform_data(
+            C.pointer_bits(self.command_handle),
+            slot as uint32,
+            C.pointer(compact),
+            bytes.count() as uint32
+        )
     }
 }
 
@@ -742,11 +810,19 @@ local func encode_color_target(value:ColorTarget, address:uint) {
     let cycle = C.store<uint8>(address, 56 as uint, Types.native_bool(value.cycle) as uint8); let cycle_resolve = C.store<uint8>(address, 57 as uint, Types.native_bool(value.cycle_resolve) as uint8)
 }
 local func encode_depth_target(value:DepthTarget, address:uint) {
-    let texture = C.store<uint>(address, 0 as uint, required_texture(value.texture).native_handle()); let depth = C.store<float32>(address, 8 as uint, value.clear_depth as float32)
+    let texture = C.store<uint>(address, 0 as uint, depth_handle(value)); let depth = C.store<float32>(address, 8 as uint, value.clear_depth as float32)
     let load = C.store<int32>(address, 12 as uint, load_value(value.depth_load, Types.Load.clear)); let store = C.store<int32>(address, 16 as uint, store_value(value.depth_store, Types.Store.discard))
     let stencil_load = C.store<int32>(address, 20 as uint, load_value(value.stencil_load, Types.Load.discard)); let stencil_store = C.store<int32>(address, 24 as uint, store_value(value.stencil_store, Types.Store.discard))
     let cycle = C.store<uint8>(address, 28 as uint, Types.native_bool(value.cycle) as uint8); let clear = C.store<uint8>(address, 29 as uint, value.clear_stencil)
     let mip = C.store<uint8>(address, 30 as uint, value.mip_level as uint8); let layer = C.store<uint8>(address, 31 as uint, value.layer as uint8)
+}
+local func depth_handle(value:DepthTarget) uint {
+    if value.native_texture != 0 as uint { return value.native_texture }
+    return required_texture(value.texture).native_handle()
+}
+local func depth_owner(value:DepthTarget) uint {
+    if value.native_owner != 0 as uint { return value.native_owner }
+    return required_texture(value.texture).owner_handle()
 }
 local func encode_color(value:Color, address:uint) { let r=C.store<float32>(address,0 as uint,value.r as float32); let g=C.store<float32>(address,4 as uint,value.g as float32); let b=C.store<float32>(address,8 as uint,value.b as float32); let a=C.store<float32>(address,12 as uint,value.a as float32) }
 local func encode_transfer_location(value:@TransferBuffer, offset:int, address:uint) { let handle=C.store<uint>(address,0 as uint,value.native_handle()); let position=C.store<uint32>(address,8 as uint,offset as uint32) }

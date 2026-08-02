@@ -1,18 +1,60 @@
+use Interop.Boundary
+use Interop.C
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
 use GFX.Input
 use GFX.Input.State as InputState
 use GFX.Plugins.InputPlugin
 
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+let sdl_was_init = C.function<func(uint32) uint32>(
+    library:Boundary.SDL3,
+    name:"SDL_WasInit"
+)
+
+func push_mouse_wheel(y:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let kind = C.store<uint32>(address, 0 as uint, 0x403 as uint32)
+    let delta_y = C.store<float32>(address, 28 as uint, y)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func push_mouse_button(kind:uint32, button:uint8) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_button = C.store<uint8>(address, 24 as uint, button)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func push_mouse_motion(dx:float32, dy:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let kind = C.store<uint32>(address, 0 as uint, 0x400 as uint32)
+    let delta_x = C.store<float32>(address, 36 as uint, dx)
+    let delta_y = C.store<float32>(address, 40 as uint, dy)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
 func observe(input:@InputState) {
     assert(!input.is_quit_requested())
     assert(!input.is_down(Input.Key.space))
-    let events = input.events()
-    assert(events.count() == 0)
+    assert(input.mouse_wheel().y == 1.0)
+    assert(input.is_down(Input.MouseButton.right))
+    assert(input.mouse_delta().x == 12.0)
+    assert(input.mouse_delta().y == -4.0)
 }
 
 func run_once(application:Application) int {
     application.run_schedule(Schedule.startup)
+    assert(sdl_was_init(0 as uint32) != 0 as uint32)
+    push_mouse_wheel(1.0)
+    push_mouse_button(0x401, 3)
+    push_mouse_motion(12.0, -4.0)
     application.run_schedule(Schedule.pre_update)
     application.run_schedule(Schedule.update)
     application.run_schedule(Schedule.shutdown)

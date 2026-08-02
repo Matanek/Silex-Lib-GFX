@@ -1,0 +1,428 @@
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.GPU
+use GFX.GPU.Types.texture_usage_flags as texture_usage_flags
+use GFX.FrameGraph.Pass
+use GFX.FrameGraph.Physical.AliasGroup as AliasGroup
+use GFX.FrameGraph.Physical.TextureSlot as TextureSlot
+use GFX.FrameGraph.Resource
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Rendering.Stats as Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+use STD.Math
+
+internal struct Edge {
+    let from:int
+    let to:int
+}
+
+internal class Graph {
+    private var resources:Resource.Resource[]
+    private var passes:Pass.Pass[]
+    private var plan:int[]
+    private var aliases:AliasGroup[]
+    private var textures:TextureSlot[]
+    private var dirty:bool
+    private var compile_error:str?
+    private var physical_width:int
+    private var physical_height:int
+
+    internal init() {
+        self.resources = []
+        self.passes = []
+        self.plan = []
+        self.aliases = []
+        self.textures = []
+        self.dirty = true
+        self.compile_error = null
+        self.physical_width = 0
+        self.physical_height = 0
+    }
+
+    internal func import_texture(name:str, descriptor:Resource.TextureDescriptor) Resource.ResourceHandle {
+        return self.add_resource(name, Resource.ResourceOrigin.imported, false, descriptor)
+    }
+
+    internal func create_texture(
+        name:str,
+        descriptor:Resource.TextureDescriptor,
+        transient:bool = true
+    ) Resource.ResourceHandle {
+        return self.add_resource(name, Resource.ResourceOrigin.created, transient, descriptor)
+    }
+
+    internal func add_pass(
+        name:str,
+        phase:Pass.PassPhase,
+        execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)
+    ) Pass.PassHandle {
+        if name.count() == 0 { panic("GFX.FrameGraph pass name cannot be empty") }
+        for current in self.passes {
+            if current.name == name { panic("GFX.FrameGraph pass is already installed: " + name) }
+        }
+        self.passes.append(Pass.Pass(name, phase, execute))
+        self.dirty = true
+        return Pass.PassHandle(self.passes.count() - 1)
+    }
+
+    internal func read(pass:Pass.PassHandle, resource:Resource.ResourceHandle) {
+        self.add_usage(pass, resource, Resource.ResourceAccess.read)
+    }
+
+    internal func write(pass:Pass.PassHandle, resource:Resource.ResourceHandle) {
+        self.add_usage(pass, resource, Resource.ResourceAccess.write)
+    }
+
+    internal func read_write(pass:Pass.PassHandle, resource:Resource.ResourceHandle) {
+        self.add_usage(pass, resource, Resource.ResourceAccess.read_write)
+    }
+
+    internal func depends(pass:Pass.PassHandle, dependency:Pass.PassHandle) {
+        self.require_pass(pass)
+        self.require_pass(dependency)
+        if pass.index == dependency.index { panic("GFX.FrameGraph pass cannot depend on itself") }
+        var dependencies = self.passes[pass.index].dependencies
+        for current in dependencies {
+            if current.index == dependency.index { return }
+        }
+        dependencies.append(dependency)
+        self.passes[pass.index].dependencies = dependencies
+        self.dirty = true
+    }
+
+    internal func compile() bool {
+        if !self.dirty { return self.compile_error == null }
+        self.compile_error = null
+        self.plan = []
+        self.aliases = []
+        var resource_index = 0
+        while resource_index < self.resources.count() {
+            self.resources[resource_index].first_pass = -1
+            self.resources[resource_index].last_pass = -1
+            self.resources[resource_index].alias_group = -1
+            resource_index++
+        }
+        var edges:Edge[] = []
+
+        for current in self.passes {
+            for dependency in current.dependencies {
+                add_edge(edges, dependency.index, self.pass_index(current.name))
+            }
+        }
+        self.add_phase_edges(edges)
+        if !self.add_resource_edges(edges) { return false }
+        if !self.sort(edges) { return false }
+        if !self.compile_lifetimes() { return false }
+        self.compile_aliases()
+        self.textures = []
+        self.physical_width = 0
+        self.physical_height = 0
+        self.dirty = false
+        return true
+    }
+
+    internal func require_compiled() {
+        if self.compile() { return }
+        if let message = self.compile_error { panic("GFX.FrameGraph " + message) }
+        panic("GFX.FrameGraph could not compile")
+    }
+
+    internal func prepare(device:@GPU.Device, viewport:Math.Vec2) {
+        self.require_compiled()
+        var width = viewport.x as int
+        var height = viewport.y as int
+        if width <= 0 { width = 1 }
+        if height <= 0 { height = 1 }
+        if self.physical_width == width && self.physical_height == height && self.textures.count() == self.aliases.count() {
+            return
+        }
+        self.textures = []
+        for alias in self.aliases {
+            var texture = device.texture(GPU.TextureSettings(
+                format:alias.format,
+                width:width,
+                height:height,
+                usage:alias.usage,
+                name:"GFX FrameGraph transient texture"
+            ))
+            self.textures.append(TextureSlot(texture))
+        }
+        self.physical_width = width
+        self.physical_height = height
+    }
+
+    internal func depth_target(resource:Resource.ResourceHandle) GPU.DepthTarget {
+        self.require_resource(resource)
+        let record = self.resources[resource.index]
+        if record.origin != Resource.ResourceOrigin.created || record.alias_group < 0 {
+            panic("GFX.FrameGraph depth target requires a created texture")
+        }
+        var texture = self.textures[record.alias_group]
+        return GPU.DepthTarget(
+            clear_depth:1.0,
+            depth_load:GPU.Load.clear,
+            depth_store:GPU.Store.preserve,
+            cycle:false,
+            native_texture:texture.native_handle(),
+            native_owner:texture.owner_handle()
+        )
+    }
+
+    internal func execute(
+        render_pass:@GPU.RenderPass,
+        cameras:@CameraFrame,
+        scene:@SceneFrame,
+        cache:&GPUCache,
+        stats:&Stats
+    ) {
+        self.require_compiled()
+        for pass_index in self.plan {
+            let current = self.passes[pass_index]
+            current.execute(render_pass, cameras, scene, cache, stats)
+            if current.phase == Pass.PassPhase.three_d { stats.record_3d_pass() }
+            if current.phase == Pass.PassPhase.post_process { stats.record_post_process_pass() }
+            if current.phase == Pass.PassPhase.two_d { stats.record_2d_pass() }
+        }
+    }
+
+    internal func pass_count() int { return self.passes.count() }
+    internal func resource_count() int { return self.resources.count() }
+    internal func transient_slot_count() int { return self.aliases.count() }
+    internal func plan_count() int { return self.plan.count() }
+    internal func plan_name(index:int) str { return self.passes[self.plan[index]].name }
+    internal func error_message() str {
+        if let message = self.compile_error { return message }
+        return ""
+    }
+
+    private func add_resource(
+        name:str,
+        origin:Resource.ResourceOrigin,
+        transient:bool,
+        descriptor:Resource.TextureDescriptor
+    ) Resource.ResourceHandle {
+        if name.count() == 0 { panic("GFX.FrameGraph resource name cannot be empty") }
+        var index = 0
+        while index < self.resources.count() {
+            if self.resources[index].name == name {
+                if self.resources[index].origin != origin {
+                    panic("GFX.FrameGraph resource has conflicting origins: " + name)
+                }
+                return Resource.ResourceHandle(index)
+            }
+            index++
+        }
+        self.resources.append(Resource.Resource(name, origin, transient, descriptor))
+        self.dirty = true
+        return Resource.ResourceHandle(self.resources.count() - 1)
+    }
+
+    private func add_usage(
+        pass:Pass.PassHandle,
+        resource:Resource.ResourceHandle,
+        access:Resource.ResourceAccess
+    ) {
+        self.require_pass(pass)
+        self.require_resource(resource)
+        var usages = self.passes[pass.index].usages
+        for current in usages {
+            if current.resource.index == resource.index {
+                panic("GFX.FrameGraph pass declares the same resource more than once")
+            }
+        }
+        usages.append(Resource.ResourceUsage(resource, access))
+        self.passes[pass.index].usages = usages
+        self.dirty = true
+    }
+
+    private func add_phase_edges(edges:&Edge[]) {
+        var first = 0
+        while first < self.passes.count() {
+            var second = 0
+            while second < self.passes.count() {
+                if self.passes[first].phase.raw_value < self.passes[second].phase.raw_value {
+                    add_edge(edges, first, second)
+                }
+                second++
+            }
+            first++
+        }
+    }
+
+    private func add_resource_edges(edges:&Edge[]) bool {
+        var resource_index = 0
+        while resource_index < self.resources.count() {
+            var writers:int[] = []
+            var readers:int[] = []
+            var pass_index = 0
+            while pass_index < self.passes.count() {
+                for usage in self.passes[pass_index].usages {
+                    if usage.resource.index == resource_index {
+                        if usage.access != Resource.ResourceAccess.read { writers.append(pass_index) }
+                        if usage.access != Resource.ResourceAccess.write { readers.append(pass_index) }
+                    }
+                }
+                pass_index++
+            }
+            if writers.count() == 0 && readers.count() == 0 {
+                if self.resources[resource_index].origin == Resource.ResourceOrigin.created {
+                    self.fail("created resource is declared but never used: " + self.resources[resource_index].name)
+                    return false
+                }
+                resource_index++
+                continue
+            }
+            if writers.count() == 0 && self.resources[resource_index].origin == Resource.ResourceOrigin.created {
+                self.fail("created resource is read before any pass writes it: " + self.resources[resource_index].name)
+                return false
+            }
+            for first_writer in writers {
+                for second_writer in writers {
+                    if self.pass_before(first_writer, second_writer) {
+                        add_edge(edges, first_writer, second_writer)
+                    }
+                }
+            }
+            var resource_valid = true
+            for reader in readers {
+                var selected = -1
+                for writer in writers {
+                    if writer != reader && self.pass_before(writer, reader) {
+                        if selected < 0 || self.pass_before(selected, writer) { selected = writer }
+                    }
+                }
+                if selected < 0 && self.resources[resource_index].origin == Resource.ResourceOrigin.created {
+                    if writers.count() == 1 { selected = writers[0] }
+                    else {
+                        self.fail("created resource has an ambiguous read before write: " + self.resources[resource_index].name)
+                        resource_valid = false
+                    }
+                }
+                if resource_valid && selected >= 0 && selected != reader { add_edge(edges, selected, reader) }
+            }
+            if !resource_valid { return false }
+            resource_index++
+        }
+        return true
+    }
+
+    private func sort(edges:Edge[]) bool {
+        var indegrees:int[] = []
+        var consumed:bool[] = []
+        for current in self.passes {
+            indegrees.append(0)
+            consumed.append(false)
+        }
+        for edge in edges { indegrees[edge.to]++ }
+        while self.plan.count() < self.passes.count() {
+            var found = -1
+            var index = 0
+            while index < self.passes.count() {
+                if !consumed[index] && indegrees[index] == 0 {
+                    found = index
+                    break
+                }
+                index++
+            }
+            if found < 0 {
+                self.fail("pass dependencies contain a cycle")
+                return false
+            }
+            consumed[found] = true
+            self.plan.append(found)
+            for edge in edges {
+                if edge.from == found { indegrees[edge.to]-- }
+            }
+        }
+        return true
+    }
+
+    private func compile_lifetimes() bool {
+        var execution_index = 0
+        while execution_index < self.plan.count() {
+            let current = self.passes[self.plan[execution_index]]
+            for usage in current.usages {
+                let resource_index = usage.resource.index
+                if self.resources[resource_index].first_pass < 0 {
+                    self.resources[resource_index].first_pass = execution_index
+                }
+                self.resources[resource_index].last_pass = execution_index
+            }
+            execution_index++
+        }
+        return true
+    }
+
+    private func compile_aliases() {
+        var resource_index = 0
+        while resource_index < self.resources.count() {
+            let resource = self.resources[resource_index]
+            if resource.origin == Resource.ResourceOrigin.created && resource.transient {
+                let flags = texture_usage_flags(resource.texture.usage)
+                var selected = -1
+                var alias_index = 0
+                while alias_index < self.aliases.count() {
+                    let alias = self.aliases[alias_index]
+                    if alias.last_pass < resource.first_pass && alias.format == resource.texture.format && alias.usage_flags == flags {
+                        selected = alias_index
+                        break
+                    }
+                    alias_index++
+                }
+                if selected < 0 {
+                    self.aliases.append(AliasGroup(
+                        resource.texture.format,
+                        resource.texture.usage,
+                        flags,
+                        resource.last_pass
+                    ))
+                    selected = self.aliases.count() - 1
+                } else {
+                    self.aliases[selected].last_pass = resource.last_pass
+                }
+                self.resources[resource_index].alias_group = selected
+            }
+            resource_index++
+        }
+    }
+
+    private func fail(message:str) {
+        self.compile_error = message
+        self.dirty = false
+    }
+
+    private func require_pass(handle:Pass.PassHandle) {
+        if !handle.is_valid() || handle.index >= self.passes.count() {
+            panic("GFX.FrameGraph received an invalid pass handle")
+        }
+    }
+
+    private func require_resource(handle:Resource.ResourceHandle) {
+        if !handle.is_valid() || handle.index >= self.resources.count() {
+            panic("GFX.FrameGraph received an invalid resource handle")
+        }
+    }
+
+    private func pass_index(name:str) int {
+        var index = 0
+        while index < self.passes.count() {
+            if self.passes[index].name == name { return index }
+            index++
+        }
+        return -1
+    }
+
+    private func pass_before(first:int, second:int) bool {
+        let first_phase = self.passes[first].phase.raw_value
+        let second_phase = self.passes[second].phase.raw_value
+        if first_phase != second_phase { return first_phase < second_phase }
+        return first < second
+    }
+}
+
+internal func add_edge(edges:&Edge[], from:int, to:int) {
+    if from == to { return }
+    for edge in edges {
+        if edge.from == from && edge.to == to { return }
+    }
+    edges.append(Edge(from:from, to:to))
+}

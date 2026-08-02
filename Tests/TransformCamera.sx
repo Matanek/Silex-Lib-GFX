@@ -1,0 +1,34 @@
+use STD.Math
+use GFX.Camera
+use GFX.Transform
+
+test "derive 2D and 3D camera matrices from transforms" {
+    let transform_2d = Transform.Transform2D(
+        Math.Vec2(10.0, 20.0),
+        0.0,
+        Math.Vec2.one()
+    )
+    let camera_2d = Camera.Camera2D(true, 2.0)
+    let center = camera_2d.view(transform_2d).multiply(
+        Math.Vec4(10.0, 20.0, 0.0, 1.0)
+    )
+    assert(center.nearly_equal(Math.Vec4(0.0, 0.0, 0.0, 1.0), 0.0001))
+    let projection_2d = camera_2d.projection(Math.Vec2(800.0, 600.0))
+    assert(projection_2d.x.x > 0.0)
+    assert(projection_2d.y.y < 0.0)
+
+    let transform_3d = Transform.Transform3D(
+        Math.Vec3(0.0, 1.0, 5.0),
+        Math.Quat.identity(),
+        Math.Vec3.one()
+    )
+    let camera_3d = Camera.Camera3D()
+    assert(transform_3d.forward().nearly_equal(Math.Vec3.front()))
+    let origin = camera_3d.view(transform_3d).multiply(
+        Math.Vec4(0.0, 1.0, 5.0, 1.0)
+    )
+    assert(origin.nearly_equal(Math.Vec4(0.0, 0.0, 0.0, 1.0), 0.0001))
+    let projection_3d = camera_3d.projection(16.0 / 9.0)
+    assert(projection_3d.x.x > 0.0)
+    assert(projection_3d.y.y > 0.0)
+}

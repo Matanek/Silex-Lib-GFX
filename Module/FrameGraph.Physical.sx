@@ -1,0 +1,30 @@
+use GFX.GPU
+
+internal class TextureSlot {
+    private var resource:GPU.Texture? = null
+    private var handle:uint = 0
+    private var owner:uint = 0
+
+    internal init(resource:GPU.Texture) {
+        self.handle = resource.native_handle()
+        self.owner = resource.owner_handle()
+        self.resource = resource
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.owner }
+}
+
+internal struct AliasGroup {
+    internal let format:GPU.TextureFormat
+    internal let usage:GPU.TextureUsage
+    internal let usage_flags:uint32
+    internal var last_pass:int
+
+    internal init(format:GPU.TextureFormat, usage:GPU.TextureUsage, usage_flags:uint32, last_pass:int) {
+        self.format = format
+        self.usage = usage
+        self.usage_flags = usage_flags
+        self.last_pass = last_pass
+    }
+}

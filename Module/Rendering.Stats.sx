@@ -1,0 +1,62 @@
+public struct Stats {
+    private var rendered_frames:int = 0
+    private var three_d_passes:int = 0
+    private var post_process_passes:int = 0
+    private var two_d_passes:int = 0
+    private var two_d_cameras:int = 0
+    private var three_d_cameras:int = 0
+    private var mesh_draws:int = 0
+    private var sprite_2d_draws:int = 0
+    private var sprite_3d_draws:int = 0
+    private var asset_uploads:int = 0
+    private var graph_passes:int = 0
+    private var graph_resources:int = 0
+    private var graph_transient_slots:int = 0
+
+    public func frames() int { return self.rendered_frames }
+    public func passes() int {
+        return self.three_d_passes + self.post_process_passes + self.two_d_passes
+    }
+    public func passes_3d() int { return self.three_d_passes }
+    public func post_process_passes() int { return self.post_process_passes }
+    public func passes_2d() int { return self.two_d_passes }
+    public func cameras_2d() int { return self.two_d_cameras }
+    public func cameras_3d() int { return self.three_d_cameras }
+    public func meshes_3d() int { return self.mesh_draws }
+    public func sprites_2d() int { return self.sprite_2d_draws }
+    public func sprites_3d() int { return self.sprite_3d_draws }
+    public func gpu_uploads() int { return self.asset_uploads }
+    public func frame_graph_passes() int { return self.graph_passes }
+    public func frame_graph_resources() int { return self.graph_resources }
+    public func frame_graph_transient_slots() int { return self.graph_transient_slots }
+
+    internal func begin_frame() {
+        self.three_d_passes = 0
+        self.post_process_passes = 0
+        self.two_d_passes = 0
+        self.asset_uploads = 0
+    }
+
+    internal func finish_frame() {
+        self.rendered_frames++
+    }
+
+    internal func record_3d_pass() { self.three_d_passes++ }
+    internal func record_post_process_pass() { self.post_process_passes++ }
+    internal func record_2d_pass() { self.two_d_passes++ }
+    internal func record_cameras(two_d:int, three_d:int) {
+        self.two_d_cameras = two_d
+        self.three_d_cameras = three_d
+    }
+    internal func record_scene(meshes:int, sprites_2d:int, sprites_3d:int) {
+        self.mesh_draws = meshes
+        self.sprite_2d_draws = sprites_2d
+        self.sprite_3d_draws = sprites_3d
+    }
+    internal func record_upload() { self.asset_uploads++ }
+    internal func record_frame_graph(passes:int, resources:int, transient_slots:int) {
+        self.graph_passes = passes
+        self.graph_resources = resources
+        self.graph_transient_slots = transient_slots
+    }
+}

@@ -4,10 +4,6 @@ use GFX.Bootstrap.Schedule
 use GFX.Input
 use GFX.Input.State as InputState
 
-class ManagedInput {
-    internal var input:Input
-}
-
 public struct InputPlugin:Plugin {
 
     func id() str { return "GFX.Plugins.InputPlugin" }
@@ -24,17 +20,17 @@ func start_input(application:Application) {
     var input = Input()
     var state = input.state()
     resources.insert(state)
-    resources.insert(ManagedInput(input:input))
+    resources.insert(input)
 }
 
-func update_input(managed:&ManagedInput) {
-    managed.input.update()
+func update_input(input:&Input, state:&InputState) {
+    input.update_state(state)
 }
 
 func stop_input(application:Application) {
     var resources = application.resources()
     var removed_state = resources.remove<InputState>()
     assert(removed_state != null)
-    var removed_input = resources.remove<ManagedInput>()
+    var removed_input = resources.remove<Input>()
     assert(removed_input != null)
 }

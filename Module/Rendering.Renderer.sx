@@ -1,0 +1,116 @@
+use GFX.Color
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.GPU
+use GFX.GPU.Commands
+use GFX.FrameGraph.Graph.Graph as FrameGraph
+use GFX.FrameGraph.Pass.PassPhase as PassPhase
+use GFX.FrameGraph.Resource.ResourceHandle as ResourceHandle
+use GFX.FrameGraph.Resource.TextureDescriptor as TextureDescriptor
+use GFX.Rendering.Stats
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Scene.Frame.Frame as SceneFrame
+use STD.Math
+
+public class Renderer {
+    private let clear:Color
+    private var frame_graph:FrameGraph
+    private let surface_color:ResourceHandle
+    private var shared_depth:ResourceHandle
+    private var current_stats:Stats
+    private var current_cameras:CameraFrame
+    private var current_scene:SceneFrame
+    private var gpu_cache:GPUCache
+    private var viewport:Math.Vec2
+
+    internal init(clear:Color) {
+        var graph = FrameGraph()
+        self.clear = clear
+        self.surface_color = graph.import_texture(
+            "GFX.SurfaceColor",
+            TextureDescriptor(GPU.TextureFormat.invalid, GPU.TextureUsage.as_color_target())
+        )
+        self.shared_depth = ResourceHandle()
+        self.frame_graph = graph
+        self.current_stats = Stats()
+        self.current_cameras = CameraFrame()
+        self.current_scene = SceneFrame()
+        self.gpu_cache = GPUCache()
+        self.viewport = Math.Vec2(1.0)
+    }
+
+    public func stats() Stats {
+        return self.current_stats
+    }
+
+    internal func add_3d_pass(name:str, execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)) {
+        var graph = self.frame_graph
+        if !self.shared_depth.is_valid() {
+            self.shared_depth = graph.create_texture(
+                "GFX.SharedDepth",
+                TextureDescriptor(GPU.TextureFormat.depth16, GPU.TextureUsage.as_depth_target())
+            )
+        }
+        let pass = graph.add_pass(name, PassPhase.three_d, execute)
+        graph.read_write(pass, self.surface_color)
+        graph.write(pass, self.shared_depth)
+    }
+
+    internal func add_post_process_pass(name:str, execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)) {
+        var graph = self.frame_graph
+        let pass = graph.add_pass(name, PassPhase.post_process, execute)
+        graph.read_write(pass, self.surface_color)
+        if self.shared_depth.is_valid() { graph.read(pass, self.shared_depth) }
+    }
+
+    internal func add_2d_pass(name:str, execute:func(@GPU.RenderPass, @CameraFrame, @SceneFrame, &GPUCache, &Stats)) {
+        var graph = self.frame_graph
+        let pass = graph.add_pass(name, PassPhase.two_d, execute)
+        graph.read_write(pass, self.surface_color)
+    }
+
+    internal func set_frame(cameras:CameraFrame, scene:SceneFrame, viewport:Math.Vec2) {
+        self.current_cameras = cameras
+        self.current_scene = scene
+        self.viewport = viewport
+    }
+
+    internal func render(device:@GPU.Device, surface:@GPU.Surface) {
+        var stats = self.current_stats
+        let cameras = self.current_cameras
+        let scene = self.current_scene
+        let viewport = self.viewport
+        var cache = self.gpu_cache
+        var graph = self.frame_graph
+        stats.begin_frame()
+        stats.record_cameras(
+            cameras.count_2d(),
+            cameras.count_3d()
+        )
+        stats.record_scene(
+            scene.mesh_count(),
+            scene.sprite_2d_count(),
+            scene.sprite_3d_count()
+        )
+        graph.prepare(device, viewport)
+        cache.prepare(device, surface.format(), scene, stats)
+        stats.record_frame_graph(
+            graph.pass_count(),
+            graph.resource_count(),
+            graph.transient_slot_count()
+        )
+        var commands = device.commands()
+        var depth:GPU.DepthTarget? = null
+        if self.shared_depth.is_valid() { depth = graph.depth_target(self.shared_depth) }
+        if var pass = commands.render(surface, self.clear_color(), depth) {
+            graph.execute(pass, cameras, scene, cache, stats)
+            pass.finish()
+        }
+        commands.submit()
+        stats.finish_frame()
+        self.current_stats = stats
+    }
+
+    private func clear_color() Color {
+        return self.clear
+    }
+}

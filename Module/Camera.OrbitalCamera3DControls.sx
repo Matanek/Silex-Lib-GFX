@@ -1,0 +1,20 @@
+use GFX.Input
+
+public struct OrbitalCamera3DControls {
+    var orbit:Input.MouseButton
+    var pan:Input.MouseButton
+    var zoom_in:Input.Key
+    var zoom_out:Input.Key
+
+    public init(
+        orbit:Input.MouseButton = Input.MouseButton.right,
+        pan:Input.MouseButton = Input.MouseButton.middle,
+        zoom_in:Input.Key = Input.Key.page_up,
+        zoom_out:Input.Key = Input.Key.page_down
+    ) {
+        self.orbit = orbit
+        self.pan = pan
+        self.zoom_in = zoom_in
+        self.zoom_out = zoom_out
+    }
+}

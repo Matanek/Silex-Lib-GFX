@@ -1,0 +1,89 @@
+use GFX.ECS.Entity.Entity
+use GFX.ECS.EntityRecipe.EntityRecipe
+use GFX.ECS.Record.Record
+
+public class World {
+    private var records:Record[]
+
+    public init() {
+        self.records = []
+    }
+
+    public func spawn(recipe:EntityRecipe) Entity {
+        var records = self.records
+        let index = records.count()
+        records.append(Record(1, recipe.take_components()))
+        self.records = records
+        return Entity(index, 1)
+    }
+
+    public func destroy(entity:Entity) {
+        var record = self.require(entity)
+        record.destroy()
+    }
+
+    public func is_alive(entity:Entity) bool {
+        if !entity.is_valid() || entity.index >= self.records.count() {
+            return false
+        }
+        var record = self.records[entity.index]
+        return record.is_alive() && record.generation() == entity.generation
+    }
+
+    public func entities() Entity[] {
+        var entities:Entity[] = []
+        var index = 0
+        while index < self.records.count() {
+            var record = self.records[index]
+            if record.is_alive() {
+                entities.append(Entity(index, record.generation()))
+            }
+            index++
+        }
+        return entities
+    }
+
+    public func insert<T>(entity:Entity, component:T) {
+        var record = self.require(entity)
+        record.insert(component)
+    }
+
+    public func has<T>(entity:Entity) bool {
+        if !self.is_alive(entity) { return false }
+        var record = self.records[entity.index]
+        return record.has<T>()
+    }
+
+    public func get<T>(entity:Entity) @T {
+        self.require(entity)
+        return self.records[entity.index].get<T>()
+    }
+
+    public func update<T>(entity:Entity, callback:func(&T)) {
+        var record = self.require(entity)
+        record.update<T>(callback)
+    }
+
+    public func remove<T>(entity:Entity) T? {
+        var record = self.require(entity)
+        return record.remove<T>()
+    }
+
+    public func clear() {
+        for record in self.records {
+            record.destroy()
+        }
+        self.records = []
+    }
+
+    drop {
+        self.clear()
+    }
+
+    private func require(entity:Entity) Record {
+        if !self.is_alive(entity) {
+            panic("GFX.ECS entity is not alive")
+        }
+        return self.records[entity.index]
+    }
+}

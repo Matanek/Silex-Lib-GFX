@@ -1,0 +1,44 @@
+use GFX.Color
+use STD.Math
+
+public struct Image {
+    private let image_width:int
+    private let image_height:int
+    private let image_pixels:uint8[]
+
+    internal init() {
+        self.image_width = 1
+        self.image_height = 1
+        self.image_pixels = [255, 255, 255, 255]
+    }
+
+    public init(width:int, height:int, rgba:uint8[]) {
+        if width <= 0 || height <= 0 {
+            panic("GFX.Assets image dimensions must be positive")
+        }
+        if rgba.count() != width * height * 4 {
+            panic("GFX.Assets image requires one RGBA8 texel per pixel")
+        }
+        self.image_width = width
+        self.image_height = height
+        self.image_pixels = rgba
+    }
+
+    public static func solid(color:Color = Color.white()) Image {
+        let rgba:uint8[] = [
+            channel(color.r),
+            channel(color.g),
+            channel(color.b),
+            channel(color.a)
+        ]
+        return Image(1, 1, rgba)
+    }
+
+    public func width() int { return self.image_width }
+    public func height() int { return self.image_height }
+    public func pixels() uint8[] { return self.image_pixels }
+}
+
+internal func channel(value:float) uint8 {
+    return (Math.clamp(value, 0.0, 1.0) * 255.0) as uint8
+}

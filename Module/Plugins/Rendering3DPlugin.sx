@@ -1,0 +1,38 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.GPU
+use GFX.Rendering
+use GFX.Rendering.GPUCache.GPUCache as GPUCache
+use GFX.Rendering.Stats as Stats
+use GFX.Scene.Frame.Frame as SceneFrame
+use GFX.Plugins.RenderingPlugin
+use GFX.Plugins.Mesh3DPlugin
+use GFX.Plugins.Sprite3DPlugin
+
+public struct Rendering3DPlugin:Plugin {
+    func id() str { return "GFX.Plugins.Rendering3DPlugin" }
+
+    func build(application:Application) {
+        application.install(RenderingPlugin())
+        application.install(Mesh3DPlugin())
+        application.install(Sprite3DPlugin())
+        var resources = application.resources()
+        var renderer = resources.get_mut<Rendering.Renderer>()
+        renderer.add_3d_pass("GFX.Rendering3D.Scene", render_scene_3d)
+        renderer.add_post_process_pass(
+            "GFX.Rendering3D.Presentation",
+            present_scene_3d
+        )
+    }
+}
+
+func render_scene_3d(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame, cache:&GPUCache, stats:&Stats) {
+    cache.render_meshes(pass, cameras, scene)
+    cache.render_sprites_3d(pass, cameras, scene)
+}
+
+func present_scene_3d(pass:@GPU.RenderPass, cameras:@CameraFrame, scene:@SceneFrame, cache:&GPUCache, stats:&Stats) {
+    let viewport = pass.size()
+    let camera_count = cameras.count_3d()
+}
+use GFX.Camera.Frame.Frame as CameraFrame

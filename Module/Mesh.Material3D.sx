@@ -1,0 +1,11 @@
+use GFX.Material.Simple as SimpleMaterial
+
+public struct Material3D {
+    var material:SimpleMaterial
+
+    public init(material:SimpleMaterial = SimpleMaterial()) {
+        self.material = material
+    }
+
+    internal func value() SimpleMaterial { return self.material }
+}

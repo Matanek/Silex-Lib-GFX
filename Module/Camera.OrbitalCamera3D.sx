@@ -1,0 +1,191 @@
+use GFX.Camera.Camera3D
+use GFX.Camera.OrbitalCamera3DControls
+use GFX.Camera.OrbitalCamera3DSettings
+use GFX.ECS
+use GFX.Transform.Transform3D
+use STD.Math
+use STD.Math.Quat
+use STD.Time.Clock
+
+public class OrbitalCamera3D {
+    private let settings:OrbitalCamera3DSettings
+    private let controls:OrbitalCamera3DControls
+    private var camera:ECS.Entity
+    private var current_target:Math.Vec3
+    private var desired_target:Math.Vec3
+    private var current_distance:float
+    private var desired_distance:float
+    private var current_yaw:float
+    private var desired_yaw:float
+    private var current_pitch:float
+    private var desired_pitch:float
+    private var clock:Clock
+
+    internal init(settings:OrbitalCamera3DSettings) {
+        validate(settings)
+        self.settings = settings
+        var controls = OrbitalCamera3DControls()
+        if let configured = settings.controls { controls = configured }
+        self.controls = controls
+        self.camera = ECS.Entity()
+        self.current_target = settings.target
+        self.desired_target = settings.target
+        self.current_distance = settings.distance
+        self.desired_distance = settings.distance
+        self.current_yaw = settings.yaw
+        self.desired_yaw = settings.yaw
+        self.current_pitch = settings.pitch
+        self.desired_pitch = settings.pitch
+        self.clock = Clock()
+    }
+
+    public func entity() ECS.Entity { return self.camera }
+    public func target() Math.Vec3 { return self.desired_target }
+    public func distance() float { return self.desired_distance }
+    internal func controls() OrbitalCamera3DControls { return self.controls }
+
+    public func set_target(target:Math.Vec3) {
+        self.current_target = target
+        self.desired_target = target
+    }
+
+    public func set_distance(distance:float) {
+        let clamped = Math.clamp(
+            distance,
+            self.settings.min_distance,
+            self.settings.max_distance
+        )
+        self.current_distance = clamped
+        self.desired_distance = clamped
+    }
+
+    internal func attach(entity:ECS.Entity) { self.camera = entity }
+
+    internal func camera_component() Camera3D {
+        return Camera3D(
+            self.settings.active,
+            self.settings.vertical_fov_radians,
+            self.settings.near_plane,
+            self.settings.far_plane,
+            self.settings.order
+        )
+    }
+
+    internal func zoom_wheel(delta:float) {
+        if !self.settings.active { return }
+        self.desired_distance = self.desired_distance - delta * self.settings.scroll_zoom_speed
+        self.desired_distance = Math.clamp(
+            self.desired_distance,
+            self.settings.min_distance,
+            self.settings.max_distance
+        )
+    }
+
+    internal func orbit(mouse_x:float, mouse_y:float) {
+        if !self.settings.active { return }
+        self.desired_yaw = self.desired_yaw - mouse_x * self.settings.orbit_sensitivity
+        self.desired_pitch = Math.clamp(
+            self.desired_pitch - mouse_y * self.settings.orbit_sensitivity,
+            self.settings.min_pitch,
+            self.settings.max_pitch
+        )
+    }
+
+    internal func pan(mouse_x:float, mouse_y:float) {
+        if !self.settings.active { return }
+        let rotation = self.rotation()
+        let right = rotation.rotate(Math.Vec3.right())
+        let up = rotation.rotate(Math.Vec3.up())
+        let scale = self.desired_distance * self.settings.pan_sensitivity
+        self.desired_target = self.desired_target
+            .subtract(right.multiply(mouse_x * scale))
+            .add(up.multiply(mouse_y * scale))
+    }
+
+    internal func advance(zooming_in:bool, zooming_out:bool) {
+        if !self.settings.active { return }
+        var clock = self.clock
+        let dt = Math.clamp(clock.tick(), 0.0, self.settings.max_delta_time)
+        self.clock = clock
+        if zooming_out {
+            self.desired_distance = self.desired_distance + self.settings.zoom_speed * dt
+        }
+        if zooming_in {
+            self.desired_distance = self.desired_distance - self.settings.zoom_speed * dt
+        }
+        self.desired_distance = Math.clamp(
+            self.desired_distance,
+            self.settings.min_distance,
+            self.settings.max_distance
+        )
+        self.desired_pitch = Math.clamp(
+            self.desired_pitch,
+            self.settings.min_pitch,
+            self.settings.max_pitch
+        )
+
+        self.current_target = self.current_target.lerp(
+            self.desired_target,
+            smoothing_factor(self.settings.pan_response, dt)
+        )
+        self.current_distance = Math.lerp(
+            self.current_distance,
+            self.desired_distance,
+            smoothing_factor(self.settings.zoom_response, dt)
+        )
+        self.current_yaw = Math.lerp(
+            self.current_yaw,
+            self.desired_yaw,
+            smoothing_factor(self.settings.orbit_response, dt)
+        )
+        self.current_pitch = Math.lerp(
+            self.current_pitch,
+            self.desired_pitch,
+            smoothing_factor(self.settings.orbit_response, dt)
+        )
+    }
+
+    private func rotation() Math.Quat {
+        return Math.Quat.angle_axis(self.current_yaw, Math.Vec3.up()).multiply(
+            Math.Quat.angle_axis(self.current_pitch, Math.Vec3.right())
+        )
+    }
+
+    internal func transform() Transform3D {
+        let rotation = self.rotation()
+        let position = self.current_target.subtract(
+            rotation.rotate(Math.Vec3.front()).multiply(self.current_distance)
+        )
+        return Transform3D(position, rotation)
+    }
+}
+
+func smoothing_factor(response:float, dt:float) float {
+    if response <= 0.0 || dt <= 0.0 { return 0.0 }
+    let scaled = response * dt
+    var power = 1.0 + scaled / 256.0
+    var iteration = 0
+    while iteration < 8 {
+        power *= power
+        iteration++
+    }
+    return 1.0 - 1.0 / power
+}
+
+func validate(settings:OrbitalCamera3DSettings) {
+    if settings.min_distance <= 0.0 || settings.max_distance < settings.min_distance {
+        panic("GFX.OrbitalCamera3D requires a positive ordered distance range")
+    }
+    if settings.distance < settings.min_distance || settings.distance > settings.max_distance {
+        panic("GFX.OrbitalCamera3D initial distance is outside its range")
+    }
+    if settings.max_pitch < settings.min_pitch {
+        panic("GFX.OrbitalCamera3D requires an ordered pitch range")
+    }
+    if settings.near_plane <= 0.0 || settings.far_plane <= settings.near_plane {
+        panic("GFX.OrbitalCamera3D requires valid near and far planes")
+    }
+    if settings.max_delta_time <= 0.0 {
+        panic("GFX.OrbitalCamera3D requires a positive maximum delta time")
+    }
+}

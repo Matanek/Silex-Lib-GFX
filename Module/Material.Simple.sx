@@ -1,0 +1,9 @@
+use GFX.Color
+
+public struct Simple {
+    var color:Color
+
+    public init(color:Color = Color.white()) {
+        self.color = color
+    }
+}

@@ -4,6 +4,7 @@ use GFX.Bootstrap.Schedule
 use Interop.C
 use Interop.Boundary
 use GFX.GPU
+use GFX.GPU.Commands
 use GFX.Color
 use GFX.Plugins.WindowPlugin
 use GFX.Window

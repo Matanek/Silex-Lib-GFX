@@ -1,0 +1,148 @@
+use GFX.Assets
+use GFX.Color
+use GFX.ECS
+use GFX.Geometry
+use GFX.Material
+use GFX.Mesh
+use GFX.Sprite
+use GFX.Transform
+use STD.Math
+
+internal struct MeshDraw {
+    internal let entity:ECS.Entity
+    internal let model:Math.Mat4
+    internal let handle:Assets.MeshHandle
+    internal let revision:int
+    internal let geometry:Geometry.Mesh
+    internal let material:Material.Simple
+}
+
+internal struct Sprite2DDraw {
+    internal let entity:ECS.Entity
+    internal let model:Math.Mat4
+    internal let handle:Assets.ImageHandle
+    internal let revision:int
+    internal let image:Assets.Image
+    internal let size:Math.Vec2
+    internal let pivot:Math.Vec2
+    internal let color:Color
+    internal let layer:int
+    internal let depth:float
+    internal let insertion_order:int
+}
+
+internal struct Sprite3DDraw {
+    internal let entity:ECS.Entity
+    internal let model:Math.Mat4
+    internal let handle:Assets.ImageHandle
+    internal let revision:int
+    internal let image:Assets.Image
+    internal let size:Math.Vec2
+    internal let pivot:Math.Vec2
+    internal let color:Color
+    internal let billboard:int
+}
+
+internal struct Frame {
+    private var meshes:MeshDraw[]
+    private var sprites_2d:Sprite2DDraw[]
+    private var sprites_3d:Sprite3DDraw[]
+
+    internal init() {
+        self.meshes = []
+        self.sprites_2d = []
+        self.sprites_3d = []
+    }
+
+    internal func mesh_draws() MeshDraw[] { return self.meshes }
+    internal func sprite_2d_draws() Sprite2DDraw[] { return self.sprites_2d }
+    internal func sprite_3d_draws() Sprite3DDraw[] { return self.sprites_3d }
+    internal func mesh_count() int { return self.meshes.count() }
+    internal func sprite_2d_count() int { return self.sprites_2d.count() }
+    internal func sprite_3d_count() int { return self.sprites_3d.count() }
+    internal func first_sprite_2d_layer() int? {
+        if self.sprites_2d.count() == 0 { return null }
+        return self.sprites_2d[0].layer
+    }
+
+    internal func append_mesh(draw:MeshDraw) { self.meshes.append(draw) }
+    internal func append_sprite_3d(draw:Sprite3DDraw) { self.sprites_3d.append(draw) }
+    internal func append_sprite_2d(draw:Sprite2DDraw) {
+        self.sprites_2d.append(draw)
+        var index = self.sprites_2d.count() - 1
+        while index > 0 && sprite_before(self.sprites_2d[index], self.sprites_2d[index - 1]) {
+            self.sprites_2d.swap(index, index - 1)
+            index--
+        }
+    }
+}
+
+internal func from_world(world:@ECS.World, meshes:@Assets.Meshes, images:@Assets.Images) Frame {
+    var frame = Frame()
+    let entities = world.entities()
+    var insertion_order = 0
+    for entity in entities {
+        if world.has<Transform.Transform3D>(entity) && world.has<Mesh.Mesh3D>(entity) && world.has<Mesh.Material3D>(entity) {
+            let transform:@Transform.Transform3D = world.get<Transform.Transform3D>(entity)
+            let component:@Mesh.Mesh3D = world.get<Mesh.Mesh3D>(entity)
+            let material:@Mesh.Material3D = world.get<Mesh.Material3D>(entity)
+            let handle = component.asset()
+            if component.is_visible() && meshes.contains(handle) {
+                frame.append_mesh(MeshDraw(
+                    entity:entity,
+                    model:transform.matrix(),
+                    handle:handle,
+                    revision:meshes.revision(handle),
+                    geometry:meshes.snapshot(handle),
+                    material:material.value()
+                ))
+            }
+        }
+        if world.has<Transform.Transform2D>(entity) && world.has<Sprite.Sprite2D>(entity) {
+            let transform:@Transform.Transform2D = world.get<Transform.Transform2D>(entity)
+            let sprite:@Sprite.Sprite2D = world.get<Sprite.Sprite2D>(entity)
+            let handle = sprite.asset()
+            if sprite.is_visible() && images.contains(handle) {
+                frame.append_sprite_2d(Sprite2DDraw(
+                    entity:entity,
+                    model:transform.matrix(),
+                    handle:handle,
+                    revision:images.revision(handle),
+                    image:images.snapshot(handle),
+                    size:sprite.sprite_size(),
+                    pivot:sprite.sprite_pivot(),
+                    color:sprite.tint(),
+                    layer:sprite.render_layer(),
+                    depth:sprite.render_depth(),
+                    insertion_order:insertion_order
+                ))
+                insertion_order++
+            }
+        }
+        if world.has<Transform.Transform3D>(entity) && world.has<Sprite.Sprite3D>(entity) {
+            let transform:@Transform.Transform3D = world.get<Transform.Transform3D>(entity)
+            let sprite:@Sprite.Sprite3D = world.get<Sprite.Sprite3D>(entity)
+            let handle = sprite.asset()
+            if sprite.is_visible() && images.contains(handle) {
+                frame.append_sprite_3d(Sprite3DDraw(
+                    entity:entity,
+                    model:transform.matrix(),
+                    handle:handle,
+                    revision:images.revision(handle),
+                    image:images.snapshot(handle),
+                    size:sprite.sprite_size(),
+                    pivot:sprite.sprite_pivot(),
+                    color:sprite.tint(),
+                    billboard:sprite.billboard_mode()
+                ))
+            }
+        }
+    }
+    return frame
+}
+
+internal func sprite_before(a:Sprite2DDraw, b:Sprite2DDraw) bool {
+    if a.layer != b.layer { return a.layer < b.layer }
+    if a.depth != b.depth { return a.depth < b.depth }
+    return a.insertion_order < b.insertion_order
+}

@@ -1,0 +1,81 @@
+use Interop.Boundary
+use Interop.C
+use GFX.Camera.OrbitalCamera3D
+use GFX.Camera.OrbitalCamera3DSettings
+use GFX.Input
+use STD.Math
+use STD.Math.Quat
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+let sdl_delay = C.function<func(uint32) void>(
+    library:Boundary.SDL3,
+    name:"SDL_Delay"
+)
+
+func push_mouse_wheel(y:float32) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let kind = C.store<uint32>(address, 0 as uint, 0x403 as uint32)
+    let delta_x = C.store<float32>(address, 24 as uint, 0.0)
+    let delta_y = C.store<float32>(address, 28 as uint, y)
+    let mouse_x = C.store<float32>(address, 36 as uint, 0.0)
+    let mouse_y = C.store<float32>(address, 40 as uint, 0.0)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+test "derive an orbital camera pose from a target and distance" {
+    let settings = OrbitalCamera3DSettings(
+        target:Math.Vec3(0.0, 0.55, 0.0),
+        distance:5.0,
+        pitch:Math.radians(-18.0),
+        vertical_fov_radians:Math.radians(42.0),
+        near_plane:0.05,
+        far_plane:80.0
+    )
+    var orbital = OrbitalCamera3D(settings)
+    let transform = orbital.transform()
+    let expected_rotation = Math.Quat.angle_axis(
+        Math.radians(-18.0),
+        Math.Vec3.right()
+    )
+    let expected_position = settings.target.subtract(
+        expected_rotation.rotate(Math.Vec3.front()).multiply(settings.distance)
+    )
+    assert(transform.position.nearly_equal(expected_position, 0.0001))
+    assert(transform.forward().nearly_equal(
+        settings.target.subtract(transform.position).normalized(),
+        0.0001
+    ))
+}
+
+test "zoom an orbital camera from the mouse wheel" {
+    var input = Input()
+    input.update()
+    push_mouse_wheel(1.0)
+    input.update()
+    assert(input.mouse_wheel().y == 1.0)
+
+    var orbital = OrbitalCamera3D(OrbitalCamera3DSettings(
+        distance:5.0,
+        min_distance:2.0,
+        max_distance:12.0,
+        scroll_zoom_speed:0.9
+    ))
+    assert(orbital.camera_component().is_active())
+    orbital.set_distance(4.5)
+    assert(orbital.distance() == 4.5)
+    var state = input.state()
+    assert(state.mouse_wheel().y == 1.0)
+    orbital.zoom_wheel(state.mouse_wheel().y)
+    assert(Math.nearly_equal(orbital.distance(), 3.6, 0.0001))
+
+    let before = orbital.transform()
+    orbital.advance(false, false)
+    sdl_delay(20)
+    orbital.advance(false, false)
+    let after = orbital.transform()
+    assert(!after.position.nearly_equal(before.position, 0.0001))
+}

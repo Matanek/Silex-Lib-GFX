@@ -1,0 +1,111 @@
+use STD.Math
+use GFX.Camera.Camera2D as Camera2D
+use GFX.Camera.Camera3D as Camera3D
+use GFX.ECS
+use GFX.Transform.Transform2D as Transform2D
+use GFX.Transform.Transform3D as Transform3D
+
+internal struct View2D {
+    internal let entity:ECS.Entity
+    internal let order:int
+    internal let view:Math.Mat4
+    internal let projection:Math.Mat4
+}
+
+internal struct View3D {
+    internal let entity:ECS.Entity
+    internal let order:int
+    internal let view:Math.Mat4
+    internal let projection:Math.Mat4
+}
+
+internal struct Frame {
+    private var views_2d:View2D[]
+    private var views_3d:View3D[]
+
+    internal init() {
+        self.views_2d = []
+        self.views_3d = []
+    }
+
+    internal func count_2d() int { return self.views_2d.count() }
+    internal func count_3d() int { return self.views_3d.count() }
+    internal func all_2d() View2D[] { return self.views_2d }
+    internal func all_3d() View3D[] { return self.views_3d }
+    internal func first_2d_order() int? {
+        if self.views_2d.count() == 0 { return null }
+        return self.views_2d[0].order
+    }
+    internal func first_3d_order() int? {
+        if self.views_3d.count() == 0 { return null }
+        return self.views_3d[0].order
+    }
+
+    internal func first_2d_projection() Math.Mat4? {
+        if self.views_2d.count() == 0 { return null }
+        return self.views_2d[0].projection
+    }
+
+    internal func first_3d_view() Math.Mat4? {
+        if self.views_3d.count() == 0 { return null }
+        return self.views_3d[0].view
+    }
+
+    internal func append_2d(view:View2D) {
+        var views = self.views_2d
+        views.append(view)
+        var index = views.count() - 1
+        while index > 0 && views[index].order < views[index - 1].order {
+            views.swap(index, index - 1)
+            index--
+        }
+        self.views_2d = views
+    }
+
+    internal func append_3d(view:View3D) {
+        var views = self.views_3d
+        views.append(view)
+        var index = views.count() - 1
+        while index > 0 && views[index].order < views[index - 1].order {
+            views.swap(index, index - 1)
+            index--
+        }
+        self.views_3d = views
+    }
+}
+
+internal func from_world(world:@ECS.World, viewport:Math.Vec2) Frame {
+    var frame = Frame()
+    let entities = world.entities()
+    for entity in entities {
+        if world.has<Transform2D>(entity) && world.has<Camera2D>(entity) {
+            let transform:@Transform2D = world.get<Transform2D>(entity)
+            let camera:@Camera2D = world.get<Camera2D>(entity)
+            if camera.is_active() {
+                frame.append_2d(View2D(
+                    entity:entity,
+                    order:camera.render_order(),
+                    view:camera.view(transform),
+                    projection:camera.projection(viewport)
+                ))
+            }
+        }
+        if world.has<Transform3D>(entity) && world.has<Camera3D>(entity) {
+            let transform:@Transform3D = world.get<Transform3D>(entity)
+            let camera:@Camera3D = world.get<Camera3D>(entity)
+            if camera.is_active() {
+                var aspect = 1.0
+                if viewport.x > 0.0 && viewport.y > 0.0 {
+                    aspect = viewport.x / viewport.y
+                }
+                frame.append_3d(View3D(
+                    entity:entity,
+                    order:camera.render_order(),
+                    view:camera.view(transform),
+                    projection:camera.projection(aspect)
+                ))
+            }
+        }
+    }
+    return frame
+}

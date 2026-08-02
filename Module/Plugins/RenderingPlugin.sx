@@ -1,0 +1,74 @@
+use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Schedule
+use GFX.Camera.Frame.Frame as CameraFrame
+use GFX.Camera.Frame.from_world as collect_camera_frame
+use GFX.Assets
+use GFX.Color
+use GFX.ECS
+use GFX.GPU
+use GFX.Rendering
+use GFX.Scene.Frame.from_world as collect_scene_frame
+use GFX.Window
+use GFX.Plugins.CameraPlugin
+use GFX.Plugins.AssetsPlugin
+use GFX.Plugins.GPUPlugin
+use GFX.Plugins.GPUPlugin.Settings as GPUSettings
+
+public struct Settings {
+    var gpu:GPUSettings = GPUSettings()
+    var clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)
+}
+
+public struct RenderingPlugin:Plugin {
+    private let settings:Settings
+
+    public init(settings:Settings = Settings()) {
+        self.settings = settings
+    }
+
+    func id() str { return "GFX.Plugins.RenderingPlugin" }
+
+    func build(application:Application) {
+        application.install(GPUPlugin(self.settings.gpu))
+        application.install(CameraPlugin())
+        application.install(AssetsPlugin())
+        application.resources().insert(Rendering.Renderer(self.clear_color()))
+        application.add_system(Schedule.render, prepare_frame)
+        application.add_after_system(Schedule.render, render_frame)
+        application.add_system(Schedule.shutdown, stop_renderer)
+    }
+
+    private func clear_color() Color {
+        return self.settings.clear
+    }
+}
+
+func prepare_frame(
+    world:@ECS.World,
+    window:@Window,
+    meshes:@Assets.Meshes,
+    images:@Assets.Images,
+    renderer:&Rendering.Renderer
+) {
+    let viewport = window.pixel_size()
+    renderer.set_frame(
+        collect_camera_frame(world, viewport),
+        collect_scene_frame(world, meshes, images),
+        viewport
+    )
+}
+
+func render_frame(
+    device:@GPU.Device,
+    surface:@GPU.Surface,
+    renderer:&Rendering.Renderer
+) {
+    renderer.render(device, surface)
+}
+
+func stop_renderer(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<Rendering.Renderer>()
+    assert(removed != null)
+}
