@@ -7,7 +7,7 @@ use GFX.Bootstrap.Schedule
 use GFX.Window
 use GFX.Input
 use GFX.Input.State as InputState
-use GFX.Plugins.WindowPlugin
+use GFX.Plugins.Window as WindowPlugin
 
 let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
     library:Boundary.SDL3,
@@ -56,7 +56,7 @@ func stop_manually(
 
 test "close a window automatically" {
     Application()
-        ..install(WindowPlugin(WindowPlugin.Settings()
+        ..install(WindowPlugin(Window.PluginSettings()
             ..title = "Automatic close"
             ..hidden = true
         ))
@@ -66,11 +66,10 @@ test "close a window automatically" {
 
 test "observe a close request manually" {
     Application()
-        ..install(WindowPlugin(
-            WindowPlugin.Settings()
-                ..title = "Manual close"
-                ..hidden = true,
-            WindowPlugin.CloseBehavior.manual
+        ..install(WindowPlugin(Window.PluginSettings()
+            ..title = "Manual close"
+            ..hidden = true
+            ..close_behavior = Window.PluginCloseBehavior.manual
         ))
         ..install(CloseProbePlugin(id_value:"ManualProbe", manual:true))
         ..run()

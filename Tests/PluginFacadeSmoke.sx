@@ -1,0 +1,22 @@
+use GFX
+use GFX.Plugins
+use GFX.Camera
+use GFX.GPU
+use GFX.Window
+
+test "compose plugins through the public catalog" {
+    var settings = Window.PluginSettings()
+        ..title = "Viewer"
+        ..close_behavior = Window.PluginCloseBehavior.manual
+    var application = GFX.Application()
+        ..install(Plugins.Window(settings))
+        ..install(Plugins.GPU(GPU.PluginSettings()
+            ..present_on_start = false
+            ..frame_interval_ms = 0
+        ))
+        ..install(Plugins.Rendering3D())
+        ..install(Plugins.OrbitalCamera3D(Camera.OrbitalPlugin3DSettings()))
+    assert(application.has_plugin("GFX.Plugins.Window"))
+    assert(application.has_plugin("GFX.Plugins.Rendering3D"))
+    assert(application.has_plugin("GFX.Plugins.OrbitalCamera3D"))
+}

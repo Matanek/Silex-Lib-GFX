@@ -46,6 +46,7 @@ in that profile.
 use GFX.Window
 use GFX.Color
 use GFX.GPU
+use GFX.Window
 
 var window = Window(Window.Settings(title:"First GPU frame"))
 var device = GPU.Device()
@@ -317,15 +318,15 @@ the resource and preserving its previous storage is unnecessary.
 
 ## Use the Bootstrap plugin
 
-Install `WindowPlugin` before `GPUPlugin`: it owns the platform window and its
-configuration. `GPUPlugin` creates one `GPU.Device` and one `GPU.Surface`
+Install `Plugins.Window` before `Plugins.GPU`: it owns the platform window and its
+configuration. `Plugins.GPU` creates one `GPU.Device` and one `GPU.Surface`
 after the window exists, and removes them before the window is destroyed:
 
 ```sx
 use GFX.Bootstrap
 use GFX.GPU
-use GFX.Plugins.GPUPlugin
-use GFX.Plugins.WindowPlugin
+use GFX.Plugins.GPU as GPUPlugin
+use GFX.Plugins.Window as WindowPlugin
 
 func render(device:@GPU.Device, surface:@GPU.Surface) {
     var commands = device.commands()
@@ -334,13 +335,15 @@ func render(device:@GPU.Device, surface:@GPU.Surface) {
 }
 
 Bootstrap.Application()
-    ..install(WindowPlugin(WindowPlugin.Settings(title:"GPU frame")))
+    ..install(WindowPlugin(Window.PluginSettings()
+        ..title = "GPU frame"
+    ))
     ..install(GPUPlugin())
     ..add_system(Bootstrap.Schedule.render, render)
     ..run()
 ```
 
-`GPUPlugin` requires an earlier `WindowPlugin` installation. Its settings
+`Plugins.GPU` requires an earlier `Plugins.Window` installation. Its settings
 cover device creation, presentation and temporary pacing only:
 `present_on_start:false` leaves the first frame to the application and
 `frame_interval_ms:0` disables plugin pacing when presentation or another

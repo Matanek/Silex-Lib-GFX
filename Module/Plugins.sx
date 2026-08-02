@@ -1,0 +1,14 @@
+public use GFX.Assets.Plugin as Assets
+public use GFX.Camera.Plugin as Camera
+public use GFX.ECS.Plugin as ECS
+public use GFX.GPU.Plugin as GPU
+public use GFX.Input.Plugin as Input
+public use GFX.Mesh.Plugin3D as Mesh3D
+public use GFX.Camera.OrbitalPlugin3D as OrbitalCamera3D
+public use GFX.Rendering.Plugin as Rendering
+public use GFX.Rendering.Plugin2D as Rendering2D
+public use GFX.Rendering.Plugin3D as Rendering3D
+public use GFX.Sprite.Plugin2D as Sprite2D
+public use GFX.Sprite.Plugin3D as Sprite3D
+public use GFX.Transform.Plugin as Transform
+public use GFX.Window.Plugin as Window

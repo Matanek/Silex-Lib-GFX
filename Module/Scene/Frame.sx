@@ -3,9 +3,12 @@ use GFX.Color
 use GFX.ECS
 use GFX.Geometry
 use GFX.Material
-use GFX.Mesh
-use GFX.Sprite
-use GFX.Transform
+use GFX.Mesh.Material3D as Material3D
+use GFX.Mesh.Mesh3D as Mesh3D
+use GFX.Sprite.Sprite2D as Sprite2D
+use GFX.Sprite.Sprite3D as Sprite3D
+use GFX.Transform.Transform2D as Transform2D
+use GFX.Transform.Transform3D as Transform3D
 use STD.Math
 
 internal struct MeshDraw {
@@ -82,10 +85,10 @@ internal func from_world(world:@ECS.World, meshes:@Assets.Meshes, images:@Assets
     let entities = world.entities()
     var insertion_order = 0
     for entity in entities {
-        if world.has<Transform.Transform3D>(entity) && world.has<Mesh.Mesh3D>(entity) && world.has<Mesh.Material3D>(entity) {
-            let transform:@Transform.Transform3D = world.get<Transform.Transform3D>(entity)
-            let component:@Mesh.Mesh3D = world.get<Mesh.Mesh3D>(entity)
-            let material:@Mesh.Material3D = world.get<Mesh.Material3D>(entity)
+        if world.has<Transform3D>(entity) && world.has<Mesh3D>(entity) && world.has<Material3D>(entity) {
+            let transform:@Transform3D = world.get<Transform3D>(entity)
+            let component:@Mesh3D = world.get<Mesh3D>(entity)
+            let material:@Material3D = world.get<Material3D>(entity)
             let handle = component.asset()
             if component.is_visible() && meshes.contains(handle) {
                 frame.append_mesh(MeshDraw(
@@ -98,9 +101,9 @@ internal func from_world(world:@ECS.World, meshes:@Assets.Meshes, images:@Assets
                 ))
             }
         }
-        if world.has<Transform.Transform2D>(entity) && world.has<Sprite.Sprite2D>(entity) {
-            let transform:@Transform.Transform2D = world.get<Transform.Transform2D>(entity)
-            let sprite:@Sprite.Sprite2D = world.get<Sprite.Sprite2D>(entity)
+        if world.has<Transform2D>(entity) && world.has<Sprite2D>(entity) {
+            let transform:@Transform2D = world.get<Transform2D>(entity)
+            let sprite:@Sprite2D = world.get<Sprite2D>(entity)
             let handle = sprite.asset()
             if sprite.is_visible() && images.contains(handle) {
                 frame.append_sprite_2d(Sprite2DDraw(
@@ -119,9 +122,9 @@ internal func from_world(world:@ECS.World, meshes:@Assets.Meshes, images:@Assets
                 insertion_order++
             }
         }
-        if world.has<Transform.Transform3D>(entity) && world.has<Sprite.Sprite3D>(entity) {
-            let transform:@Transform.Transform3D = world.get<Transform.Transform3D>(entity)
-            let sprite:@Sprite.Sprite3D = world.get<Sprite.Sprite3D>(entity)
+        if world.has<Transform3D>(entity) && world.has<Sprite3D>(entity) {
+            let transform:@Transform3D = world.get<Transform3D>(entity)
+            let sprite:@Sprite3D = world.get<Sprite3D>(entity)
             let handle = sprite.asset()
             if sprite.is_visible() && images.contains(handle) {
                 frame.append_sprite_3d(Sprite3DDraw(

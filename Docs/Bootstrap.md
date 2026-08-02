@@ -1,8 +1,8 @@
 # Compose a GFX application
 
 `GFX.Bootstrap` orchestrates optional plugins and scheduled systems. Direct GFX
-modules do not depend on it. `GFX.Plugins` will contain the integrations that
-connect future window, event, audio, and rendering APIs to this bootstrap.
+modules do not depend on it. `GFX.Plugins` contains the integrations that
+connect window, input, GPU, scene, and rendering APIs to this bootstrap.
 
 ## Use the package facade
 
@@ -11,11 +11,12 @@ capability namespaces qualified:
 
 ```sx
 use GFX
+use GFX.Plugins
 
 func main() {
     GFX.Application()
-        ..install(GFX.Plugins.WindowPlugin())
-        ..install(GFX.Plugins.RenderingPlugin())
+        ..install(Plugins.Window())
+        ..install(Plugins.Rendering())
         ..run()
 }
 ```

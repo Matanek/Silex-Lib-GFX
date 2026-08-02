@@ -1,3 +1,0 @@
-public use GFX.Sprite.Billboard
-public use GFX.Sprite.Sprite2D
-public use GFX.Sprite.Sprite3D

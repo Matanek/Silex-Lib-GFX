@@ -6,12 +6,15 @@ the same renderer and presentation frame.
 
 ```sx
 use GFX.Bootstrap.Application
-use GFX.Plugins.Rendering2DPlugin
-use GFX.Plugins.Rendering3DPlugin
-use GFX.Plugins.WindowPlugin
+use GFX.Window
+use GFX.Plugins.Rendering2D as Rendering2DPlugin
+use GFX.Plugins.Rendering3D as Rendering3DPlugin
+use GFX.Plugins.Window as WindowPlugin
 
 Application()
-    ..install(WindowPlugin(WindowPlugin.Settings(title:"Renderer")))
+    ..install(WindowPlugin(Window.PluginSettings()
+        ..title = "Renderer"
+    ))
     ..install(Rendering3DPlugin())
     ..install(Rendering2DPlugin())
     ..run()
@@ -24,10 +27,10 @@ The renderer compiles its installed capabilities into this execution order:
 3. 2D scene and overlays.
 
 This order is derived by the internal FrameGraph and does not depend on the
-order in which the plugins are installed. `Rendering2DPlugin` and
-`Rendering3DPlugin` both install the common
-`RenderingPlugin`, which provides the GPU device, presentation surface,
-renderer, and frame submission. `WindowPlugin` is installed explicitly before
+order in which the plugins are installed. `Plugins.Rendering2D` and
+`Plugins.Rendering3D` both install the common
+`Plugins.Rendering`, which provides the GPU device, presentation surface,
+renderer, and frame submission. `Plugins.Window` is installed explicitly before
 the rendering capability and provides the window and input. Installing both
 rendering capabilities still creates one presentation frame.
 

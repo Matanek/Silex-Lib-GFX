@@ -1,0 +1,11 @@
+use GFX.Bootstrap.Plugin as PluginProtocol
+use GFX.Bootstrap.Application
+use GFX.ECS.Plugin as ECSPlugin
+
+public struct Plugin:PluginProtocol {
+    func id() str { return "GFX.Plugins.Transform" }
+
+    func build(application:Application) {
+        application.install(ECSPlugin())
+    }
+}

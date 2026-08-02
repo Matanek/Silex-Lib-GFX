@@ -10,8 +10,8 @@ use GFX.Bootstrap.Schedule
 use GFX.Camera
 use GFX.ECS
 use GFX.Transform
-use GFX.Plugins.Rendering3DPlugin
-use GFX.Plugins.WindowPlugin
+use GFX.Plugins.Rendering3D as Rendering3DPlugin
+use GFX.Plugins.Window as WindowPlugin
 use STD.Math
 
 func create_scene(world:&ECS.World) {
@@ -47,32 +47,32 @@ already living entity. `World.update<T>(entity, callback)` mutates a typed
 component, `World.remove<T>` detaches one, and `World.destroy` invalidates the
 entity and removes all of its components.
 
-`RenderingPlugin` installs the camera, transform, and ECS capabilities through
-their plugins. Applications may also install `ECSPlugin`, `TransformPlugin`, or
-`CameraPlugin` directly when they need these scene capabilities without the
+`Plugins.Rendering` installs the camera, transform, and ECS capabilities through
+their plugins. Applications may also install `Plugins.ECS`, `Plugins.Transform`, or
+`Plugins.Camera` directly when they need these scene capabilities without the
 retained renderer.
 
 ## Orbital camera
 
-`OrbitalCamera3DPlugin` creates and controls a perspective camera around a
+`Plugins.OrbitalCamera3D` creates and controls a perspective camera around a
 target. Right-drag orbits, middle-drag pans, and the mouse wheel zooms.
 `PageUp` and `PageDown` provide continuous keyboard zoom.
 
 ```sx
-use GFX.Camera.OrbitalCamera3DSettings
-use GFX.Plugins.OrbitalCamera3DPlugin
+use GFX.Camera.OrbitalPlugin3DSettings
+use GFX.Plugins.OrbitalCamera3D as OrbitalCamera3DPlugin
 use STD.Math
 
-application.install(OrbitalCamera3DPlugin(OrbitalCamera3DSettings(
-    target:Math.Vec3(0.0, 0.55, 0.0),
-    distance:5.0,
-    min_distance:2.0,
-    max_distance:12.0,
-    pitch:Math.radians(-18.0),
-    vertical_fov_radians:Math.radians(42.0),
-    near_plane:0.05,
-    far_plane:80.0
-)))
+application.install(OrbitalCamera3DPlugin(OrbitalPlugin3DSettings()
+    ..target = Math.Vec3(0.0, 0.55, 0.0)
+    ..distance = 5.0
+    ..min_distance = 2.0
+    ..max_distance = 12.0
+    ..pitch = Math.radians(-18.0)
+    ..vertical_fov_radians = Math.radians(42.0)
+    ..near_plane = 0.05
+    ..far_plane = 80.0
+))
 ```
 
 The plugin installs its rendering and input dependencies. Its

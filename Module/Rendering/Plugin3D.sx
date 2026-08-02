@@ -1,16 +1,16 @@
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Application
 use GFX.GPU
 use GFX.Rendering
 use GFX.Rendering.GPUCache.GPUCache as GPUCache
 use GFX.Rendering.Stats as Stats
 use GFX.Scene.Frame.Frame as SceneFrame
-use GFX.Plugins.RenderingPlugin
-use GFX.Plugins.Mesh3DPlugin
-use GFX.Plugins.Sprite3DPlugin
+use GFX.Rendering.Plugin as RenderingPlugin
+use GFX.Mesh.Plugin3D as Mesh3DPlugin
+use GFX.Sprite.Plugin3D as Sprite3DPlugin
 
-public struct Rendering3DPlugin:Plugin {
-    func id() str { return "GFX.Plugins.Rendering3DPlugin" }
+public struct Plugin3D:PluginProtocol {
+    func id() str { return "GFX.Plugins.Rendering3D" }
 
     func build(application:Application) {
         application.install(RenderingPlugin())

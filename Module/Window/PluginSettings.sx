@@ -1,0 +1,37 @@
+use GFX.Window.PluginCloseBehavior
+
+public struct PluginSettings {
+    var title:str
+    var width:int
+    var height:int
+    var resizable:bool
+    var fullscreen:bool
+    var borderless:bool
+    var high_pixel_density:bool
+    var hidden:bool
+    var maximized:bool
+    var minimized:bool
+    var always_on_top:bool
+    var transparent:bool
+    var focusable:bool
+    var utility:bool
+    var close_behavior:PluginCloseBehavior
+
+    public init() {
+        self.title = "Window"
+        self.width = 1280
+        self.height = 720
+        self.resizable = true
+        self.fullscreen = false
+        self.borderless = false
+        self.high_pixel_density = true
+        self.hidden = false
+        self.maximized = false
+        self.minimized = false
+        self.always_on_top = false
+        self.transparent = false
+        self.focusable = true
+        self.utility = false
+        self.close_behavior = PluginCloseBehavior.automatic
+    }
+}

@@ -1,10 +1,10 @@
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
 use GFX.ECS
 
-public struct ECSPlugin:Plugin {
-    func id() str { return "GFX.Plugins.ECSPlugin" }
+public struct Plugin:PluginProtocol {
+    func id() str { return "GFX.Plugins.ECS" }
 
     func build(application:Application) {
         application.resources().insert(ECS.World())

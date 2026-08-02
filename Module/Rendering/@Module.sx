@@ -1,2 +1,0 @@
-public use GFX.Rendering.Renderer
-public use GFX.Rendering.Stats

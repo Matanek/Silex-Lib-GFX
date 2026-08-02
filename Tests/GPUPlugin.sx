@@ -2,8 +2,8 @@ use GFX.Bootstrap
 use GFX.Color
 use GFX.GPU
 use GFX.Window
-use GFX.Plugins.GPUPlugin
-use GFX.Plugins.WindowPlugin
+use GFX.Plugins.GPU as GPUPlugin
+use GFX.Plugins.Window as WindowPlugin
 use Interop.C
 use Interop.Boundary
 
@@ -58,16 +58,16 @@ test "install GPU presentation after configuring a window" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(Rendered(frames:0))
-    application.install(WindowPlugin(WindowPlugin.Settings(
-        title:"GPU plugin test",
-        width:64,
-        height:64,
-        hidden:true
-    )))
-    application.install(GPUPlugin(GPUPlugin.Settings(
-        present_on_start:false,
-        frame_interval_ms:0
-    )))
+    application.install(WindowPlugin(Window.PluginSettings()
+        ..title = "GPU plugin test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.install(GPUPlugin(GPU.PluginSettings()
+        ..present_on_start = false
+        ..frame_interval_ms = 0
+    ))
     application.add_system(Bootstrap.Schedule.render, render_once)
     assert(application.run() == 0)
     let rendered:@Rendered = resources.get<Rendered>()
@@ -76,14 +76,13 @@ test "install GPU presentation after configuring a window" {
 
 test "keep automatic window closing with an explicit window plugin" {
     Bootstrap.Application()
-        ..install(WindowPlugin(WindowPlugin.Settings(
-            title:"GPU close test",
-            width:64,
-            height:64,
-            hidden:true
-        )))
-        ..install(GPUPlugin(GPUPlugin.Settings(
-        )))
+        ..install(WindowPlugin(Window.PluginSettings()
+            ..title = "GPU close test"
+            ..width = 64
+            ..height = 64
+            ..hidden = true
+        ))
+        ..install(GPUPlugin())
         ..add_system(Bootstrap.Schedule.startup, request_close)
         ..run()
 }
@@ -92,12 +91,12 @@ test "use the explicitly installed window plugin" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(WindowCount(value:0))
-    application.install(WindowPlugin(WindowPlugin.Settings(
-        title:"Configured GPU window",
-        width:64,
-        height:64,
-        hidden:true
-    )))
+    application.install(WindowPlugin(Window.PluginSettings()
+        ..title = "Configured GPU window"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
     application.install(GPUPlugin())
     application.add_system(Bootstrap.Schedule.startup, count_windows)
     application.add_system(Bootstrap.Schedule.startup, request_close)

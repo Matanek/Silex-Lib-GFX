@@ -37,6 +37,12 @@ public use GFX.GPU.Device.DeviceSettings
 public use GFX.GPU.Device.SurfaceSettings
 public use GFX.GPU.Device.Device
 public use GFX.GPU.Device.Surface
+public struct PluginSettings {
+    var device:DeviceSettings? = null
+    var surface:SurfaceSettings? = null
+    var present_on_start:bool = true
+    var frame_interval_ms:int = 16
+}
 
 public use GFX.GPU.Resources.BufferSettings
 public use GFX.GPU.Resources.TextureSettings

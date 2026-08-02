@@ -4,6 +4,9 @@ use STD.Math
 use GFX.Session
 use GFX.Display
 
+public use GFX.Window.PluginCloseBehavior
+public use GFX.Window.PluginSettings
+
 public struct Settings {
     var title:str = "Window"
     var width:int = 1280

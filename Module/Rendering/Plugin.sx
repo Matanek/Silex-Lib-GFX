@@ -1,4 +1,4 @@
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
 use GFX.Camera.Frame.Frame as CameraFrame
@@ -10,22 +10,19 @@ use GFX.GPU
 use GFX.Rendering
 use GFX.Scene.Frame.from_world as collect_scene_frame
 use GFX.Window
-use GFX.Plugins.CameraPlugin
-use GFX.Plugins.AssetsPlugin
-use GFX.Plugins.GPUPlugin
+use GFX.Camera.Plugin as CameraPlugin
+use GFX.Assets.Plugin as AssetsPlugin
+use GFX.GPU.Plugin as GPUPlugin
+use GFX.Rendering.PluginSettings
 
-public struct Settings {
-    var clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)
-}
+public struct Plugin:PluginProtocol {
+    private let settings:PluginSettings
 
-public struct RenderingPlugin:Plugin {
-    private let settings:Settings
-
-    public init(settings:Settings = Settings()) {
+    public init(settings:PluginSettings = PluginSettings()) {
         self.settings = settings
     }
 
-    func id() str { return "GFX.Plugins.RenderingPlugin" }
+    func id() str { return "GFX.Plugins.Rendering" }
 
     func build(application:Application) {
         application.install(GPUPlugin())

@@ -4,6 +4,7 @@ use GFX.Assets
 use GFX.Color
 use GFX.ECS
 use GFX.Geometry
+use GFX.GPU
 use GFX.Material
 use GFX.Mesh
 use GFX.Rendering
@@ -11,11 +12,11 @@ use GFX.Sprite
 use GFX.Transform
 use GFX.Window
 use STD.Math
-use GFX.Plugins.GPUPlugin
-use GFX.Plugins.RenderingPlugin
-use GFX.Plugins.Rendering2DPlugin
-use GFX.Plugins.Rendering3DPlugin
-use GFX.Plugins.WindowPlugin
+use GFX.Plugins.GPU as GPUPlugin
+use GFX.Plugins.Rendering as RenderingPlugin
+use GFX.Plugins.Rendering2D as Rendering2DPlugin
+use GFX.Plugins.Rendering3D as Rendering3DPlugin
+use GFX.Plugins.Window as WindowPlugin
 
 struct Probe {
     var frames:int
@@ -174,16 +175,16 @@ test "compose retained 3D post-process and 2D through the FrameGraph" {
         frame_graph_transient_slots:0
     ))
     resources.insert(SceneHandles(mesh:Assets.MeshHandle(), image:Assets.ImageHandle()))
-    application.install(WindowPlugin(WindowPlugin.Settings(
-        title:"Rendering pipelines test",
-        width:64,
-        height:64,
-        hidden:true
-    )))
-    application.install(GPUPlugin(GPUPlugin.Settings(
-        present_on_start:false,
-        frame_interval_ms:0
-    )))
+    application.install(WindowPlugin(Window.PluginSettings()
+        ..title = "Rendering pipelines test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.install(GPUPlugin(GPU.PluginSettings()
+        ..present_on_start = false
+        ..frame_interval_ms = 0
+    ))
     application.install(RenderingPlugin())
     application.install(Rendering2DPlugin())
     application.install(Rendering3DPlugin())
@@ -192,9 +193,9 @@ test "compose retained 3D post-process and 2D through the FrameGraph" {
     application.add_after_system(Bootstrap.Schedule.render, inspect_renderer)
     assert(application.run() == 0)
 
-    assert(application.has_plugin("GFX.Plugins.RenderingPlugin"))
-    assert(application.has_plugin("GFX.Plugins.Rendering3DPlugin"))
-    assert(application.has_plugin("GFX.Plugins.Rendering2DPlugin"))
+    assert(application.has_plugin("GFX.Plugins.Rendering"))
+    assert(application.has_plugin("GFX.Plugins.Rendering3D"))
+    assert(application.has_plugin("GFX.Plugins.Rendering2D"))
     let probe:@Probe = resources.get<Probe>()
     assert(probe.frames == 3)
     assert(probe.passes == 3)
@@ -218,16 +219,16 @@ test "render a 2D-only graph without allocating depth" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(TwoDProbe(passes:0, resources:0, transient_slots:0))
-    application.install(WindowPlugin(WindowPlugin.Settings(
-        title:"2D FrameGraph test",
-        width:64,
-        height:64,
-        hidden:true
-    )))
-    application.install(GPUPlugin(GPUPlugin.Settings(
-        present_on_start:false,
-        frame_interval_ms:0
-    )))
+    application.install(WindowPlugin(Window.PluginSettings()
+        ..title = "2D FrameGraph test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.install(GPUPlugin(GPU.PluginSettings()
+        ..present_on_start = false
+        ..frame_interval_ms = 0
+    ))
     application.install(RenderingPlugin())
     application.install(Rendering2DPlugin())
     application.add_system(Bootstrap.Schedule.startup, create_2d_camera)

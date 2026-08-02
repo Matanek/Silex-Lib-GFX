@@ -1,0 +1,5 @@
+use GFX.Color
+
+public struct PluginSettings {
+    var clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)
+}

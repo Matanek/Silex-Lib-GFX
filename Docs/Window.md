@@ -81,6 +81,16 @@ normal, paused and error. `show_system_menu` takes an explicit local position.
 Unsupported platform operations fail with a targeted GFX panic rather than
 silently pretending success.
 
-`WindowPlugin` creates this same `Window`, installs `InputPlugin`, and applies
+`Plugins.Window` creates this same `Window`, installs `Plugins.Input`, and applies
 automatic or manual close policy. A close request for another window never
 stops the application.
+
+```sx
+use GFX.Plugins
+use GFX.Window
+
+application.install(Plugins.Window(Window.PluginSettings()
+    ..title = "Viewer"
+    ..close_behavior = Window.PluginCloseBehavior.manual
+))
+```

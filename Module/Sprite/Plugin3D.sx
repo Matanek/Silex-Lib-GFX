@@ -1,0 +1,13 @@
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Plugin as PluginProtocol
+use GFX.Assets.Plugin as AssetsPlugin
+use GFX.Transform.Plugin as TransformPlugin
+
+public struct Plugin3D:PluginProtocol {
+    func id() str { return "GFX.Plugins.Sprite3D" }
+
+    func build(application:Application) {
+        application.install(AssetsPlugin())
+        application.install(TransformPlugin())
+    }
+}

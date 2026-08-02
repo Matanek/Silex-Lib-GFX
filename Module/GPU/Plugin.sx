@@ -1,19 +1,13 @@
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
 use Interop.C
 use Interop.Boundary
 use GFX.GPU
+use GFX.GPU.PluginSettings
 use GFX.GPU.Commands
 use GFX.Color
 use GFX.Window
-
-public struct Settings {
-    var device:GPU.DeviceSettings? = null
-    var surface:GPU.SurfaceSettings? = null
-    var present_on_start:bool = true
-    var frame_interval_ms:int = 16
-}
 
 struct Configuration {
     let device:GPU.DeviceSettings
@@ -26,21 +20,21 @@ struct FramePacing {
     func wait() { sdl_delay(self.milliseconds) }
 }
 
-public struct GPUPlugin:Plugin {
-    private let settings:Settings
+public struct Plugin:PluginProtocol {
+    private let settings:PluginSettings
 
-    public init(settings:Settings = Settings()) {
+    public init(settings:PluginSettings = PluginSettings()) {
         self.settings = settings
     }
 
-    func id() str { return "GFX.Plugins.GPUPlugin" }
+    func id() str { return "GFX.Plugins.GPU" }
 
     func build(application:Application) {
         var device = GPU.DeviceSettings()
         var surface = GPU.SurfaceSettings()
         if let configured_device = self.settings.device { device = configured_device }
         if let configured_surface = self.settings.surface { surface = configured_surface }
-        if !application.has_plugin("GFX.Plugins.WindowPlugin") {
+        if !application.has_plugin("GFX.Plugins.Window") {
             panic("GFX.GPUPlugin requires WindowPlugin to be installed first")
         }
         application.resources().insert(Configuration(

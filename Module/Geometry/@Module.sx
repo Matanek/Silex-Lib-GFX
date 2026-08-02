@@ -1,4 +1,0 @@
-public use GFX.Geometry.Vertex
-public use GFX.Geometry.Mesh
-public use GFX.Geometry.Plane
-public use GFX.Geometry.Cube

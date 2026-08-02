@@ -1,10 +1,10 @@
 use GFX.Assets
 use GFX.Bootstrap.Application
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Schedule
 
-public struct AssetsPlugin:Plugin {
-    func id() str { return "GFX.Plugins.AssetsPlugin" }
+public struct Plugin:PluginProtocol {
+    func id() str { return "GFX.Plugins.Assets" }
 
     func build(application:Application) {
         application.resources().insert(Assets.Meshes())

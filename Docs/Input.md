@@ -66,9 +66,9 @@ axis normalization maps `-32768` to `-1.0` and `32767` to `1.0`.
 `is_quit_requested()` becomes true only for the global `quit` event. A window
 close request remains targeted and never requests global shutdown by itself.
 
-## Use InputPlugin
+## Use the input plugin
 
-`GFX.Plugins.InputPlugin` owns and updates the same direct `Input`, but publishes
+`GFX.Plugins.Input` owns and updates the same direct `Input`, but publishes
 only `GFX.Input.State` as a read-only resource. Systems may all inspect the
 snapshot; only the private driver pumps SDL.
 
@@ -82,6 +82,6 @@ func controls(input:@InputState) {
 }
 ```
 
-`WindowPlugin` installs `InputPlugin`. Its automatic policy stops only for a
+`Plugins.Window` installs `Plugins.Input`. Its automatic policy stops only for a
 global quit or for a close request targeting its own window; manual mode leaves
 both events and policy to the application.

@@ -1,12 +1,12 @@
-use GFX.Bootstrap.Plugin
+use GFX.Bootstrap.Plugin as PluginProtocol
 use GFX.Bootstrap.Application
 use GFX.Bootstrap.Schedule
 use GFX.Input
 use GFX.Input.State as InputState
 
-public struct InputPlugin:Plugin {
+public struct Plugin:PluginProtocol {
 
-    func id() str { return "GFX.Plugins.InputPlugin" }
+    func id() str { return "GFX.Plugins.Input" }
 
     func build(application:Application) {
         application.add_system(Schedule.startup, start_input)
