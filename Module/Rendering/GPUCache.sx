@@ -275,7 +275,7 @@ internal class GPUCache {
         var targets:GPU.ColorTargetFormat[] = []
         targets.append(GPU.ColorTargetFormat(format:format))
         var mesh_pipeline = device.graphics_pipeline(
-            GPU.ShaderProgram.hlsl(file:"../Shaders/RetainedMesh.hlsl"),
+            GPU.ShaderProgram.hlsl(file:"../../Shaders/RetainedMesh.hlsl"),
             GPU.GraphicsPipelineSettings(
                 vertex_buffers:mesh_buffers,
                 attributes:mesh_attributes,
@@ -307,7 +307,7 @@ internal class GPUCache {
                 enabled:true
             )
         ))
-        let sprite_program = GPU.ShaderProgram.hlsl(file:"../Shaders/RetainedSprite.hlsl")
+        let sprite_program = GPU.ShaderProgram.hlsl(file:"../../Shaders/RetainedSprite.hlsl")
         var sprite_3d_pipeline = device.graphics_pipeline(
             sprite_program,
             GPU.GraphicsPipelineSettings(
