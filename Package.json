@@ -1,8 +1,8 @@
 {
   "name": "GFX",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "dependencies": {
-    "STD": "^0.6.0"
+    "STD": "^0.7.0"
   },
   "artifacts": {
     "macos-arm64": {
