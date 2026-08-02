@@ -1,0 +1,6 @@
+test "load the GFX facade and child modules through qualified paths" {
+    let color = GFX.Color.bytes(20, 21, 1)
+    var application = GFX.Application()
+    assert(color.r > 0.0)
+    assert(!application.has_plugin("GFX.Plugins.WindowPlugin"))
+}

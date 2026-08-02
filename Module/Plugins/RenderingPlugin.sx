@@ -13,10 +13,8 @@ use GFX.Window
 use GFX.Plugins.CameraPlugin
 use GFX.Plugins.AssetsPlugin
 use GFX.Plugins.GPUPlugin
-use GFX.Plugins.GPUPlugin.Settings as GPUSettings
 
 public struct Settings {
-    var gpu:GPUSettings = GPUSettings()
     var clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)
 }
 
@@ -30,7 +28,7 @@ public struct RenderingPlugin:Plugin {
     func id() str { return "GFX.Plugins.RenderingPlugin" }
 
     func build(application:Application) {
-        application.install(GPUPlugin(self.settings.gpu))
+        application.install(GPUPlugin())
         application.install(CameraPlugin())
         application.install(AssetsPlugin())
         application.resources().insert(Rendering.Renderer(self.clear_color()))

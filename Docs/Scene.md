@@ -11,6 +11,7 @@ use GFX.Camera
 use GFX.ECS
 use GFX.Transform
 use GFX.Plugins.Rendering3DPlugin
+use GFX.Plugins.WindowPlugin
 use STD.Math
 
 func create_scene(world:&ECS.World) {
@@ -23,6 +24,7 @@ func create_scene(world:&ECS.World) {
 }
 
 Application()
+    ..install(WindowPlugin())
     ..install(Rendering3DPlugin())
     ..add_system(Schedule.startup, create_scene)
     ..run()

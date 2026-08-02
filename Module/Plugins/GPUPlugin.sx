@@ -6,11 +6,9 @@ use Interop.Boundary
 use GFX.GPU
 use GFX.GPU.Commands
 use GFX.Color
-use GFX.Plugins.WindowPlugin
 use GFX.Window
 
 public struct Settings {
-    var window:WindowPlugin.Settings? = null
     var device:GPU.DeviceSettings? = null
     var surface:GPU.SurfaceSettings? = null
     var present_on_start:bool = true
@@ -38,13 +36,13 @@ public struct GPUPlugin:Plugin {
     func id() str { return "GFX.Plugins.GPUPlugin" }
 
     func build(application:Application) {
-        var window = WindowPlugin.Settings()
         var device = GPU.DeviceSettings()
         var surface = GPU.SurfaceSettings()
-        if let configured_window = self.settings.window { window = configured_window }
         if let configured_device = self.settings.device { device = configured_device }
         if let configured_surface = self.settings.surface { surface = configured_surface }
-        application.install(WindowPlugin(window))
+        if !application.has_plugin("GFX.Plugins.WindowPlugin") {
+            panic("GFX.GPUPlugin requires WindowPlugin to be installed first")
+        }
         application.resources().insert(Configuration(
             device:device,
             surface:surface

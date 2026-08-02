@@ -317,14 +317,15 @@ the resource and preserving its previous storage is unnecessary.
 
 ## Use the Bootstrap plugin
 
-`GPUPlugin` installs `WindowPlugin`, creates one `GPU.Device` and one
-`GPU.Surface` after the window exists, and removes them before the window is
-destroyed:
+Install `WindowPlugin` before `GPUPlugin`: it owns the platform window and its
+configuration. `GPUPlugin` creates one `GPU.Device` and one `GPU.Surface`
+after the window exists, and removes them before the window is destroyed:
 
 ```sx
 use GFX.Bootstrap
 use GFX.GPU
 use GFX.Plugins.GPUPlugin
+use GFX.Plugins.WindowPlugin
 
 func render(device:@GPU.Device, surface:@GPU.Surface) {
     var commands = device.commands()
@@ -333,15 +334,17 @@ func render(device:@GPU.Device, surface:@GPU.Surface) {
 }
 
 Bootstrap.Application()
+    ..install(WindowPlugin(WindowPlugin.Settings(title:"GPU frame")))
     ..install(GPUPlugin())
     ..add_system(Bootstrap.Schedule.render, render)
     ..run()
 ```
 
-Plugin identity reuses an explicitly installed `WindowPlugin`; it does not
-create a second window. `present_on_start:false` leaves the first frame to the
-application. `frame_interval_ms:0` disables the temporary plugin pacing when
-presentation or another renderer already paces the loop.
+`GPUPlugin` requires an earlier `WindowPlugin` installation. Its settings
+cover device creation, presentation and temporary pacing only:
+`present_on_start:false` leaves the first frame to the application and
+`frame_interval_ms:0` disables plugin pacing when presentation or another
+renderer already paces the loop.
 
 ## Coverage contract
 

@@ -8,8 +8,10 @@ the same renderer and presentation frame.
 use GFX.Bootstrap.Application
 use GFX.Plugins.Rendering2DPlugin
 use GFX.Plugins.Rendering3DPlugin
+use GFX.Plugins.WindowPlugin
 
 Application()
+    ..install(WindowPlugin(WindowPlugin.Settings(title:"Renderer")))
     ..install(Rendering3DPlugin())
     ..install(Rendering2DPlugin())
     ..run()
@@ -24,9 +26,10 @@ The renderer compiles its installed capabilities into this execution order:
 This order is derived by the internal FrameGraph and does not depend on the
 order in which the plugins are installed. `Rendering2DPlugin` and
 `Rendering3DPlugin` both install the common
-`RenderingPlugin`, which provides the window, input, GPU device, presentation
-surface, renderer, and frame submission. Installing both capabilities still
-creates only one window and one presentation frame.
+`RenderingPlugin`, which provides the GPU device, presentation surface,
+renderer, and frame submission. `WindowPlugin` is installed explicitly before
+the rendering capability and provides the window and input. Installing both
+rendering capabilities still creates one presentation frame.
 
 The public `Rendering.Renderer` resource exposes completed-frame statistics.
 FrameGraph resources, passes, GPU command ownership, and pass registration

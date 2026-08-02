@@ -54,17 +54,17 @@ func count_windows(count:&WindowCount) {
     if windows != 0 as uint { sdl_free(C.pointer_bits(windows)) }
 }
 
-test "install GPU presentation through the Bootstrap" {
+test "install GPU presentation after configuring a window" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(Rendered(frames:0))
+    application.install(WindowPlugin(WindowPlugin.Settings(
+        title:"GPU plugin test",
+        width:64,
+        height:64,
+        hidden:true
+    )))
     application.install(GPUPlugin(GPUPlugin.Settings(
-        window:Window.Settings(
-            title:"GPU plugin test",
-            width:64,
-            height:64,
-            hidden:true
-        ),
         present_on_start:false,
         frame_interval_ms:0
     )))
@@ -74,21 +74,21 @@ test "install GPU presentation through the Bootstrap" {
     assert(rendered.frames == 1)
 }
 
-test "keep automatic window closing with the GPU plugin" {
+test "keep automatic window closing with an explicit window plugin" {
     Bootstrap.Application()
+        ..install(WindowPlugin(WindowPlugin.Settings(
+            title:"GPU close test",
+            width:64,
+            height:64,
+            hidden:true
+        )))
         ..install(GPUPlugin(GPUPlugin.Settings(
-            window:Window.Settings(
-                title:"GPU close test",
-                width:64,
-                height:64,
-                hidden:true
-            )
         )))
         ..add_system(Bootstrap.Schedule.startup, request_close)
         ..run()
 }
 
-test "reuse an explicitly installed window plugin" {
+test "use the explicitly installed window plugin" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(WindowCount(value:0))

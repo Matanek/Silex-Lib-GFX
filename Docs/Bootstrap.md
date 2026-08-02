@@ -4,6 +4,26 @@
 modules do not depend on it. `GFX.Plugins` will contain the integrations that
 connect future window, event, audio, and rendering APIs to this bootstrap.
 
+## Use the package facade
+
+The principal GFX module exposes the application vocabulary while keeping
+capability namespaces qualified:
+
+```sx
+use GFX
+
+func main() {
+    GFX.Application()
+        ..install(GFX.Plugins.WindowPlugin())
+        ..install(GFX.Plugins.RenderingPlugin())
+        ..run()
+}
+```
+
+Qualified names prevent collisions with similarly named modules from another
+package. Precise imports remain available when local brevity is more useful,
+and a fully qualified GFX path may be used without any `use` declaration.
+
 ## Define and install a plugin
 
 A plugin is an ordinary configured value conforming to `Bootstrap.Plugin`:
