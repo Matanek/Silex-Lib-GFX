@@ -1,0 +1,11 @@
+use GFX.ECS.World.World
+
+// Query is a compiler-derived system capability. Pattern is a tuple whose
+// fields carry read (`@`) or mutable (`&`) component access intent.
+public class Query<Pattern> {
+    internal var world:World
+
+    internal init(world:World) {
+        self.world = world
+    }
+}

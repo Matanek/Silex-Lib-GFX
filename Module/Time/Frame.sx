@@ -1,0 +1,18 @@
+use STD.Math
+use STD.Time.Clock
+
+public struct Time {
+    public var delta_seconds:float
+    private var clock:Clock
+
+    internal init() {
+        self.delta_seconds = 0.0
+        self.clock = Clock()
+    }
+
+    internal func advance() {
+        var clock = self.clock
+        self.delta_seconds = Math.clamp(clock.tick(), 0.0, 0.1)
+        self.clock = clock
+    }
+}

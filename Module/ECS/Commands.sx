@@ -1,0 +1,37 @@
+use GFX.ECS.Entity.Entity
+use GFX.ECS.EntityRecipe.EntityRecipe
+use GFX.ECS.World.World
+
+internal enum Command {
+    spawn(EntityRecipe)
+    destroy(Entity)
+}
+
+public class Commands {
+    private var pending:Command[]
+
+    internal init() {
+        self.pending = []
+    }
+
+    public func spawn(recipe:EntityRecipe) {
+        self.pending.append(Command.spawn(recipe))
+    }
+
+    public func destroy(entity:Entity) {
+        self.pending.append(Command.destroy(entity))
+    }
+
+    internal func flush(world:&World) {
+        var commands = self.pending
+        self.pending = []
+        for let command in commands {
+            match command {
+                spawn(recipe) => { world.spawn(recipe) }
+                destroy(entity) => {
+                    if world.is_alive(entity) { world.destroy(entity) }
+                }
+            }
+        }
+    }
+}

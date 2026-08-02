@@ -1,2 +1,3 @@
 public use GFX.Bootstrap.Application
 public use GFX.Bootstrap.Schedule
+public use GFX.Time.Frame.Time

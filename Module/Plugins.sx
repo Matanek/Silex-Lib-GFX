@@ -11,4 +11,5 @@ public use GFX.Rendering.Plugin3D as Rendering3D
 public use GFX.Sprite.Plugin2D as Sprite2D
 public use GFX.Sprite.Plugin3D as Sprite3D
 public use GFX.Transform.Plugin as Transform
+public use GFX.Time.Plugin as Time
 public use GFX.Window.Plugin as Window

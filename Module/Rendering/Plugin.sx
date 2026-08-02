@@ -9,6 +9,7 @@ use GFX.ECS
 use GFX.GPU
 use GFX.Rendering
 use GFX.Scene.Frame.from_world as collect_scene_frame
+use GFX.Time.Plugin as TimePlugin
 use GFX.Window
 use GFX.Camera.Plugin as CameraPlugin
 use GFX.Assets.Plugin as AssetsPlugin
@@ -25,6 +26,7 @@ public struct Plugin:PluginProtocol {
     func id() str { return "GFX.Plugins.Rendering" }
 
     func build(application:Application) {
+        application.install(TimePlugin())
         application.install(GPUPlugin())
         application.install(CameraPlugin())
         application.install(AssetsPlugin())

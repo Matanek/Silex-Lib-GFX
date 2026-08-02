@@ -8,12 +8,20 @@ public struct Plugin:PluginProtocol {
 
     func build(application:Application) {
         application.resources().insert(ECS.World())
+        application.resources().insert(ECS.Commands())
+        application.add_system(Schedule.post_update, flush_commands)
         application.add_system(Schedule.shutdown, stop_ecs)
     }
 }
 
+func flush_commands(world:&ECS.World, commands:&ECS.Commands) {
+    commands.flush(world)
+}
+
 func stop_ecs(application:Application) {
     var resources = application.resources()
+    var commands = resources.remove<ECS.Commands>()
     var removed = resources.remove<ECS.World>()
+    assert(commands != null)
     assert(removed != null)
 }

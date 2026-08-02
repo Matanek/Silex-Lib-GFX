@@ -93,9 +93,11 @@ reads of one type are valid, while a repeated access involving `&T` is rejected
 at compile time.
 
 `func()` and `func(Application)` remain valid. `Application` must be the sole
-parameter because it represents unrestricted access. Systems return `void`;
-optional injection and derived ECS query parameters are not part of this first
-contract.
+parameter because it represents unrestricted access. Systems return `void`.
+An `ECS.Query<...>` value is derived from the installed `ECS.World` rather than
+looked up as a resource; its tuple declares component access with the same `@`
+and `&` vocabulary. Conflicting mutable component queries, or a query combined
+with mutable `World` access, are rejected when the system is registered.
 
 ## Control the application from a system
 

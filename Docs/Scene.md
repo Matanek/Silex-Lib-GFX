@@ -47,6 +47,58 @@ already living entity. `World.update<T>(entity, callback)` mutates a typed
 component, `World.remove<T>` detaches one, and `World.destroy` invalidates the
 entity and removes all of its components.
 
+## Query components from a system
+
+A typed query makes its filter and access intent part of the system signature:
+
+```sx
+use GFX.ECS
+use GFX.Transform
+
+struct Rotator {
+    let radians_per_second:float
+}
+
+func rotate(
+    time:@GFX.Time,
+    query:ECS.Query<(@Rotator, &Transform.Transform3D)>
+) {
+    for (rotator, transform) in query {
+        let yaw = Math.Quat.angle_axis(
+            rotator.radians_per_second * time.delta_seconds,
+            Math.Vec3.up()
+        )
+        transform.rotation = yaw.multiply(copy transform.rotation).normalized()
+    }
+}
+```
+
+Only living entities containing every requested component enter the loop. `@T`
+borrows a component for reading and `&T` borrows it for mutation. Adding
+`ECS.Entity` to the tuple exposes the stable entity identity without treating it
+as a stored component:
+
+```sx
+func expire(
+    commands:&ECS.Commands,
+    query:ECS.Query<(ECS.Entity, @Lifetime)>
+) {
+    for (entity, lifetime) in query {
+        if lifetime.finished { commands.destroy(entity) }
+    }
+}
+```
+
+`Commands.spawn(recipe)` and `Commands.destroy(entity)` preserve submission
+order and are applied in `post_update`. Structural changes therefore never
+invalidate an active query. The query is specialized by the compiler and walks
+the world's typed component slots directly: it allocates no entity list and
+performs no string, hash, or reflective component lookup in the loop.
+
+`Plugins.ECS` installs both `World` and `Commands`. `Plugins.Rendering` also
+installs `GFX.Time`; its `delta_seconds` value is advanced once in `pre_update`,
+so every update system observes the same frame duration.
+
 `Plugins.Rendering` installs the camera, transform, and ECS capabilities through
 their plugins. Applications may also install `Plugins.ECS`, `Plugins.Transform`, or
 `Plugins.Camera` directly when they need these scene capabilities without the

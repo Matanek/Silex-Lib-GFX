@@ -1,0 +1,67 @@
+use GFX.Bootstrap.Application
+use GFX.Bootstrap.Schedule
+use GFX.ECS
+use GFX.Plugins
+
+struct Position { var x:int }
+struct Velocity { let x:int }
+
+func spawn_deferred(commands:&ECS.Commands) {
+    var recipe = ECS.EntityRecipe()
+        ..with(Position(x:9))
+    commands.spawn(recipe)
+}
+
+func integrate(query:ECS.Query<(@Velocity, &Position)>) {
+    for (velocity, position) in query {
+        position.x += velocity.x
+    }
+}
+
+func destroy_stationary(
+    commands:&ECS.Commands,
+    query:ECS.Query<(ECS.Entity, @Position)>
+) {
+    for (entity, position) in query {
+        if position.x == 7 { commands.destroy(entity) }
+    }
+}
+
+func run_frame(application:Application) int {
+    application.run_schedule(Schedule.update)
+    application.run_schedule(Schedule.post_update)
+    return 0
+}
+
+test "query filters components, mutates in place, and commands flush later" {
+    var application = Application()
+        ..install(Plugins.ECS())
+        ..add_system(Schedule.update, spawn_deferred)
+        ..add_system(Schedule.update, integrate)
+        ..add_system(Schedule.update, destroy_stationary)
+        ..with_runner(run_frame)
+
+    var first = ECS.Entity()
+    var second = ECS.Entity()
+    if true {
+        var resources = application.resources()
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        var moving = ECS.EntityRecipe()
+            ..with(Position(x:40))
+            ..with(Velocity(x:2))
+        first = world.spawn(moving)
+        var stationary = ECS.EntityRecipe()
+            ..with(Position(x:7))
+        second = world.spawn(stationary)
+    }
+    application.run()
+
+    if true {
+        var resources = application.resources()
+        let world:@ECS.World = resources.get<ECS.World>()
+        assert(world.get<Position>(first).x == 42)
+        assert(!world.is_alive(second))
+        let remaining = world.entities()
+        assert(remaining.count() == 2)
+    }
+}
