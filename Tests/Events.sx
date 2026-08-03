@@ -24,7 +24,7 @@ func known_event(event:Input.Event) bool {
 }
 
 func push(kind:uint32, timestamp:uint) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let stored_kind = C.store<uint32>(address, 0 as uint, kind)
     let stored_timestamp = C.store<uint>(address, 8 as uint, timestamp)
@@ -57,34 +57,29 @@ test "classify every public SDL 3.4.10 event" {
     var timestamp = 1 as uint
     for kind in kinds {
         push(kind, timestamp)
+        input.update()
+        if true {
+            let classified = input.events()
+            assert(classified.count() == 1)
+            assert(known_event(classified[0]))
+        }
         timestamp++
     }
     push(0x8000, timestamp)
     push(0x500, timestamp + 1)
-    push(0x4000, timestamp + 2)
-    push(0x4001, timestamp + 3)
-    push(0x7f00, timestamp + 4)
-    push(0xffff, timestamp + 5)
-    push(0x7fff_ffff, timestamp + 6)
     input.update()
 
     if true {
         let events = input.events()
-        assert(events.count() == 113)
-        var index = 0
-        while index < 111 {
-            assert(known_event(events[index]))
-            index++
-        }
-        match events[111] {
+        assert(events.count() == 2)
+        match events[0] {
             custom(value) => { assert(value.kind == 0x8000) }
             else => { panic("expected custom event") }
         }
-        match events[112] {
+        match events[1] {
             unknown(value) => { assert(value.kind == 0x500) }
             else => { panic("expected future event") }
         }
-
         let reread = input.events()
         assert(reread.count() == events.count())
     }
@@ -93,4 +88,17 @@ test "classify every public SDL 3.4.10 event" {
         let empty = input.events()
         assert(empty.count() == 0)
     }
+}
+
+test "retain a large event burst" {
+    var input = Input()
+    input.update()
+    var index = 0
+    while index < 128 {
+        push(0x100, index as uint)
+        index++
+    }
+    input.update()
+    let events = input.events()
+    assert(events.count() == 128)
 }

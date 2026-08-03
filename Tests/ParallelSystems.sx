@@ -1,0 +1,132 @@
+use GFX.Bootstrap
+
+class Gate {
+    var ready:bool
+
+    internal init() { self.ready = false }
+
+    internal func signal() { mutex { self.ready = true } }
+
+    internal func wait() {
+        var attempts = 0
+        while attempts < 100_000_000 {
+            var completed = false
+            mutex { completed = self.ready }
+            if completed { return }
+            attempts++
+        }
+        panic("compatible GFX systems did not overlap")
+    }
+}
+
+struct WorkerProbe { var gate:Gate }
+struct MainProbe { var gate:Gate }
+
+class MainThreadEffect {
+    static var observed:int = 0
+    internal static func observe() { MainThreadEffect.observed++ }
+    internal static func count() int { return MainThreadEffect.observed }
+}
+
+func worker_signal(probe:&WorkerProbe) {
+    probe.gate.signal()
+}
+
+func main_wait(probe:&MainProbe) {
+    MainThreadEffect.observe()
+    probe.gate.wait()
+}
+
+struct SharedRead { let value:int }
+struct ReadLeft { var value:int }
+struct ReadRight { var value:int }
+
+func read_left(shared:@SharedRead, state:&ReadLeft) {
+    assert(shared.value == 42)
+    state.value++
+}
+
+func read_right(shared:@SharedRead, state:&ReadRight) {
+    assert(shared.value == 42)
+    state.value++
+}
+
+struct ConflictState { var step:int }
+
+func conflict_first(state:&ConflictState) {
+    assert(state.step == 0 || state.step == 2)
+    state.step = 1
+}
+
+func conflict_second(state:&ConflictState) {
+    assert(state.step == 1)
+    state.step = 2
+}
+
+func run_parallel(application:Bootstrap.Application) int {
+    application.run_schedule(Bootstrap.Schedule.update)
+    application.run_schedule(Bootstrap.Schedule.update)
+    return 0
+}
+
+test "parallelize compatible systems and preserve conflict barriers" {
+    var main_gate = Gate()
+    var application = Bootstrap.Application(2)
+    var resources = application.resources()
+    resources.insert(WorkerProbe(gate:main_gate))
+    resources.insert(MainProbe(gate:main_gate))
+    resources.insert(SharedRead(value:42))
+    resources.insert(ReadLeft(value:0))
+    resources.insert(ReadRight(value:0))
+    resources.insert(ConflictState(step:0))
+
+    application.add_system(Bootstrap.Schedule.update, worker_signal)
+    application.add_system(Bootstrap.Schedule.update, main_wait)
+    application.add_system(Bootstrap.Schedule.update, read_left)
+    application.add_system(Bootstrap.Schedule.update, read_right)
+    application.add_system(Bootstrap.Schedule.update, conflict_first)
+    application.add_system(Bootstrap.Schedule.update, conflict_second)
+    application.with_runner(run_parallel)
+
+    assert(application.run() == 0)
+    assert(application.scheduler_plan_build_count() == 1)
+    assert(application.scheduler_stage_count(Bootstrap.Schedule.update, false) == 2)
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.update, false) == 2)
+    assert(MainThreadEffect.count() == 2)
+    if true {
+        let state:@ConflictState = resources.get<ConflictState>()
+        assert(state.step == 2)
+    }
+}
+
+test "place shared reads with disjoint writes in one stage" {
+    var application = Bootstrap.Application(2)
+    var resources = application.resources()
+    resources.insert(SharedRead(value:42))
+    resources.insert(ReadLeft(value:0))
+    resources.insert(ReadRight(value:0))
+    application.add_system(Bootstrap.Schedule.update, read_left)
+    application.add_system(Bootstrap.Schedule.update, read_right)
+    application.with_runner(run_single_worker)
+    assert(application.run() == 0)
+    assert(application.scheduler_stage_count(Bootstrap.Schedule.update, false) == 1)
+}
+
+func run_single_worker(application:Bootstrap.Application) int {
+    application.run_schedule(Bootstrap.Schedule.update)
+    return 0
+}
+
+test "preserve barriers with the internal single-worker executor" {
+    var application = Bootstrap.Application(1)
+    var resources = application.resources()
+    resources.insert(ConflictState(step:0))
+    application.add_system(Bootstrap.Schedule.update, conflict_first)
+    application.add_system(Bootstrap.Schedule.update, conflict_second)
+    application.with_runner(run_single_worker)
+    assert(application.run() == 0)
+    if true {
+        let state:@ConflictState = resources.get<ConflictState>()
+        assert(state.step == 2)
+    }
+}

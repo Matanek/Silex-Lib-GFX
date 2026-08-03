@@ -1,0 +1,44 @@
+use GFX.Bootstrap
+use GFX.ECS
+use GFX.ECS.Plugin as ECSPlugin
+use STD.Time.Stopwatch
+
+struct Position { var x:int }
+
+func integrate(query:ECS.Query<(ECS.Entity, &Position)>) {
+    for (entity, position) in query { position.x++ }
+}
+
+func seed(application:Bootstrap.Application, count:int) {
+    var resources = application.resources()
+    var world:&ECS.World = resources.get_mut<ECS.World>()
+    var index = 0
+    while index < count {
+        var recipe = ECS.EntityRecipe()..with(Position(x:index))
+        world.spawn(recipe)
+        index++
+    }
+}
+
+func benchmark(count:int, frames:int) {
+    var application = Bootstrap.Application()
+        ..install(ECSPlugin())
+        ..add_system(Bootstrap.Schedule.update, integrate)
+    seed(application, count)
+    var elapsed = Stopwatch()
+    elapsed.start()
+    var frame = 0
+    while frame < frames {
+        application.run_schedule(Bootstrap.Schedule.update)
+        frame++
+    }
+    elapsed.stop()
+    print(count, " rows x ", frames, ": ", elapsed.get_elapsed_milliseconds(), " ms")
+    print("  local dispatches: ", application.query_local_dispatch_count())
+    print("  parallel dispatches: ", application.query_parallel_dispatch_count())
+}
+
+test "query scheduler threshold and throughput" {
+    benchmark(31, 2_000)
+    benchmark(4_096, 250)
+}

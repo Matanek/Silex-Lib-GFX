@@ -1,0 +1,83 @@
+use GFX.ECS.Entity.Entity
+
+// Dense component column with a sparse entity-index lookup. The sparse entry
+// stores dense index + 1 so zero can represent absence without initialization
+// metadata.
+internal struct ComponentPool<T> {
+    private let type_id:int
+    private var sparse:int[]
+    private var entities:Entity[]
+    private var values:T[]
+
+    internal init(type_id:int) {
+        self.type_id = type_id
+        self.sparse = []
+        self.entities = []
+        self.values = []
+    }
+
+    internal func id() int { return self.type_id }
+    internal func count() int { return self.entities.count() }
+    internal func entity(index:int) Entity { return self.entities[index] }
+
+    internal func has(entity:Entity) bool {
+        if entity.index < 0 || entity.index >= self.sparse.count() { return false }
+        let encoded = self.sparse[entity.index]
+        if encoded == 0 { return false }
+        return self.entities[encoded - 1] == entity
+    }
+
+    internal func insert(entity:Entity, value:T) bool {
+        self.ensure_sparse(entity.index)
+        let encoded = self.sparse[entity.index]
+        if encoded != 0 && self.entities[encoded - 1] == entity {
+            self.values.replace(encoded - 1, value)
+            return false
+        }
+        self.entities.append(entity)
+        self.values.append(value)
+        self.sparse[entity.index] = self.entities.count()
+        return true
+    }
+
+    internal func get(entity:Entity) @self:T {
+        let index = self.dense_index(entity)
+        if index < 0 { panic("GFX.ECS entity does not contain the requested component") }
+        return @self.values[index]
+    }
+
+    internal func get_mut(entity:Entity) &self:T {
+        let index = self.dense_index(entity)
+        if index < 0 { panic("GFX.ECS entity does not contain the requested component") }
+        return &self.values[index]
+    }
+
+    internal func remove(entity:Entity) T? {
+        let index = self.dense_index(entity)
+        if index < 0 { return null }
+        let last = self.entities.count() - 1
+        let last_entity = self.entities.take_last()
+        var last_value = self.values.take_last()
+        if index == last {
+            self.sparse[entity.index] = 0
+            return last_value
+        }
+        var removed = self.values.replace(index, move last_value)
+        if index != last {
+            let moved = last_entity
+            self.entities[index] = moved
+            self.sparse[moved.index] = index + 1
+        }
+        self.sparse[entity.index] = 0
+        return removed
+    }
+
+    private func dense_index(entity:Entity) int {
+        if !self.has(entity) { return -1 }
+        return self.sparse[entity.index] - 1
+    }
+
+    private func ensure_sparse(index:int) {
+        while self.sparse.count() <= index { self.sparse.append(0) }
+    }
+}

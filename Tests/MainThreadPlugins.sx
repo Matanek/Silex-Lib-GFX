@@ -1,0 +1,27 @@
+use GFX.Bootstrap
+use GFX.GPU
+use GFX.Window
+use GFX.Plugins.GPU as GPUPlugin
+use GFX.Plugins.Rendering as RenderingPlugin
+use GFX.Plugins.Window as WindowPlugin
+
+func inspect_main_thread_plugins(application:Bootstrap.Application) int {
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.startup, false) == 0)
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.render, false) == 0)
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.render, true) == 0)
+    return 0
+}
+
+test "keep Window GPU and rendering systems on the main thread" {
+    var application = Bootstrap.Application(1)
+    application.install(WindowPlugin(Window.PluginSettings()
+        ..hidden = true
+    ))
+    application.install(GPUPlugin(GPU.PluginSettings()
+        ..present_on_start = false
+        ..frame_interval_ms = 0
+    ))
+    application.install(RenderingPlugin())
+    application.with_runner(inspect_main_thread_plugins)
+    assert(application.run() == 0)
+}

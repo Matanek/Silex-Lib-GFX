@@ -7,7 +7,7 @@ let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boun
 func enqueue(storage:&uint[16]) { assert(sdl_push_event(C.mutable_pointer(storage)) != 0) }
 
 func mouse_motion(x:float32, y:float32, dx:float32, dy:float32) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let kind = C.store<uint32>(address, 0 as uint, 0x400 as uint32)
     let position_x = C.store<float32>(address, 28 as uint, x)
@@ -18,7 +18,7 @@ func mouse_motion(x:float32, y:float32, dx:float32, dy:float32) {
 }
 
 func mouse_wheel(x:float32, y:float32) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let kind = C.store<uint32>(address, 0 as uint, 0x403 as uint32)
     let delta_x = C.store<float32>(address, 24 as uint, x)
@@ -29,7 +29,7 @@ func mouse_wheel(x:float32, y:float32) {
 }
 
 func text_event(kind:uint32, text:str) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let stored_kind = C.store<uint32>(address, 0 as uint, kind)
     let stored_text = C.store<uint>(address, 24 as uint, C.address_bits(C.terminated_pointer(text)))
@@ -37,7 +37,7 @@ func text_event(kind:uint32, text:str) {
 }
 
 func key_event(kind:uint32, scancode:int32) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let stored_kind = C.store<uint32>(address, 0 as uint, kind)
     let stored_scancode = C.store<int32>(address, 24 as uint, scancode)
@@ -45,7 +45,7 @@ func key_event(kind:uint32, scancode:int32) {
 }
 
 func joystick_event(kind:uint32, id:uint32, index:uint8, value:int16) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let stored_kind = C.store<uint32>(address, 0 as uint, kind)
     let stored_id = C.store<uint32>(address, 16 as uint, id)
@@ -89,7 +89,7 @@ func pump_transient_data(input:&Input) {
     let first_candidate = C.store<uint>(candidates, 0 as uint, C.address_bits(C.terminated_pointer("héros")))
     let second_candidate = C.store<uint>(candidates, 8 as uint, C.address_bits(C.terminated_pointer("héroïne")))
 
-    var editing:uint[16]
+    var editing:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let editing_address = C.address_bits(C.mutable_pointer(editing))
     let editing_kind = C.store<uint32>(editing_address, 0 as uint, 0x307 as uint32)
     let editing_values = C.store<uint>(editing_address, 24 as uint, candidates)
@@ -97,7 +97,7 @@ func pump_transient_data(input:&Input) {
     let editing_selection = C.store<int32>(editing_address, 36 as uint, 1)
     enqueue(editing)
 
-    var clipboard:uint[16]
+    var clipboard:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let clipboard_address = C.address_bits(C.mutable_pointer(clipboard))
     let clipboard_kind = C.store<uint32>(clipboard_address, 0 as uint, 0x900 as uint32)
     let clipboard_owned = C.store<uint8>(clipboard_address, 16 as uint, 1 as uint8)
@@ -105,7 +105,7 @@ func pump_transient_data(input:&Input) {
     let clipboard_values = C.store<uint>(clipboard_address, 24 as uint, candidates)
     enqueue(clipboard)
 
-    var drop_storage:uint[16]
+    var drop_storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let drop_address = C.address_bits(C.mutable_pointer(drop_storage))
     let drop_kind = C.store<uint32>(drop_address, 0 as uint, 0x1000 as uint32)
     let drop_source = C.store<uint>(drop_address, 32 as uint, C.address_bits(C.terminated_pointer("Finder")))

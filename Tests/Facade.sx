@@ -6,3 +6,17 @@ test "load the GFX facade and child modules through qualified paths" {
     assert(gpu.present_on_start)
     assert(!application.has_plugin("GFX.Plugins.Window"))
 }
+
+struct FacadeProbe {
+    var calls:int
+}
+
+func record_facade_system(probe:&FacadeProbe) {
+    probe.calls++
+}
+
+test "register an injected system through the GFX facade" {
+    var application = GFX.Application()
+    application
+        ..add_system(GFX.Schedule.startup, record_facade_system)
+}

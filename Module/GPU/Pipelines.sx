@@ -324,16 +324,16 @@ public class ComputePipeline {
 }
 
 extend Device {
-    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, code:@uint8[..], settings:ShaderSettings = ShaderSettings()) Shader {
-        return Shader(self, stage, format, code, settings)
+    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:@uint8[..], settings:ShaderSettings = ShaderSettings()) Shader {
+        return Shader(self, stage, format, input, settings)
     }
 
-    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, source:str, settings:ShaderSettings = ShaderSettings()) Shader {
+    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:str, settings:ShaderSettings = ShaderSettings()) Shader {
         var code:uint8[] = []
-        let count = C.byte_count(source)
+        let count = C.byte_count(input)
         var index:uint = 0
         while index < count {
-            code.append(C.byte_at(source, index))
+            code.append(C.byte_at(input, index))
             index++
         }
         return Shader(self, stage, format, @code[0:code.count()], settings)
@@ -405,50 +405,50 @@ extend Device {
         panic("GFX.GPU device has no shader format compatible with this HLSL program")
     }
 
-    public func compute_pipeline(format:Types.ShaderFormat, code:@uint8[..], settings:ComputePipelineSettings) ComputePipeline {
-        return ComputePipeline(self, format, code, settings)
+    public func compute_pipeline(input:Types.ShaderFormat, data:@uint8[..], settings:ComputePipelineSettings) ComputePipeline {
+        return ComputePipeline(self, input, data, settings)
     }
 
-    public func compute_pipeline(format:Types.ShaderFormat, source:str, settings:ComputePipelineSettings) ComputePipeline {
+    public func compute_pipeline(input:Types.ShaderFormat, data:str, settings:ComputePipelineSettings) ComputePipeline {
         var code:uint8[] = []
-        let count = C.byte_count(source)
+        let count = C.byte_count(data)
         var index:uint = 0
         while index < count {
-            code.append(C.byte_at(source, index))
+            code.append(C.byte_at(data, index))
             index++
         }
-        return ComputePipeline(self, format, @code[0:code.count()], settings)
+        return ComputePipeline(self, input, @code[0:code.count()], settings)
     }
 
-    public func compute_pipeline(program:@ComputeProgram, name:str? = null) ComputePipeline {
+    public func compute_pipeline(input:@ComputeProgram, data:str? = null) ComputePipeline {
         let formats = self.shader_formats()
         let settings = ComputePipelineSettings(
-            entry:copy program.entry,
-            samplers:copy program.samplers,
-            read_only_storage_textures:copy program.read_only_storage_textures,
-            read_only_storage_buffers:copy program.read_only_storage_buffers,
-            read_write_storage_textures:copy program.read_write_storage_textures,
-            read_write_storage_buffers:copy program.read_write_storage_buffers,
-            uniform_buffers:copy program.uniform_buffers,
-            threads_x:copy program.threads_x,
-            threads_y:copy program.threads_y,
-            threads_z:copy program.threads_z,
-            name:name
+            entry:copy input.entry,
+            samplers:copy input.samplers,
+            read_only_storage_textures:copy input.read_only_storage_textures,
+            read_only_storage_buffers:copy input.read_only_storage_buffers,
+            read_write_storage_textures:copy input.read_write_storage_textures,
+            read_write_storage_buffers:copy input.read_write_storage_buffers,
+            uniform_buffers:copy input.uniform_buffers,
+            threads_x:copy input.threads_x,
+            threads_y:copy input.threads_y,
+            threads_z:copy input.threads_z,
+            name:data
         )
         if formats.msl {
-            if let code = program.msl {
+            if let code = input.msl {
                 var bytes = decode_shader(code)
                 return ComputePipeline(self, Types.ShaderFormat.msl, @bytes[0:bytes.count()], settings)
             }
         }
         if formats.dxil {
-            if let code = program.dxil {
+            if let code = input.dxil {
                 var bytes = decode_shader(code)
                 return ComputePipeline(self, Types.ShaderFormat.dxil, @bytes[0:bytes.count()], settings)
             }
         }
         if formats.spirv {
-            if let code = program.spirv {
+            if let code = input.spirv {
                 var bytes = decode_shader(code)
                 return ComputePipeline(self, Types.ShaderFormat.spirv, @bytes[0:bytes.count()], settings)
             }

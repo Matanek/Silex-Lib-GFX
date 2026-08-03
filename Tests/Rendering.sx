@@ -51,6 +51,23 @@ struct TwoDProbe {
     var transient_slots:int
 }
 
+struct RenderSpin { let radians:float }
+
+func update_renderable_query(
+    query:ECS.Query<(@RenderSpin, &Transform.Transform3D)>
+) {
+    for (spin, transform) in query {
+        let delta = Math.Quat.angle_axis(spin.radians, Math.Vec3.up())
+        let rotated = transform.rotation.multiply(delta)
+        transform.rotation = rotated.normalized()
+    }
+}
+
+func touch_render_world(world:&ECS.World) {
+    let entities = world.entities()
+    assert(entities.count() == 6)
+}
+
 func create_cameras(world:&ECS.World) {
     var camera_2d = ECS.EntityRecipe()
         ..with(Transform.Transform2D())
@@ -83,6 +100,7 @@ func create_scene(
         ..with(Transform.Transform3D())
         ..with(Mesh.Mesh3D(cube))
         ..with(Mesh.Material3D(Material.Simple(Color.indigo_500())))
+        ..with(RenderSpin(radians:0.01))
     world.spawn(mesh)
 
     var sprite_2d = ECS.EntityRecipe()
@@ -190,6 +208,8 @@ test "compose retained 3D post-process and 2D through the FrameGraph" {
     application.install(Rendering3DPlugin())
     application.add_system(Bootstrap.Schedule.startup, create_cameras)
     application.add_system(Bootstrap.Schedule.startup, create_scene)
+    application.add_system(Bootstrap.Schedule.update, touch_render_world)
+    application.add_system(Bootstrap.Schedule.update, update_renderable_query)
     application.add_after_system(Bootstrap.Schedule.render, inspect_renderer)
     assert(application.run() == 0)
 

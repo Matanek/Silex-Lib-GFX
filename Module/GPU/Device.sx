@@ -142,20 +142,20 @@ public class Device {
         return sdl_set_gpu_allowed_frames_in_flight(C.pointer_bits(self.handle), count as uint32) != 0
     }
 
-    public func supports(format:Types.TextureFormat, usage:Types.TextureUsage, type:Types.TextureType = Types.TextureType.texture_2d) bool {
+    public func supports(feature:Types.TextureFormat, options:Types.TextureUsage, type:Types.TextureType = Types.TextureType.texture_2d) bool {
         return sdl_gpu_texture_supports_format(
             C.pointer_bits(self.handle),
-            format.raw_value as int32,
+            feature.raw_value as int32,
             type.raw_value as int32,
-            Types.texture_usage_flags(usage)
+            Types.texture_usage_flags(options)
         ) != 0
     }
 
-    public func supports(format:Types.TextureFormat, samples:Types.Samples) bool {
+    public func supports(feature:Types.TextureFormat, options:Types.Samples) bool {
         return sdl_gpu_texture_supports_sample_count(
             C.pointer_bits(self.handle),
-            format.raw_value as int32,
-            samples.raw_value as int32
+            feature.raw_value as int32,
+            options.raw_value as int32
         ) != 0
     }
 
@@ -219,15 +219,15 @@ public class Surface {
     public func color_space() Types.ColorSpace { return required_color_space(self.current_color_space) }
     public func is_presentable() bool { return self.format() != Types.TextureFormat.invalid }
 
-    public func supports(mode:Types.PresentMode) bool {
+    public func supports(feature:Types.PresentMode) bool {
         return sdl_window_supports_gpu_present_mode(
-            C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), mode.raw_value as int32
+            C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), feature.raw_value as int32
         ) != 0
     }
 
-    public func supports(color_space:Types.ColorSpace) bool {
+    public func supports(feature:Types.ColorSpace) bool {
         return sdl_window_supports_gpu_swapchain_composition(
-            C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), color_space.raw_value as int32
+            C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), feature.raw_value as int32
         ) != 0
     }
 

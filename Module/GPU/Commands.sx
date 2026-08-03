@@ -144,19 +144,19 @@ public class CommandBuffer {
         }
     }
 
-    public func render(surface:@Surface, clear:Color = Color.black(), depth:DepthTarget? = null) RenderPass? {
+    public func render(target:@Surface, options:Color = Color.black(), depth:DepthTarget? = null) RenderPass? {
         self.require_available("begin a window render pass")
-        self.require_owner(surface.owner_handle())
+        self.require_owner(target.owner_handle())
         var texture:uint = 0
         var width:uint32 = 0
         var height:uint32 = 0
         require_gpu_action(sdl_wait_and_acquire_gpu_swapchain_texture(
-            C.pointer_bits(self.handle), C.pointer_bits(surface.native_window()),
+            C.pointer_bits(self.handle), C.pointer_bits(target.native_window()),
             C.mutable_pointer(texture), C.mutable_pointer(width), C.mutable_pointer(height)
         ) != 0, "acquire the next window image")
         if texture == 0 as uint { return null }
-        var target:uint[8]
-        encode_color_target_handle(texture, clear, C.address_bits(C.mutable_pointer(target)))
+        var color_target:uint[8]
+        encode_color_target_handle(texture, options, C.address_bits(C.mutable_pointer(color_target)))
         var native_depth:uint[4]
         var depth_address:uint = 0
         if var configured = depth {
@@ -164,7 +164,7 @@ public class CommandBuffer {
             depth_address = C.address_bits(C.mutable_pointer(native_depth))
             encode_depth_target(configured, depth_address)
         }
-        return self.begin_render(C.address_bits(C.mutable_pointer(target)), 1, depth_address, width, height)
+        return self.begin_render(C.address_bits(C.mutable_pointer(color_target)), 1, depth_address, width, height)
     }
 
     public func try_render(surface:@Surface, clear:Color = Color.black(), depth:DepthTarget? = null) RenderPass? {
@@ -204,26 +204,26 @@ public class CommandBuffer {
         return self.render(targets)
     }
 
-    public func render(targets:ColorTarget[], depth:DepthTarget? = null) RenderPass {
+    public func render(target:ColorTarget[], options:DepthTarget? = null) RenderPass {
         self.require_available("begin a render pass")
-        if targets.count() == 0 && depth == null { panic("GFX.GPU render pass requires a color or depth target") }
-        if targets.count() > 8 { panic("GFX.GPU render pass supports at most eight color targets") }
+        if target.count() == 0 && options == null { panic("GFX.GPU render pass requires a color or depth target") }
+        if target.count() > 8 { panic("GFX.GPU render pass supports at most eight color targets") }
         var native_targets:uint[64]
         var index = 0
-        while index < targets.count() {
-            var configured = targets[index]
+        while index < target.count() {
+            var configured = target[index]
             self.require_owner(required_texture(configured.texture).owner_handle())
             require_nonnegative(configured.mip_level, "color target mip level")
             require_nonnegative(configured.layer, "color target layer")
             require_nonnegative(configured.resolve_mip_level, "resolve target mip level")
             require_nonnegative(configured.resolve_layer, "resolve target layer")
             if var resolve = configured.resolve { self.require_owner(resolve.owner_handle()) }
-            encode_color_target(targets[index], C.address_bits(C.mutable_pointer(native_targets)) + (index * 64) as uint)
+            encode_color_target(target[index], C.address_bits(C.mutable_pointer(native_targets)) + (index * 64) as uint)
             index++
         }
         var native_depth:uint[4]
         var depth_address:uint = 0
-        if var configured = depth {
+        if var configured = options {
             self.require_owner(required_texture(configured.texture).owner_handle())
             require_nonnegative(configured.mip_level, "depth target mip level")
             require_nonnegative(configured.layer, "depth target layer")
@@ -232,7 +232,7 @@ public class CommandBuffer {
         }
         let handle = C.address_bits(sdl_begin_gpu_render_pass(
             C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(native_targets))),
-            targets.count() as uint32, C.pointer_bits(depth_address)
+            target.count() as uint32, C.pointer_bits(depth_address)
         ))
         if handle == 0 as uint { panic("GFX.GPU could not begin a render pass: " + gpu_error()) }
         self.pass_active = true
@@ -583,70 +583,70 @@ public class CopyPass {
     internal init(commands:CommandBuffer, handle:uint) { self.commands = commands; self.handle = handle; self.device_handle = commands.native_device() }
     drop { self.finish() }
 
-    public func upload(source:@TransferBuffer, destination:@Buffer, size:int, source_offset:int = 0, destination_offset:int = 0, cycle:bool = true) {
+    public func upload(source:@TransferBuffer, destination:@Buffer, extent:int, layout:int = 0, offset:int = 0, cycle:bool = true) {
         self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
         if source.direction() != Types.TransferDirection.upload { panic("GFX.GPU buffer upload requires an upload transfer buffer") }
-        require_range(source.size(), source_offset, size, "buffer upload source")
-        require_range(destination.size(), destination_offset, size, "buffer upload destination")
+        require_range(source.size(), layout, extent, "buffer upload source")
+        require_range(destination.size(), offset, extent, "buffer upload destination")
         var source_info:uint[2]; var destination_info:uint[2]
-        encode_transfer_location(source, source_offset, C.address_bits(C.mutable_pointer(source_info)))
-        encode_buffer_region(destination, destination_offset, size, C.address_bits(C.mutable_pointer(destination_info)))
+        encode_transfer_location(source, layout, C.address_bits(C.mutable_pointer(source_info)))
+        encode_buffer_region(destination, offset, extent, C.address_bits(C.mutable_pointer(destination_info)))
         sdl_upload_to_gpu_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), Types.native_bool(cycle))
     }
-    public func download(source:@Buffer, destination:@TransferBuffer, size:int, source_offset:int = 0, destination_offset:int = 0) {
+    public func download(source:@Buffer, destination:@TransferBuffer, extent:int, layout:int = 0, offset:int = 0) {
         self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
         if destination.direction() != Types.TransferDirection.download { panic("GFX.GPU buffer download requires a download transfer buffer") }
-        require_range(source.size(), source_offset, size, "buffer download source")
-        require_range(destination.size(), destination_offset, size, "buffer download destination")
+        require_range(source.size(), layout, extent, "buffer download source")
+        require_range(destination.size(), offset, extent, "buffer download destination")
         var source_info:uint[2]; var destination_info:uint[2]
-        encode_buffer_region(source, source_offset, size, C.address_bits(C.mutable_pointer(source_info)))
-        encode_transfer_location(destination, destination_offset, C.address_bits(C.mutable_pointer(destination_info)))
+        encode_buffer_region(source, layout, extent, C.address_bits(C.mutable_pointer(source_info)))
+        encode_transfer_location(destination, offset, C.address_bits(C.mutable_pointer(destination_info)))
         sdl_download_from_gpu_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))))
     }
-    public func copy(source:@Buffer, destination:@Buffer, size:int, source_offset:int = 0, destination_offset:int = 0, cycle:bool = true) {
+    public func copy(source:@Buffer, destination:@Buffer, extent:int, layout:int = 0, offset:int = 0, cycle:bool = true) {
         self.require_owner(source.owner_handle()); self.require_owner(destination.owner_handle())
-        require_range(source.size(), source_offset, size, "buffer copy source")
-        require_range(destination.size(), destination_offset, size, "buffer copy destination")
+        require_range(source.size(), layout, extent, "buffer copy source")
+        require_range(destination.size(), offset, extent, "buffer copy destination")
         var source_info:uint[2]; var destination_info:uint[2]
-        encode_buffer_location(source, source_offset, C.address_bits(C.mutable_pointer(source_info)))
-        encode_buffer_location(destination, destination_offset, C.address_bits(C.mutable_pointer(destination_info)))
-        sdl_copy_gpu_buffer_to_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), size as uint32, Types.native_bool(cycle))
+        encode_buffer_location(source, layout, C.address_bits(C.mutable_pointer(source_info)))
+        encode_buffer_location(destination, offset, C.address_bits(C.mutable_pointer(destination_info)))
+        sdl_copy_gpu_buffer_to_buffer(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), extent as uint32, Types.native_bool(cycle))
     }
-    public func upload(source:@TransferBuffer, destination:TextureRegion, pixels_per_row:int, rows_per_layer:int, source_offset:int = 0, cycle:bool = true) {
+    public func upload(source:@TransferBuffer, destination:TextureRegion, extent:int, layout:int, offset:int = 0, cycle:bool = true) {
         self.require_owner(source.owner_handle()); self.require_owner(required_texture(destination.texture).owner_handle())
         if source.direction() != Types.TransferDirection.upload { panic("GFX.GPU texture upload requires an upload transfer buffer") }
-        require_range(source.size(), source_offset, 0, "texture upload source")
+        require_range(source.size(), offset, 0, "texture upload source")
         require_texture_region(destination)
-        require_positive(pixels_per_row, "texture upload pixels per row")
-        require_positive(rows_per_layer, "texture upload rows per layer")
+        require_positive(extent, "texture upload pixels per row")
+        require_positive(layout, "texture upload rows per layer")
         var transfer:uint[3]; var region:uint[5]
-        encode_texture_transfer(source, source_offset, pixels_per_row, rows_per_layer, C.address_bits(C.mutable_pointer(transfer)))
+        encode_texture_transfer(source, offset, extent, layout, C.address_bits(C.mutable_pointer(transfer)))
         encode_texture_region(destination, C.address_bits(C.mutable_pointer(region)))
         sdl_upload_to_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(transfer))), C.pointer_bits(C.address_bits(C.mutable_pointer(region))), Types.native_bool(cycle))
     }
-    public func download(source:TextureRegion, destination:@TransferBuffer, pixels_per_row:int, rows_per_layer:int, destination_offset:int = 0) {
+    public func download(source:TextureRegion, destination:@TransferBuffer, extent:int, layout:int, offset:int = 0) {
         self.require_owner(required_texture(source.texture).owner_handle()); self.require_owner(destination.owner_handle())
         if destination.direction() != Types.TransferDirection.download { panic("GFX.GPU texture download requires a download transfer buffer") }
-        require_range(destination.size(), destination_offset, 0, "texture download destination")
+        require_range(destination.size(), offset, 0, "texture download destination")
         require_texture_region(source)
-        require_positive(pixels_per_row, "texture download pixels per row")
-        require_positive(rows_per_layer, "texture download rows per layer")
+        require_positive(extent, "texture download pixels per row")
+        require_positive(layout, "texture download rows per layer")
         var region:uint[5]; var transfer:uint[3]
         encode_texture_region(source, C.address_bits(C.mutable_pointer(region)))
-        encode_texture_transfer(destination, destination_offset, pixels_per_row, rows_per_layer, C.address_bits(C.mutable_pointer(transfer)))
+        encode_texture_transfer(destination, offset, extent, layout, C.address_bits(C.mutable_pointer(transfer)))
         sdl_download_from_gpu_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(region))), C.pointer_bits(C.address_bits(C.mutable_pointer(transfer))))
     }
-    public func copy(source:TextureLocation, destination:TextureLocation, width:int, height:int, depth:int = 1, cycle:bool = true) {
+    public func copy(source:TextureLocation, destination:TextureLocation, extent:int, layout:int, offset:int = 1, cycle:bool = true) {
         self.require_owner(required_texture(source.texture).owner_handle()); self.require_owner(required_texture(destination.texture).owner_handle())
         require_texture_location(source)
         require_texture_location(destination)
-        require_positive(width, "texture copy width")
-        require_positive(height, "texture copy height")
-        require_positive(depth, "texture copy depth")
+        require_positive(extent, "texture copy width")
+        require_positive(layout, "texture copy height")
+        require_positive(offset, "texture copy depth")
         var source_info:uint[4]; var destination_info:uint[4]
         encode_texture_location(source, C.address_bits(C.mutable_pointer(source_info)))
         encode_texture_location(destination, C.address_bits(C.mutable_pointer(destination_info)))
-        sdl_copy_gpu_texture_to_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), width as uint32, height as uint32, depth as uint32, Types.native_bool(cycle))
+        sdl_copy_gpu_texture_to_texture(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(source_info))), C.pointer_bits(C.address_bits(C.mutable_pointer(destination_info))), extent as uint32, layout as uint32, offset as uint32, Types.native_bool(cycle))
     }
     public func finish() {
         if self.handle == 0 as uint { return }

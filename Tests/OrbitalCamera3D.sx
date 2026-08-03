@@ -16,7 +16,7 @@ let sdl_delay = C.function<func(uint32) void>(
 )
 
 func push_mouse_wheel(y:float32) {
-    var storage:uint[16]
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     let address = C.address_bits(C.mutable_pointer(storage))
     let kind = C.store<uint32>(address, 0 as uint, 0x403 as uint32)
     let delta_x = C.store<float32>(address, 24 as uint, 0.0)

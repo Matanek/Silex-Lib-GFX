@@ -1,0 +1,67 @@
+use GFX.Bootstrap
+use GFX.ECS
+use GFX.ECS.Plugin as ECSPlugin
+
+struct Position { var value:int }
+struct Velocity { var value:int }
+struct Marker { let value:int }
+
+func read_position(query:ECS.Query<(@Position, @Marker)>) {}
+func observe_position(query:ECS.Query<(@Position, @Marker)>) {}
+func write_velocity(query:ECS.Query<(&Velocity, @Marker)>) {}
+func write_position(query:ECS.Query<(&Position, @Marker)>) {}
+func write_world(world:&ECS.World) {}
+func legacy(application:Bootstrap.Application) {}
+
+func inspect_plan(application:Bootstrap.Application) int {
+    assert(application.scheduler_plan_build_count() == 1)
+    assert(application.scheduler_stage_count(Bootstrap.Schedule.update, false) == 4)
+    assert(application.scheduler_stage_count(Bootstrap.Schedule.update, true) == 1)
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.update, false) == 5)
+    assert(application.scheduler_worker_system_count(Bootstrap.Schedule.update, true) == 1)
+    return 0
+}
+
+test "derive resource, component, World, and Application access descriptors" {
+    var application = Bootstrap.Application(1)
+    application.install(ECSPlugin())
+    if true {
+        var resources = application.resources()
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        var recipe = ECS.EntityRecipe()
+            ..with(Position(value:1))
+            ..with(Velocity(value:2))
+            ..with(Marker(value:3))
+        world.spawn(recipe)
+    }
+    application.add_system(Bootstrap.Schedule.update, read_position)
+    application.add_system(Bootstrap.Schedule.update, observe_position)
+    application.add_system(Bootstrap.Schedule.update, write_velocity)
+    application.add_system(Bootstrap.Schedule.update, write_position)
+    application.add_system(Bootstrap.Schedule.update, write_world)
+    application.add_system(Bootstrap.Schedule.update, legacy)
+    application.add_after_system(Bootstrap.Schedule.update, read_position)
+    application.with_runner(inspect_plan)
+    assert(application.run() == 0)
+}
+
+struct ChainLeft { var value:int }
+struct ChainRight { var value:int }
+
+func chain_first(left:&ChainLeft) {}
+func chain_middle(left:@ChainLeft, right:&ChainRight) {}
+func chain_last(right:@ChainRight) {}
+
+func inspect_chain(application:Bootstrap.Application) int {
+    assert(application.scheduler_stage_count(Bootstrap.Schedule.update, false) == 3)
+    return 0
+}
+
+test "preserve transitive registration dependencies between stages" {
+    var application = Bootstrap.Application(1)
+    application.add_system(Bootstrap.Schedule.update, chain_first)
+    application.add_system(Bootstrap.Schedule.update, chain_middle)
+    application.add_system(Bootstrap.Schedule.update, chain_last)
+    application.with_runner(inspect_chain)
+    assert(application.run() == 0)
+}

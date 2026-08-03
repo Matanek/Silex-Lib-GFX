@@ -49,7 +49,7 @@ internal class BufferSlot {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
         self.byte_count = resource.size()
-        self.resource = resource
+        self.resource = move resource
     }
     internal func native_handle() uint { return self.handle }
     internal func owner_handle() uint { return self.owner }
@@ -58,7 +58,8 @@ internal class BufferSlot {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
         self.byte_count = resource.size()
-        self.resource = resource
+        self.resource = null
+        self.resource = move resource
     }
 }
 
@@ -70,14 +71,15 @@ internal class TextureSlot {
     internal init(resource:GPU.Texture) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = move resource
     }
     internal func native_handle() uint { return self.handle }
     internal func owner_handle() uint { return self.owner }
     internal func update(resource:GPU.Texture) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = null
+        self.resource = move resource
     }
 }
 
@@ -89,14 +91,15 @@ internal class PipelineSlot {
     internal init(resource:GPU.GraphicsPipeline) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = move resource
     }
     internal func native_handle() uint { return self.handle }
     internal func owner_handle() uint { return self.owner }
     internal func update(resource:GPU.GraphicsPipeline) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = null
+        self.resource = move resource
     }
 }
 
@@ -108,14 +111,15 @@ internal class SamplerSlot {
     internal init(resource:GPU.Sampler) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = move resource
     }
     internal func native_handle() uint { return self.handle }
     internal func owner_handle() uint { return self.owner }
     internal func update(resource:GPU.Sampler) {
         self.handle = resource.native_handle()
         self.owner = resource.owner_handle()
-        self.resource = resource
+        self.resource = null
+        self.resource = move resource
     }
 }
 
@@ -350,7 +354,7 @@ internal class GPUCache {
             self.samplers.append(SamplerSlot(sprite_sampler))
             self.sprite_sampler_slot = self.samplers.count() - 1
         } else {
-            self.samplers[self.sprite_sampler_slot].update(sprite_sampler)
+            update_sampler(self.samplers, self.sprite_sampler_slot, sprite_sampler)
         }
         self.color_format = format
     }
@@ -412,8 +416,8 @@ internal class GPUCache {
             self.mesh_buffers.append(BufferSlot(index_buffer))
             self.meshes[entry_index].index_slot = self.mesh_buffers.count() - 1
         } else {
-            self.mesh_buffers[self.meshes[entry_index].vertex_slot].update(vertex)
-            self.mesh_buffers[self.meshes[entry_index].index_slot].update(index_buffer)
+            update_buffer(self.mesh_buffers, self.meshes[entry_index].vertex_slot, vertex)
+            update_buffer(self.mesh_buffers, self.meshes[entry_index].index_slot, index_buffer)
         }
         self.meshes[entry_index].index_count = draw.geometry.index_count()
         self.meshes[entry_index].revision = draw.revision
@@ -456,7 +460,7 @@ internal class GPUCache {
             self.image_textures.append(TextureSlot(texture))
             self.images[entry_index].texture_slot = self.image_textures.count() - 1
         } else {
-            self.image_textures[self.images[entry_index].texture_slot].update(texture)
+            update_texture(self.image_textures, self.images[entry_index].texture_slot, texture)
         }
         self.images[entry_index].revision = revision
         stats.record_upload()
@@ -488,6 +492,22 @@ internal func store_pipeline(pipelines:&PipelineSlot[], slot:int, pipeline:GPU.G
         pipelines.append(PipelineSlot(pipeline))
         return pipelines.count() - 1
     }
-    pipelines[slot].update(pipeline)
+    var stored:&PipelineSlot = &pipelines[slot]
+    stored.update(pipeline)
     return slot
+}
+
+internal func update_sampler(samplers:&SamplerSlot[], slot:int, sampler:GPU.Sampler) {
+    var stored:&SamplerSlot = &samplers[slot]
+    stored.update(sampler)
+}
+
+internal func update_buffer(buffers:&BufferSlot[], slot:int, buffer:GPU.Buffer) {
+    var stored:&BufferSlot = &buffers[slot]
+    stored.update(buffer)
+}
+
+internal func update_texture(textures:&TextureSlot[], slot:int, texture:GPU.Texture) {
+    var stored:&TextureSlot = &textures[slot]
+    stored.update(texture)
 }

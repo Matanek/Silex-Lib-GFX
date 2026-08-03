@@ -39,8 +39,8 @@ first within their camera kind.
 
 An `EntityRecipe` collects every initial component before the entity becomes
 visible in the world. A recipe is consumed by one `World.spawn` call. This
-atomic boundary can later be shared by deferred commands and archetype-aware
-storage without changing scene construction code.
+atomic boundary is shared by deferred commands and archetype-aware storage
+without changing scene construction code.
 
 Use `World.insert(entity, component)` only to add or replace a component on an
 already living entity. `World.update<T>(entity, callback)` mutates a typed
@@ -89,11 +89,42 @@ func expire(
 }
 ```
 
-`Commands.spawn(recipe)` and `Commands.destroy(entity)` preserve submission
-order and are applied in `post_update`. Structural changes therefore never
-invalidate an active query. The query is specialized by the compiler and walks
-the world's typed component slots directly: it allocates no entity list and
-performs no string, hash, or reflective component lookup in the loop.
+`Commands.spawn(recipe)`, `Commands.destroy(entity)`,
+`Commands.insert(entity, component)`, and `Commands.remove<T>(entity)` preserve
+submission order and are applied in `post_update`. Structural changes therefore
+never invalidate an active query. A command targeting an entity destroyed by an
+earlier command is ignored.
+
+The compiler may split a sufficiently large query loop into disjoint row
+intervals when each iteration only reads `@T`, mutates the current entity's
+`&T`, or records deferred commands. `continue` keeps that optimization
+available. A `break`, a return from the loop, an outer accumulation, or an
+effect whose ordering matters keeps the loop sequential and preserves its
+ordinary result. Command order is identical in both modes; worker completion
+order is not observable.
+
+This scheduling remains internal: application code never names a chunk,
+worker, range, or command writer. The query is specialized by the compiler and
+walks matching archetypes directly; it allocates no entity list and performs no
+string, hash, or reflective component lookup in the entity loop.
+
+## Storage and identity guarantees
+
+`World` keeps a generational entity table, an archetype index, and one dense
+component column per concrete component type. A sparse entity-index table gives
+constant-time access to a component; removal fills the hole with the last dense
+value. Adding or removing a component only moves the entity between archetype
+membership lists—the component columns stay dense.
+
+Destroyed entity slots are reused, but their generation changes. A stale
+`Entity` consequently never becomes alive again and cannot address the
+components of its replacement. Spawning a recipe containing the same component
+type more than once keeps the latest value and still creates a single archetype
+membership.
+
+These details are internal. The stable surface remains `Entity`, `World`,
+`EntityRecipe`, `Query`, and `Commands`, so the storage strategy and future
+query caching can evolve without changing scene or system code.
 
 `Plugins.ECS` installs both `World` and `Commands`. `Plugins.Rendering` also
 installs `GFX.Time`; its `delta_seconds` value is advanced once in `pre_update`,

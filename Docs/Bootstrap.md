@@ -164,10 +164,23 @@ while running:
 shutdown -> finalize
 ```
 
-Systems keep registration order. `shutdown` and `finalize` reverse that order,
-so a dependent plugin is dismantled before the dependency it installed.
-`add_after_system` creates a second group that runs after the ordinary systems
-of the same schedule. A custom runner may invoke `run_schedule` directly.
+Before the first schedule runs, GFX builds stable stages from the generated
+resource and component access lists. Systems with compatible reads and writes
+may overlap; a write conflict preserves their registration dependency. Two
+systems placed in the same stage have no guaranteed relative instant of
+execution, so externally observable effects must not rely on their accidental
+timing.
 
-The generated access list remains internal, so a future parallel scheduler can
-reason about read/write conflicts without changing system signatures.
+Calls and effects that are not proven worker-safe stay on the main thread.
+This includes unrestricted `Application` callbacks and the Window and GPU
+plugin systems. A main-thread system may still share a stage with compatible
+worker systems; the stage completes before the next one begins. Mutable
+`World` access conflicts with every ECS access, while resource and component
+types remain separate conflict domains.
+
+`shutdown` and `finalize` stay sequential and reverse registration order, so a
+dependent plugin is dismantled before the dependency it installed.
+`add_after_system` creates a second group that begins only after every ordinary
+stage of the same schedule. A custom runner may invoke `run_schedule` directly.
+The executor, stages and access descriptors remain private implementation
+details; system signatures and application setup do not expose jobs or fences.

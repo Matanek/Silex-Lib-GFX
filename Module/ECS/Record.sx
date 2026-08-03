@@ -1,43 +1,43 @@
-use GFX.Bootstrap.Resources
-
 internal class Record {
-    private let current_generation:int
+    private var current_generation:int
     private var alive:bool
-    private var component_store:Resources
+    private var archetype_index:int
+    private var archetype_row:int
 
-    internal init(generation:int, components:Resources) {
+    internal init() {
+        self.current_generation = 1
+        self.alive = false
+        self.archetype_index = -1
+        self.archetype_row = -1
+    }
+
+    internal init(generation:int) {
         self.current_generation = generation
         self.alive = true
-        self.component_store = components
+        self.archetype_index = -1
+        self.archetype_row = -1
     }
 
     internal func generation() int { return self.current_generation }
     internal func is_alive() bool { return self.alive }
 
-    internal func insert<T>(component:T) {
-        self.component_store.insert(component)
+    internal func location() (archetype:int, row:int) {
+        return (archetype:self.archetype_index, row:self.archetype_row)
     }
 
-    internal func has<T>() bool {
-        return self.component_store.has<T>()
+    internal func place(archetype:int, row:int) {
+        self.archetype_index = archetype
+        self.archetype_row = row
     }
 
-    internal func get<T>() @T {
-        return self.component_store.get<T>()
-    }
-
-    internal func update<T>(callback:func(&T)) {
-        var component:&T = self.component_store.get_mut<T>()
-        callback(component)
-    }
-
-    internal func remove<T>() T? {
-        return self.component_store.remove<T>()
+    internal func revive() {
+        self.alive = true
     }
 
     internal func destroy() {
-        if !self.alive { return }
-        self.component_store.clear()
         self.alive = false
+        self.archetype_index = -1
+        self.archetype_row = -1
+        self.current_generation++
     }
 }
