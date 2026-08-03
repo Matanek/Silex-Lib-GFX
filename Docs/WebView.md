@@ -37,13 +37,41 @@ the executable and records the source file as a compilation-cache dependency.
 they associate that text with a logical path and media type.
 
 Logical paths begin with `/` and identify assets inside the embedded site. The
-general `Asset(text, path, media_type)` initializer remains available for JSON,
-SVG, or another textual media type.
+general `Asset(text, path, media_type)` initializer accepts a `WebView.MediaType`
+for JSON, SVG, or another textual media type:
 
-The current macOS implementation assembles the entry HTML and its CSS and
-JavaScript assets into one self-contained document before loading it through
-WKWebView. The source directory is not distributed beside the executable.
-Binary images and fonts are not part of this first textual contract.
+```sx
+let manifest = WebView.Asset(
+    content:embed_text("Web/manifest.json"),
+    path:"/manifest.json",
+    media_type:WebView.MediaType.json,
+)
+```
+
+`MediaType` names common web formats independently of their file extension.
+For example, `.jpg` and `.jpeg` both use `MediaType.jpeg`. Use
+`MediaType.custom("model/gltf-binary")` for a registered or application-specific
+type absent from the enum. `media_type_text` returns its standardized HTTP
+representation, and `Asset.media_type_text()` does the same for an asset.
+
+Text and binary resources use the same generic `Asset` through overloaded
+`content` constructors:
+
+```sx
+site.add(WebView.Asset(
+    content:embed_bytes("Web/icon.png"),
+    path:"/icon.png",
+    media_type:WebView.MediaType.png,
+))
+```
+
+References such as `<img src="/icon.png">` and `url("/icon.png")` are replaced
+with self-contained data URLs when the document is assembled. SVG may use
+either `embed_text` or `embed_bytes`; raster images and fonts use `embed_bytes`.
+
+The current macOS implementation assembles the entry HTML and its embedded
+resources into one self-contained document before loading it through WKWebView.
+The source directory is not distributed beside the executable.
 
 `View` has no per-frame `update()` operation. WebKit owns layout, JavaScript,
 painting, and invalidation. The application only processes its ordinary GFX
@@ -107,6 +135,16 @@ for event in input.events() {
 
 `Settings.background` and `set_background(Color)` control the native window
 and WebView background. An opaque CSS background still takes precedence.
+
+The browser context menu is disabled by default, so embedded application
+interfaces do not expose native browser actions such as Reload. The HTML page
+may still handle the `contextmenu` event to present its own application menu.
+Enable the system browser menu explicitly when building a navigation or
+debugging surface:
+
+```sx
+let settings = WebView.Settings(context_menu:true)
+```
 
 Create, use, and destroy the window and its view on the main thread. `View`
 retains its `GFX.Window`, fills its content area, and follows resizing through

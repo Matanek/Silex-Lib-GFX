@@ -4,32 +4,127 @@ use STD.JSON
 use STD.Text.UTF8.bytes as utf8_bytes
 use Interop.C
 
+public enum MediaType {
+    html
+    css
+    javascript
+    plain_text
+    json
+    svg
+    png
+    jpeg
+    webp
+    gif
+    avif
+    bmp
+    icon
+    woff
+    woff2
+    truetype
+    opentype
+    wasm
+    pdf
+    binary
+    custom(str)
+}
+
+public func media_type_text(media_type:MediaType) str {
+    return match media_type {
+        html => "text/html; charset=utf-8"
+        css => "text/css; charset=utf-8"
+        javascript => "text/javascript; charset=utf-8"
+        plain_text => "text/plain; charset=utf-8"
+        json => "application/json"
+        svg => "image/svg+xml"
+        png => "image/png"
+        jpeg => "image/jpeg"
+        webp => "image/webp"
+        gif => "image/gif"
+        avif => "image/avif"
+        bmp => "image/bmp"
+        icon => "image/vnd.microsoft.icon"
+        woff => "font/woff"
+        woff2 => "font/woff2"
+        truetype => "font/ttf"
+        opentype => "font/otf"
+        wasm => "application/wasm"
+        pdf => "application/pdf"
+        binary => "application/octet-stream"
+        custom(value) => value
+    }
+}
+
+internal enum AssetContent {
+    empty
+    text(str)
+    bytes(uint8[])
+}
+
 public struct Asset {
     private let logical_path:str
-    private let media_type_value:str
-    private let embedded_text:str
+    private let media_type_value:MediaType
+    private let embedded_content:AssetContent
 
-    public init(text:str, path:str, media_type:str) {
+    public init(content:str, path:str, media_type:MediaType) {
         self.logical_path = path
         self.media_type_value = media_type
-        self.embedded_text = text
+        self.embedded_content = AssetContent.text(content)
+    }
+
+    public init(content:uint8[], path:str, media_type:MediaType) {
+        self.logical_path = path
+        self.media_type_value = media_type
+        self.embedded_content = AssetContent.bytes(content)
     }
 
     public static func html(text:str, path:str = "/index.html") Asset {
-        return Asset(text:text, path:path, media_type:"text/html; charset=utf-8")
+        return Asset(content:text, path:path, media_type:MediaType.html)
     }
 
     public static func css(text:str, path:str = "/style.css") Asset {
-        return Asset(text:text, path:path, media_type:"text/css; charset=utf-8")
+        return Asset(content:text, path:path, media_type:MediaType.css)
     }
 
     public static func javascript(text:str, path:str = "/app.js") Asset {
-        return Asset(text:text, path:path, media_type:"text/javascript; charset=utf-8")
+        return Asset(content:text, path:path, media_type:MediaType.javascript)
     }
 
     public func path() str { return self.logical_path }
-    public func media_type() str { return self.media_type_value }
-    public func text() str { return self.embedded_text }
+    public func media_type() MediaType { return self.media_type_value }
+    public func media_type_text() str { return media_type_text(self.media_type_value) }
+
+    public func text() str {
+        return match self.embedded_content {
+            empty => missing_asset_text()
+            text(value) => value
+            bytes(_) => missing_asset_text()
+        }
+    }
+
+    internal func is_text() bool {
+        return match self.embedded_content {
+            empty => false
+            text(_) => true
+            bytes(_) => false
+        }
+    }
+
+    internal func data() uint8[] {
+        return match self.embedded_content {
+            empty => empty_asset_data()
+            text(value) => utf8_bytes(value)
+            bytes(value) => value
+        }
+    }
+}
+
+internal func missing_asset_text() str {
+    panic("GFX.WebView.Asset contains bytes, not text")
+}
+
+internal func empty_asset_data() uint8[] {
+    let result:uint8[] = []
+    return result
 }
 
 public struct Site {
@@ -80,6 +175,7 @@ public enum Status {
 
 public struct Settings {
     var background:Color = Color(r:1.0, g:1.0, b:1.0, a:1.0)
+    var context_menu:bool = false
 }
 
 public struct Availability {
@@ -202,7 +298,7 @@ public class View {
         }
         var bridge = Bridge()
         let callback:func(uint, uint, uint, uint) void = receive_bridge_message
-        let document_value = document(site)
+        let document_value = document(site, settings)
         let handle = Platform.create(
             platform_window,
             document_value,
@@ -280,21 +376,106 @@ public class View {
     }
 }
 
-internal func document(site:Site) str {
+internal func document(site:Site, settings:Settings = Settings()) str {
     var result = site.entry().text() +
-        "\n<script>" + Platform.bridge_script() + bridge_script() + "</script>\n"
+        "\n<script>" + Platform.bridge_script() + bridge_script() +
+        context_menu_script(settings) + "</script>\n"
     for let asset in site.assets() {
         if asset.path() != site.entry().path() {
             let media_type = asset.media_type()
-            if media_type == "text/css" || media_type == "text/css; charset=utf-8" {
+            if asset.is_text() && is_css(media_type) {
                 result = result + "\n<style>\n" + asset.text() + "\n</style>\n"
             }
-            if media_type == "text/javascript" || media_type == "text/javascript; charset=utf-8" {
+            if asset.is_text() && is_javascript(media_type) {
                 result = result + "\n<script>\n" + asset.text() + "\n</script>\n"
             }
         }
     }
+    for let asset in site.assets() {
+        if asset.path() != site.entry().path() &&
+            (!asset.is_text() || (!is_css(asset.media_type()) && !is_javascript(asset.media_type()))) {
+            result = replace_all(result, asset.path(), data_uri(asset))
+        }
+    }
     return result
+}
+
+internal func data_uri(asset:Asset) str {
+    return "data:" + asset.media_type_text() + ";base64," + base64(asset.data())
+}
+
+internal func base64(values:uint8[]) str {
+    let alphabet = utf8_bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+    var output:uint8[] = []
+    var index = 0
+    while index < values.count() {
+        let first = values[index] as uint32
+        var second:uint32 = 0
+        var third:uint32 = 0
+        if index + 1 < values.count() { second = values[index + 1] as uint32 }
+        if index + 2 < values.count() { third = values[index + 2] as uint32 }
+        let value = (first << 16) + (second << 8) + third
+        output.append(alphabet[((value >> 18) & 63) as int])
+        output.append(alphabet[((value >> 12) & 63) as int])
+        if index + 1 < values.count() {
+            output.append(alphabet[((value >> 6) & 63) as int])
+        } else {
+            output.append(61 as uint8)
+        }
+        if index + 2 < values.count() {
+            output.append(alphabet[(value & 63) as int])
+        } else {
+            output.append(61 as uint8)
+        }
+        index += 3
+    }
+    return C.string(@output[0:output.count()])
+}
+
+internal func replace_all(text:str, pattern:str, replacement:str) str {
+    let input = utf8_bytes(text)
+    let searched = utf8_bytes(pattern)
+    if searched.count() == 0 { return text }
+    let inserted = utf8_bytes(replacement)
+    var output:uint8[] = []
+    var index = 0
+    while index < input.count() {
+        var matches = index + searched.count() <= input.count()
+        var offset = 0
+        while matches && offset < searched.count() {
+            if input[index + offset] != searched[offset] { matches = false }
+            offset++
+        }
+        if matches {
+            for byte in inserted { output.append(byte) }
+            index += searched.count()
+        } else {
+            output.append(input[index])
+            index++
+        }
+    }
+    return C.string(@output[0:output.count()])
+}
+
+internal func is_css(media_type:MediaType) bool {
+    return match media_type {
+        css => true
+        custom(value) => value == "text/css" || value == "text/css; charset=utf-8"
+        else => false
+    }
+}
+
+internal func is_javascript(media_type:MediaType) bool {
+    return match media_type {
+        javascript => true
+        custom(value) => value == "text/javascript" || value == "text/javascript; charset=utf-8"
+        else => false
+    }
+}
+
+internal func context_menu_script(settings:Settings) str {
+    if settings.context_menu { return "" }
+    return "document.addEventListener('contextmenu',event=>event.preventDefault(),{capture:true});"
 }
 
 func encode_messages(messages:Message[]) str {

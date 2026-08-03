@@ -28,23 +28,31 @@ test "attach a system WebView to a GFX window" {
     assert(view.status() == WebView.Status.ready)
 
     let message_count = 256
+    view.send("context-menu-state")
     for index in 0...message_count { view.send("ping", "$(index)") }
     assert(view.flush())
     assert(view.sent_batch_count() == 1)
 
     var received = 0
+    var context_menu_disabled = false
     var bridge_attempts = 0
-    while received < message_count && bridge_attempts < 500 {
+    while (received < message_count || !context_menu_disabled) && bridge_attempts < 500 {
         input.wait(4)
         input.update()
         for message in view.receive() {
-            assert(message.name == "pong")
-            assert(message.payload == "$(received)")
-            received++
+            if message.name == "context-menu-state" {
+                assert(message.payload == "disabled")
+                context_menu_disabled = true
+            } else {
+                assert(message.name == "pong")
+                assert(message.payload == "$(received)")
+                received++
+            }
         }
         bridge_attempts++
     }
     assert(received == message_count)
+    assert(context_menu_disabled)
     assert(view.received_batch_count() == 1)
 
     view.set_visible(false)

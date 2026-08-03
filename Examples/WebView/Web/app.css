@@ -11,6 +11,8 @@ body {
     display: grid;
     place-items: center;
     background: radial-gradient(circle at top, #ffffff, #ffe7a3 62%);
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 main {

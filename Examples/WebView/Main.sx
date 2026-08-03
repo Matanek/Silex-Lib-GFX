@@ -14,7 +14,7 @@ func main() {
         WebView.Asset.html(embed_text("Web/index.html"))
     )
     site.add(WebView.Asset.css(embed_text("Web/app.css"), path:"/app.css"))
-    site.add(WebView.Asset.javascript(embed_text("Web/app.js")))
+    site.add(WebView.Asset.javascript(embed_text("Web/app.js"), path:"/app.js"))
 
     var view = WebView.View(
         window,
