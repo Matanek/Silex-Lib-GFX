@@ -179,7 +179,7 @@ public class Surface {
 
     internal init(device:Device, window:Window, settings:SurfaceSettings) {
         let device_handle = device.native_handle()
-        let window_handle = window.presentation_handle()
+        let window_handle = window.native_handle()
         require_gpu_action(
             sdl_claim_window_for_gpu_device(C.pointer_bits(device_handle), C.pointer_bits(window_handle)) != 0,
             "attach the device to the window"

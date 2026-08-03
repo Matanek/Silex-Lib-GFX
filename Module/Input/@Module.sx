@@ -569,6 +569,13 @@ public class Input {
         self.current_state = state
     }
 
+    public func wait(timeout_milliseconds:int) {
+        if timeout_milliseconds < 0 || timeout_milliseconds > 2_147_483_647 {
+            panic("GFX.Input.wait requires a timeout between 0 and 2147483647 milliseconds")
+        }
+        Native.wait_for_event(timeout_milliseconds)
+    }
+
     internal func update_state(state:&State) {
         state.begin_frame()
         var watched:Event[] = []

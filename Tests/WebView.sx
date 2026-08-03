@@ -1,0 +1,69 @@
+use GFX.Window
+use GFX.Color
+use GFX.Input
+use GFX.WebView
+
+test "attach a system WebView to a GFX window" {
+    var window = Window(Window.Settings(
+        title:"GFX.WebView native smoke",
+        width:320,
+        height:240,
+        hidden:true
+    ))
+    var site = WebView.Site(
+        WebView.Asset.html(embed_text("WebView/Fixtures/index.html"))
+    )
+    site.add(WebView.Asset.css(embed_text("WebView/Fixtures/app.css"), path:"/app.css"))
+    site.add(WebView.Asset.javascript(embed_text("WebView/Fixtures/app.js")))
+
+    var view = WebView.View(window, site, WebView.Settings(background:Color.amber_100()))
+    var input = Input()
+    var ready_attempts = 0
+    while view.status() == WebView.Status.loading && ready_attempts < 250 {
+        input.wait(4)
+        input.update()
+        ready_attempts++
+    }
+    assert(view.is_visible())
+    assert(view.status() == WebView.Status.ready)
+
+    let message_count = 256
+    for index in 0...message_count { view.send("ping", "$(index)") }
+    assert(view.flush())
+    assert(view.sent_batch_count() == 1)
+
+    var received = 0
+    var bridge_attempts = 0
+    while received < message_count && bridge_attempts < 500 {
+        input.wait(4)
+        input.update()
+        for message in view.receive() {
+            assert(message.name == "pong")
+            assert(message.payload == "$(received)")
+            received++
+        }
+        bridge_attempts++
+    }
+    assert(received == message_count)
+    assert(view.received_batch_count() == 1)
+
+    view.set_visible(false)
+    assert(!view.is_visible())
+    view.set_visible(true)
+    view.set_background(Color.blue_100())
+    view.reload()
+    assert(view.status() == WebView.Status.loading || view.status() == WebView.Status.ready)
+
+    view.simulate_close_request()
+    input.update()
+    var received_close = false
+    for event in input.events() {
+        match event {
+            window_close_requested(request) => {
+                if request.window == window.id() { received_close = true }
+            }
+            else => {}
+        }
+    }
+    assert(received_close)
+}

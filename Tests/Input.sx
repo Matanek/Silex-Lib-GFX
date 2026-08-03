@@ -43,6 +43,7 @@ test "translate SDL events into input state" {
     push_window_event(0x8000, window_id.value, 0, 0)
     push_key_event(0x300, window_id.value, 4, 0x0041 as uint16, false, 42 as uint)
     push_window_event(0x210, window_id.value, 0, 0)
+    input.wait(0)
     input.update()
 
     assert(input.is_down(Input.Key.a))

@@ -162,6 +162,10 @@ public func poll_event() Events.Event? {
     return null
 }
 
+public func wait_for_event(timeout_milliseconds:int) {
+    let result = sdl_wait_event_timeout(C.pointer_bits(0 as uint), timeout_milliseconds as int32)
+}
+
 func display_event(address:uint, kind:uint32, timestamp:Events.Timestamp) Events.Event {
     let display = Display.Id(value:C.load<uint32>(address, 16 as uint))
     let plain = Events.DisplayEvent(display:display, timestamp:timestamp)
@@ -949,6 +953,7 @@ func function_key(value:int32) Keyboard.Key {
 }
 
 let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PollEvent")
+let sdl_wait_event_timeout = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_WaitEventTimeout")
 let sdl_get_global_mouse_state = C.function<func(C.MutablePointer<float32>, C.MutablePointer<float32>) uint32>(library:Boundary.SDL3, name:"SDL_GetGlobalMouseState")
 let sdl_get_mod_state = C.function<func() uint32>(library:Boundary.SDL3, name:"SDL_GetModState")
 let sdl_get_sensor_type = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetSensorTypeForID")

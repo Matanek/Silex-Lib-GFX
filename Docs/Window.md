@@ -50,6 +50,13 @@ one operation. Setters request bordered, resizable, always-on-top, focusable,
 opacity, mouse grab, keyboard grab and relative mouse mode independently.
 Opacity and progress values outside `[0.0, 1.0]` are rejected.
 
+`presentation_handle()` is the deliberate low-level escape hatch for packages
+that attach another system presentation layer to the window. It returns the
+active operating-system window or surface handle, never the private SDL
+handle. Its representation is platform-specific, remains owned by `Window`,
+and is valid only while that window is alive. Ordinary application code does
+not need it.
+
 Mouse confinement uses an optional local logical rectangle; `warp_mouse`
 places the pointer in local coordinates. Text input is explicitly started and
 stopped on a window. `TextInputSettings` describes content kind,

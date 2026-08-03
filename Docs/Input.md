@@ -4,6 +4,19 @@
 of each frame; every observer can then read the same ordered snapshot without
 consuming it.
 
+Direct event-driven applications can call `wait(timeout_milliseconds)` before
+`update()`. Waiting with a null event leaves the first queued event available
+for the following snapshot while yielding the platform runloop to native GUI
+components:
+
+```sx
+while running {
+    input.wait(16)
+    input.update()
+    // Inspect input.events().
+}
+```
+
 ```sx
 use GFX.Input
 

@@ -147,6 +147,23 @@ programs report the HLSL path directly, including errors originating in quoted
 Reflection supplies sampler, storage and uniform resource counts to SDL_GPU.
 The developer does not repeat those declarations in `ShaderSettings`.
 
+`GPU.ComputeProgram.hlsl` applies the same contract to a compute entry point.
+Reflection also supplies its thread-group dimensions.
+
+Silex records file sources and quoted `#include` files as compilation-cache
+dependencies. The embedded target variants are MSL on `macos-arm64`, SPIR-V
+on `linux-x64`, and DXIL plus SPIR-V on Windows. The application therefore
+does not ship Shadercross or compile shaders at runtime.
+
+An invalid file diagnostic is attached directly to the HLSL source:
+
+```text
+Shaders/World.hlsl:18:12: error: use of undeclared identifier 'camera'
+```
+
+For an inline source, the `.sx` call remains the primary location and the
+message carries the HLSL coordinates.
+
 The explicit path remains available for precompiled binaries, backend-specific
 MSL or any application that intentionally controls the SDL shader format:
 

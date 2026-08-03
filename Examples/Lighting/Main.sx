@@ -1,0 +1,87 @@
+use GFX
+use GFX.Plugins
+use GFX.ECS
+use STD.Math
+
+struct Rotator {
+    let radians_per_second:float
+}
+
+func rotate_entities(
+    time:@GFX.Time,
+    rotators:ECS.Query<(@Rotator, &GFX.Transform.Transform3D)>
+) {
+    for (rotator, transform) in rotators {
+        let rotation = Math.Quat.angle_axis(
+            rotator.radians_per_second * time.delta_seconds,
+            Math.Vec3.up()
+        )
+        let rotated = transform.rotation.multiply(rotation)
+        transform.rotation = rotated.normalized()
+    }
+}
+
+func create_geometry_ground(world:&GFX.ECS.World, meshes:&GFX.Assets.Meshes) {
+    let ground_mesh = meshes.add(
+        GFX.Geometry.Cube.make().translated(Math.Vec3(0.0, -0.5, 0.0))
+    )
+    var ground = GFX.ECS.EntityRecipe()
+        ..with(GFX.Transform.Transform3D(
+            Math.Vec3.zero(),
+            Math.Quat.identity(),
+            Math.Vec3(4.0, 0.3, 4.0)
+        ))
+        ..with(GFX.Mesh.Mesh3D(ground_mesh))
+        ..with(GFX.Mesh.Material3D(
+            GFX.Material.Simple(GFX.Color.bytes(125, 127, 118))
+        ))
+    world.spawn(ground)
+}
+
+func create_geometry_cube(world:&GFX.ECS.World, meshes:&GFX.Assets.Meshes) {
+    let cube_mesh = meshes.add(
+        GFX.Geometry.Cube.make().translated(Math.Vec3(0.0, 0.5, 0.0))
+    )
+    var cube = GFX.ECS.EntityRecipe()
+        ..with(GFX.Transform.Transform3D(
+            Math.Vec3.zero(),
+            Math.Quat.angle_axis(
+                Math.radians(22.0),
+                Math.Vec3.up()
+            )
+        ))
+        ..with(GFX.Mesh.Mesh3D(cube_mesh))
+        ..with(GFX.Mesh.Material3D(
+            GFX.Material.Simple(GFX.Color.bytes(218, 214, 196))
+        ))
+        ..with(Rotator(radians_per_second:Math.radians(45.0)))
+    world.spawn(cube)
+}
+
+func create_geometry(world:&GFX.ECS.World, meshes:&GFX.Assets.Meshes) {
+   create_geometry_ground(world, meshes)
+   create_geometry_cube(world, meshes)
+}
+
+func main() {
+    GFX.Application()
+        ..install(Plugins.Window(Plugins.Window.Settings()
+            ..title = "Silex Lighting"
+            ..width = 1280
+            ..height = 720
+        ))
+        ..install(Plugins.Rendering())
+        ..install(Plugins.OrbitalCamera3D(Plugins.OrbitalCamera3D.Settings()
+            ..target = Math.Vec3(0.0, 0.55, 0.0)
+            ..distance = 5.0
+            ..min_distance = 2.0
+            ..max_distance = 12.0
+            ..pitch = Math.radians(-18.0)
+            ..vertical_fov_radians = Math.radians(42.0)
+            ..near_plane = 0.05
+            ..far_plane = 80.0
+        ))
+        ..add_system(GFX.Schedule.startup, create_geometry)
+        ..add_system(GFX.Schedule.update, rotate_entities)
+        ..run()
+}

@@ -151,8 +151,10 @@ public class Window {
     }
 
     public func presentation_handle() uint {
-        return self.handle
+        return Platform.presentation_handle(self.handle)
     }
+
+    internal func native_handle() uint { return self.handle }
 
     public func title() str {
         return self.current_title

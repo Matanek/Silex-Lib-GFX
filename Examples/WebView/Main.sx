@@ -1,0 +1,56 @@
+use GFX.Window
+use GFX.Input
+use GFX.Color
+use GFX.WebView
+
+func main() {
+    var window = Window(Window.Settings(
+        title:"Silex GFX.WebView — Amber",
+        width:960,
+        height:640
+    ))
+    window.set_title("Silex GFX.WebView — Amber")
+    var site = WebView.Site(
+        WebView.Asset.html(embed_text("Web/index.html"))
+    )
+    site.add(WebView.Asset.css(embed_text("Web/app.css"), path:"/app.css"))
+    site.add(WebView.Asset.javascript(embed_text("Web/app.js")))
+
+    var view = WebView.View(
+        window,
+        site,
+        WebView.Settings(background:Color.amber_100())
+    )
+    window.show()
+    window.raise()
+    var input = Input()
+    var running = true
+    var loading = true
+    while running {
+        input.wait(16)
+        input.update()
+        if input.is_quit_requested() { running = false }
+        for event in input.events() {
+            match event {
+                window_close_requested(request) => {
+                    if request.window == window.id() { running = false }
+                }
+                else => {}
+            }
+        }
+
+        for message in view.receive() {
+            if message.name == "action" {
+                view.send("status", "Silex received: " + message.payload)
+            }
+        }
+        view.flush()
+
+        if loading {
+            let status = view.status()
+            if status == WebView.Status.ready {
+                loading = false
+            }
+        }
+    }
+}

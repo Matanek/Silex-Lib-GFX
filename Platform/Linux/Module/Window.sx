@@ -1,0 +1,35 @@
+use Interop.C
+use Interop.Boundary
+
+func presentation_handle(window:uint) uint {
+    let properties = sdl_get_window_properties(C.pointer_bits(window))
+    if properties == 0 { return 0 as uint }
+    let wayland = C.address_bits(sdl_get_pointer_property(
+        properties,
+        C.terminated_pointer("SDL.window.wayland.surface"),
+        C.pointer_bits(0 as uint)
+    ))
+    if wayland != 0 as uint { return wayland }
+    return sdl_get_number_property(
+        properties,
+        C.terminated_pointer("SDL.window.x11.window"),
+        0
+    ) as uint
+}
+
+let sdl_get_window_properties = C.function<func(C.Pointer<uint8>) uint32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowProperties"
+)
+
+let sdl_get_pointer_property = C.function<func(
+    uint32, C.Pointer<uint8>, C.Pointer<uint8>
+) C.Pointer<uint8> >(
+    library:Boundary.SDL3,
+    name:"SDL_GetPointerProperty"
+)
+
+let sdl_get_number_property = C.function<func(uint32, C.Pointer<uint8>, int) int>(
+    library:Boundary.SDL3,
+    name:"SDL_GetNumberProperty"
+)
