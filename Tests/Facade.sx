@@ -1,6 +1,6 @@
 test "load the GFX facade and child modules through qualified paths" {
     let color = GFX.Color.bytes(20, 21, 1)
-    let gpu = GFX.GPU.PluginSettings()
+    let gpu = GFX.Plugins.GPU.Settings()
     var application = GFX.Application()
     assert(color.r > 0.0)
     assert(gpu.present_on_start)

@@ -25,6 +25,18 @@ Qualified names prevent collisions with similarly named modules from another
 package. Precise imports remain available when local brevity is more useful,
 and a fully qualified GFX path may be used without any `use` declaration.
 
+Every configurable plugin exposes its configuration through its own `Settings`
+member, such as `Plugins.Window.Settings` or `Plugins.GPU.Settings`. The
+qualified name keeps the relationship visible, while an application that names
+the configuration repeatedly can introduce a local alias:
+
+```sx
+use GFX.Plugins.Window.Settings as WindowSettings
+
+let settings = WindowSettings()
+    ..title = "Viewer"
+```
+
 ## Define and install a plugin
 
 A plugin is an ordinary configured value conforming to `Bootstrap.Plugin`:

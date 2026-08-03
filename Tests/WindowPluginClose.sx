@@ -56,7 +56,7 @@ func stop_manually(
 
 test "close a window automatically" {
     Application()
-        ..install(WindowPlugin(Window.PluginSettings()
+        ..install(WindowPlugin(WindowPlugin.Settings()
             ..title = "Automatic close"
             ..hidden = true
         ))
@@ -66,7 +66,7 @@ test "close a window automatically" {
 
 test "observe a close request manually" {
     Application()
-        ..install(WindowPlugin(Window.PluginSettings()
+        ..install(WindowPlugin(WindowPlugin.Settings()
             ..title = "Manual close"
             ..hidden = true
             ..close_behavior = Window.PluginCloseBehavior.manual

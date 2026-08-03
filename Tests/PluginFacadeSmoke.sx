@@ -1,22 +1,23 @@
 use GFX
 use GFX.Plugins
-use GFX.Camera
-use GFX.GPU
+use GFX.Plugins.Window.Settings as WindowSettings
 use GFX.Window
 
 test "compose plugins through the public catalog" {
-    var settings = Window.PluginSettings()
+    var settings = WindowSettings()
         ..title = "Viewer"
         ..close_behavior = Window.PluginCloseBehavior.manual
     var application = GFX.Application()
         ..install(Plugins.Window(settings))
-        ..install(Plugins.GPU(GPU.PluginSettings()
+        ..install(Plugins.GPU(Plugins.GPU.Settings()
             ..present_on_start = false
             ..frame_interval_ms = 0
         ))
+        ..install(Plugins.Rendering(Plugins.Rendering.Settings()))
         ..install(Plugins.Rendering3D())
-        ..install(Plugins.OrbitalCamera3D(Camera.OrbitalPlugin3DSettings()))
+        ..install(Plugins.OrbitalCamera3D(Plugins.OrbitalCamera3D.Settings()))
     assert(application.has_plugin("GFX.Plugins.Window"))
+    assert(application.has_plugin("GFX.Plugins.Rendering"))
     assert(application.has_plugin("GFX.Plugins.Rendering3D"))
     assert(application.has_plugin("GFX.Plugins.OrbitalCamera3D"))
 }

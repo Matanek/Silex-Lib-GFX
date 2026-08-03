@@ -6,13 +6,12 @@ the same renderer and presentation frame.
 
 ```sx
 use GFX.Bootstrap.Application
-use GFX.Window
 use GFX.Plugins.Rendering2D as Rendering2DPlugin
 use GFX.Plugins.Rendering3D as Rendering3DPlugin
 use GFX.Plugins.Window as WindowPlugin
 
 Application()
-    ..install(WindowPlugin(Window.PluginSettings()
+    ..install(WindowPlugin(WindowPlugin.Settings()
         ..title = "Renderer"
     ))
     ..install(Rendering3DPlugin())

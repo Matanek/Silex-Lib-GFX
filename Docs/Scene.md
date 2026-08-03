@@ -142,11 +142,10 @@ target. Right-drag orbits, middle-drag pans, and the mouse wheel zooms.
 `PageUp` and `PageDown` provide continuous keyboard zoom.
 
 ```sx
-use GFX.Camera.OrbitalPlugin3DSettings
 use GFX.Plugins.OrbitalCamera3D as OrbitalCamera3DPlugin
 use STD.Math
 
-application.install(OrbitalCamera3DPlugin(OrbitalPlugin3DSettings()
+application.install(OrbitalCamera3DPlugin(OrbitalCamera3DPlugin.Settings()
     ..target = Math.Vec3(0.0, 0.55, 0.0)
     ..distance = 5.0
     ..min_distance = 2.0

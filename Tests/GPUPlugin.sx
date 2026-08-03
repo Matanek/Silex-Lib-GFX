@@ -58,13 +58,13 @@ test "install GPU presentation after configuring a window" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(Rendered(frames:0))
-    application.install(WindowPlugin(Window.PluginSettings()
+    application.install(WindowPlugin(WindowPlugin.Settings()
         ..title = "GPU plugin test"
         ..width = 64
         ..height = 64
         ..hidden = true
     ))
-    application.install(GPUPlugin(GPU.PluginSettings()
+    application.install(GPUPlugin(GPUPlugin.Settings()
         ..present_on_start = false
         ..frame_interval_ms = 0
     ))
@@ -76,7 +76,7 @@ test "install GPU presentation after configuring a window" {
 
 test "keep automatic window closing with an explicit window plugin" {
     Bootstrap.Application()
-        ..install(WindowPlugin(Window.PluginSettings()
+        ..install(WindowPlugin(WindowPlugin.Settings()
             ..title = "GPU close test"
             ..width = 64
             ..height = 64
@@ -91,7 +91,7 @@ test "use the explicitly installed window plugin" {
     var application = Bootstrap.Application()
     var resources = application.resources()
     resources.insert(WindowCount(value:0))
-    application.install(WindowPlugin(Window.PluginSettings()
+    application.install(WindowPlugin(WindowPlugin.Settings()
         ..title = "Configured GPU window"
         ..width = 64
         ..height = 64

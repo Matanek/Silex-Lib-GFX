@@ -1,0 +1,2 @@
+public use GFX.Window.Plugin as Window
+public use GFX.Window.PluginSettings as Settings

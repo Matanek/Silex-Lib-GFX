@@ -335,7 +335,7 @@ func render(device:@GPU.Device, surface:@GPU.Surface) {
 }
 
 Bootstrap.Application()
-    ..install(WindowPlugin(Window.PluginSettings()
+    ..install(WindowPlugin(WindowPlugin.Settings()
         ..title = "GPU frame"
     ))
     ..install(GPUPlugin())

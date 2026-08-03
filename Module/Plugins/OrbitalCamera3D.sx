@@ -1,0 +1,2 @@
+public use GFX.Camera.OrbitalPlugin3D as OrbitalCamera3D
+public use GFX.Camera.OrbitalPlugin3DSettings as Settings

@@ -89,7 +89,7 @@ stops the application.
 use GFX.Plugins
 use GFX.Window
 
-application.install(Plugins.Window(Window.PluginSettings()
+application.install(Plugins.Window(Plugins.Window.Settings()
     ..title = "Viewer"
     ..close_behavior = Window.PluginCloseBehavior.manual
 ))

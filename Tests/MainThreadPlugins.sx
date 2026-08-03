@@ -14,10 +14,10 @@ func inspect_main_thread_plugins(application:Bootstrap.Application) int {
 
 test "keep Window GPU and rendering systems on the main thread" {
     var application = Bootstrap.Application(1)
-    application.install(WindowPlugin(Window.PluginSettings()
+    application.install(WindowPlugin(WindowPlugin.Settings()
         ..hidden = true
     ))
-    application.install(GPUPlugin(GPU.PluginSettings()
+    application.install(GPUPlugin(GPUPlugin.Settings()
         ..present_on_start = false
         ..frame_interval_ms = 0
     ))

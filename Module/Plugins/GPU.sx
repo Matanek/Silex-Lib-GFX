@@ -1,0 +1,2 @@
+public use GFX.GPU.Plugin as GPU
+public use GFX.GPU.PluginSettings as Settings
