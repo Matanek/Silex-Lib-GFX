@@ -1,0 +1,40 @@
+use GFX.Application
+
+struct Time {
+    let delta:int
+}
+
+struct World {
+    var value:int
+}
+
+func update(time:@Time, world:&World) {
+    world.value += time.delta
+}
+
+func observe(first:@Time, second:@Time) {
+    assert(first.delta + second.delta == 4)
+}
+
+func no_dependencies() {}
+
+func run_once(application:Application) int {
+    application.run_schedule(Application.Schedule.update)
+    return 0
+}
+
+test "inject resources into systems" {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(Time(delta:2))
+    resources.insert(World(value:40))
+    application.add_system(Application.Schedule.update, update)
+    application.add_system(Application.Schedule.update, observe)
+    application.add_after_system(Application.Schedule.update, no_dependencies)
+    application.with_runner(run_once)
+    assert(application.run() == 0)
+    if true {
+        let world:@World = resources.get<World>()
+        assert(world.value == 42)
+    }
+}

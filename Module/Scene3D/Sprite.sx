@@ -1,0 +1,61 @@
+use GFX.Assets.ImageHandle as ImageHandle
+use GFX.Assets.ImageRegion as ImageRegion
+use GFX.Color
+use GFX.Scene3D.Sampling as Sampling
+use STD.Math
+
+public enum Billboard {
+    none
+    face_camera
+    face_camera_y
+}
+
+public struct Sprite {
+    var image:ImageHandle
+    var size:Math.Vec2
+    var pivot:Math.Vec2
+    var color:Color
+    var billboard:Billboard
+    var visible:bool
+    private var current_region:ImageRegion?
+    private var current_sampling:Sampling
+
+    public init(
+        image:ImageHandle = ImageHandle(),
+        size:Math.Vec2 = Math.Vec2(1.0),
+        pivot:Math.Vec2 = Math.Vec2(0.5),
+        color:Color = Color.white(),
+        billboard:Billboard = Billboard.face_camera,
+        visible:bool = true
+    ) {
+        self.image = image
+        self.size = size
+        self.pivot = pivot
+        self.color = color
+        self.billboard = billboard
+        self.visible = visible
+        self.current_region = null
+        self.current_sampling = Sampling.smooth
+    }
+
+    public func region() ImageRegion? { return self.current_region }
+    public func region(value:ImageRegion) { self.current_region = value }
+    public func sampling() Sampling { return self.current_sampling }
+    public func sampling(value:Sampling) { self.current_sampling = value }
+
+    internal func asset() ImageHandle { return self.image }
+    internal func sprite_size() Math.Vec2 { return self.size }
+    internal func sprite_pivot() Math.Vec2 { return self.pivot }
+    internal func tint() Color { return self.color }
+    internal func billboard_mode() int {
+        if self.billboard == Billboard.none { return 0 }
+        if self.billboard == Billboard.face_camera_y { return 2 }
+        return 1
+    }
+    internal func is_visible() bool { return self.visible }
+    internal func image_region() ImageRegion? { return self.current_region }
+    internal func sampling_mode() int {
+        if self.current_sampling == Sampling.pixelated { return 1 }
+        return 0
+    }
+}

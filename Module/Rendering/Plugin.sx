@@ -1,0 +1,46 @@
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+use GFX.GPU
+use GFX.GPU.Plugin as GPUPlugin
+use GFX.Rendering.Renderer
+
+public struct Settings {
+    var clear:GFX.Color = GFX.Color(r:0.055, g:0.075, b:0.105, a:1.0)
+}
+
+public struct Plugin:PluginProtocol {
+    private let settings:Settings
+
+    public init(settings:Settings = Settings()) { self.settings = settings }
+
+    func id() str { return "GFX.Rendering.Plugin" }
+
+    func build(application:Application) {
+        application.add_plugin(GPUPlugin())
+        application.resources().insert(Renderer(self.settings.clear))
+        application.add_after_system(Schedule.render, render_frame)
+        application.add_system(Schedule.shutdown, stop_renderer)
+    }
+}
+
+func render_frame(application:Application) {
+    var resources = application.resources()
+    var stored = resources.remove<Renderer>()
+    if var renderer = stored {
+        {
+            let device = resources.get<GPU.Device>()
+            let surface = resources.get<GPU.Surface>()
+            renderer.render(device, surface, application)
+        }
+        resources.insert(renderer)
+        return
+    }
+    panic("GFX.Rendering has no renderer")
+}
+
+func stop_renderer(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<Renderer>()
+    assert(removed != null)
+}

@@ -1,0 +1,21 @@
+use GFX.Application
+use GFX.WebView
+
+func handle_web_messages(view:&WebView.View) {
+    for message in view.receive() {
+        if message.name == "greet" {
+            view.send("greeting", "Hello, " + message.payload + "!")
+        }
+    }
+}
+
+func main() {
+    var site = WebView.Site.html(embed_text("EmbeddedFiles/index.html"))
+        ..add(WebView.Asset.css(embed_text("EmbeddedFiles/app.css"), path:"/app.css"))
+        ..add(WebView.Asset.javascript(embed_text("EmbeddedFiles/app.js"), path:"/app.js"))
+
+    Application()
+        ..add_plugin(WebView.Plugin(site))
+        ..add_system(Application.Schedule.update, handle_web_messages)
+        ..run()
+}

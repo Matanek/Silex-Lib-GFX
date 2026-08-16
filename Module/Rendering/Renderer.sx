@@ -1,0 +1,134 @@
+use GFX.Application
+use GFX.Color
+use GFX.FrameGraph
+use GFX.GPU
+use GFX.Rendering.Stats
+use GFX.Window
+
+internal struct RegisteredPass {
+    let name:str
+    let execute:func(@GPU.RenderPass, @Application)
+}
+
+public class Renderer {
+    private let clear:Color
+    private var frame_graph:FrameGraph
+    private let output:FrameGraph.Texture
+    private var depth:FrameGraph.Texture? = null
+    private var passes:RegisteredPass[]
+    private var current_stats:Stats
+    private var needs_depth:bool
+    private var physical_depth:GPU.Texture? = null
+    private var depth_width:int
+    private var depth_height:int
+
+    public init(clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)) {
+        var graph = FrameGraph()
+        self.output = graph.import_texture(
+            "GFX.Output",
+            FrameGraph.TextureDescriptor(
+                GPU.TextureFormat.invalid,
+                GPU.TextureUsage.as_color_target()
+            )
+        )
+        self.clear = clear
+        self.frame_graph = graph
+        self.passes = []
+        self.current_stats = Stats()
+        self.needs_depth = false
+        self.depth_width = 0
+        self.depth_height = 0
+    }
+
+    public func graph() FrameGraph { return self.frame_graph }
+    public func output_texture() FrameGraph.Texture { return self.output }
+    public func depth_texture() FrameGraph.Texture? { return self.depth }
+    public func stats() Stats { return self.current_stats }
+
+    public func add_pass(
+        name:str,
+        execute:func(@GPU.RenderPass, @Application),
+        depth:bool = false
+    ) FrameGraph.Pass {
+        let pass = self.frame_graph.add_pass(name)
+        self.frame_graph.read_write(pass, self.output)
+        if depth {
+            if self.depth == null {
+                self.depth = self.frame_graph.create_texture(
+                    "GFX.Depth",
+                    FrameGraph.TextureDescriptor(
+                        GPU.TextureFormat.depth16,
+                        GPU.TextureUsage.as_depth_target()
+                    )
+                )
+            }
+            if let target = self.depth { self.frame_graph.write(pass, target) }
+            self.needs_depth = true
+        }
+        self.passes.append(RegisteredPass(name:name, execute:execute))
+        return pass
+    }
+
+    internal func render(
+        device:@GPU.Device,
+        surface:@GPU.Surface,
+        application:Application
+    ) {
+        var graph = self.frame_graph
+        graph.require_compiled()
+        var depth_target:GPU.DepthTarget? = null
+        if self.needs_depth {
+            var window = application.resources().get<Window>()
+            let size = window.pixel_size()
+            self.ensure_depth(device, size.x as int, size.y as int)
+            if let texture = self.physical_depth {
+                depth_target = GPU.DepthTarget(
+                    texture:texture,
+                    clear_depth:1.0,
+                    depth_load:GPU.Load.clear,
+                    depth_store:GPU.Store.preserve,
+                    cycle:true
+                )
+            }
+        }
+        var commands = device.commands()
+        if var pass = commands.render(surface, self.clear, depth_target) {
+            var index = 0
+            while index < graph.plan_count() {
+                let name = graph.pass_name(graph.plan_pass(index))
+                let registered = self.require_pass(name)
+                registered.execute(pass, application)
+                index++
+            }
+            pass.finish()
+        }
+        commands.submit()
+        self.current_stats.record_frame(graph.plan_count())
+    }
+
+    private func ensure_depth(device:@GPU.Device, width:int, height:int) {
+        var resolved_width = width
+        var resolved_height = height
+        if resolved_width < 1 { resolved_width = 1 }
+        if resolved_height < 1 { resolved_height = 1 }
+        if self.physical_depth != null && self.depth_width == resolved_width &&
+            self.depth_height == resolved_height
+        {
+            return
+        }
+        self.physical_depth = device.texture(GPU.TextureSettings(
+            format:GPU.TextureFormat.depth16,
+            width:resolved_width,
+            height:resolved_height,
+            usage:GPU.TextureUsage.as_depth_target(),
+            name:"GFX frame depth"
+        ))
+        self.depth_width = resolved_width
+        self.depth_height = resolved_height
+    }
+
+    private func require_pass(name:str) RegisteredPass {
+        for pass in self.passes { if pass.name == name { return pass } }
+        panic("GFX.Rendering has no executor for FrameGraph pass '" + name + "'")
+    }
+}

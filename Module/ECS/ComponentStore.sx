@@ -1,0 +1,95 @@
+use GFX.ECS.ComponentPool.ComponentPool
+use GFX.ECS.Entity.Entity
+
+// Compiler-provided typed storage used only for ECS component pools.
+intrinsic class ComponentPools {
+    public func insert<T>(value:T)
+    public func has<T>() bool
+    public func get<T>() @T
+    public func get_mut<T>() &T
+    public func try_get<T>() @T?
+    public func try_get_mut<T>() &T?
+    public func remove<T>() T?
+    public func clear()
+}
+
+internal protocol ComponentKind {
+    func remove_from(resources:&ComponentPools, entity:Entity)
+}
+
+internal struct TypedComponentKind<T>:ComponentKind {
+    func remove_from(resources:&ComponentPools, entity:Entity) {
+        if !resources.has<ComponentPool<T>>() { return }
+        var pool:&ComponentPool<T> = resources.get_mut<ComponentPool<T>>()
+        pool.remove(entity)
+    }
+}
+
+internal struct ComponentStore {
+    private var resources:ComponentPools
+    private var kinds:ComponentKind[]
+
+    internal init() {
+        self.resources = ComponentPools()
+        self.kinds = []
+    }
+
+    internal func insert<T>(entity:Entity, component:T) int {
+        let id = self.ensure<T>()
+        var pool:&ComponentPool<T> = self.resources.get_mut<ComponentPool<T>>()
+        pool.insert(entity, component)
+        return id
+    }
+
+    internal func has<T>(entity:Entity) bool {
+        if !self.resources.has<ComponentPool<T>>() { return false }
+        let pool:@ComponentPool<T> = self.resources.get<ComponentPool<T>>()
+        return pool.has(entity)
+    }
+
+    internal func get<T>(entity:Entity) @self:T {
+        if !self.resources.has<ComponentPool<T>>() {
+            panic("GFX.ECS component type is not present in this world")
+        }
+        let pool:@ComponentPool<T> = self.resources.get<ComponentPool<T>>()
+        return pool.get(entity)
+    }
+
+    // Lowered by the compiler so a reference can retain ComponentStore
+    // provenance across the typed Resources slot and dense pool.
+    internal func get_mut<T>(entity:Entity) &self:T {
+        var pool:&ComponentPool<T> = self.resources.get_mut<ComponentPool<T>>()
+        return pool.get_mut(entity)
+    }
+
+    internal func update<T>(entity:Entity, callback:func(&T)) {
+        var component:&T = self.get_mut<T>(entity)
+        callback(component)
+    }
+
+    internal func remove<T>(entity:Entity) T? {
+        if !self.resources.has<ComponentPool<T>>() { return null }
+        var pool:&ComponentPool<T> = self.resources.get_mut<ComponentPool<T>>()
+        return pool.remove(entity)
+    }
+
+    internal func type_id<T>() int {
+        if !self.resources.has<ComponentPool<T>>() { return -1 }
+        let pool:@ComponentPool<T> = self.resources.get<ComponentPool<T>>()
+        return pool.id()
+    }
+
+    internal func remove_all(entity:Entity) {
+        var resources = self.resources
+        var kinds = self.kinds
+        for var kind in kinds { kind.remove_from(resources, entity) }
+    }
+
+    private func ensure<T>() int {
+        if let pool = self.resources.try_get<ComponentPool<T>>() { return pool.id() }
+        let id = self.kinds.count()
+        self.resources.insert(ComponentPool<T>(id))
+        self.kinds.append(TypedComponentKind<T>())
+        return id
+    }
+}

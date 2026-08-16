@@ -1,0 +1,32 @@
+use GFX.Canvas.Path.Path
+use GFX.Canvas.Shapes.Circle
+use GFX.Canvas.Shapes.Line
+use GFX.Canvas.Shapes.Rect
+use GFX.Canvas.Styles.Fill
+use GFX.Canvas.Styles.Stroke
+use GFX.Canvas.Styles.TextStyle
+use STD.Math
+
+public struct FillRect { public let shape:Rect; public let style:Fill }
+public struct StrokeRect { public let shape:Rect; public let style:Stroke }
+public struct FillCircle { public let shape:Circle; public let style:Fill }
+public struct StrokeCircle { public let shape:Circle; public let style:Stroke }
+public struct StrokeLine { public let shape:Line; public let style:Stroke }
+public struct FillPath { public var shape:Path; public let style:Fill }
+public struct StrokePath { public var shape:Path; public let style:Stroke }
+public struct Text {
+    public let value:str
+    public let position:Math.Vec2
+    public var style:TextStyle
+}
+
+public enum Command {
+    fill_rect(FillRect)
+    stroke_rect(StrokeRect)
+    fill_circle(FillCircle)
+    stroke_circle(StrokeCircle)
+    stroke_line(StrokeLine)
+    fill_path(FillPath)
+    stroke_path(StrokePath)
+    text(Text)
+}

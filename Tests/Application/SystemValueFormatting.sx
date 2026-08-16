@@ -1,0 +1,33 @@
+use GFX.Application
+use GFX.Color
+use STD.Math.Vec3
+
+struct FormattingConfig {
+    let color:Color
+    let vector:Vec3
+}
+
+func verify_formatting(config:@FormattingConfig) {
+    let color = config.color.to_str()
+    let vector = config.vector.to_str()
+    assert(color == "{ 0.25 0.5 0.75 1.0 }")
+    assert(vector == "{ 1.0 2.0 3.0 }")
+    print(color)
+    print(vector)
+}
+
+func run_once(application:Application) int {
+    application.run_schedule(Application.Schedule.startup)
+    return 0
+}
+
+test "format values inside injected application systems" {
+    var application = Application()
+    application.resources().insert(FormattingConfig(
+        color:Color(r:0.25, g:0.5, b:0.75, a:1.0),
+        vector:Vec3(1.0, 2.0, 3.0)
+    ))
+    application.add_system(Application.Schedule.startup, verify_formatting)
+    application.with_runner(run_once)
+    assert(application.run() == 0)
+}

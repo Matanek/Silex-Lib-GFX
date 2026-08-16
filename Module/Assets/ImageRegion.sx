@@ -1,0 +1,16 @@
+public struct ImageRegion {
+    public let x:int
+    public let y:int
+    public let width:int
+    public let height:int
+
+    public init(x:int, y:int, width:int, height:int) {
+        if x < 0 || y < 0 || width <= 0 || height <= 0 {
+            panic("GFX image region requires a non-negative origin and positive dimensions")
+        }
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}

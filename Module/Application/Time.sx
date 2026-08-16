@@ -1,0 +1,24 @@
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+use GFX.Application.FrameTime
+
+public struct Time:PluginProtocol {
+    func id() str { return "GFX.Application.Time" }
+
+    func build(application:Application) {
+        application.resources().insert(FrameTime())
+        application.add_system(Schedule.pre_update, advance_time)
+        application.add_system(Schedule.shutdown, stop_time)
+    }
+}
+
+func advance_time(time:&FrameTime) {
+    time.advance()
+}
+
+func stop_time(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<FrameTime>()
+    assert(removed != null)
+}

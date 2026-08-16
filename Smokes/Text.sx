@@ -1,0 +1,34 @@
+use Interop.C
+use Interop.Boundary
+
+let sdl_init = C.function<func(uint32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_Init"
+)
+
+let sdl_quit = C.function<func() void>(
+    library:Boundary.SDL3,
+    name:"SDL_Quit"
+)
+
+let ttf_init = C.function<func() int32>(
+    library:Boundary.SDL3_ttf,
+    name:"TTF_Init"
+)
+
+let ttf_quit = C.function<func() void>(
+    library:Boundary.SDL3_ttf,
+    name:"TTF_Quit"
+)
+
+func main() {
+    if sdl_init(0) == 0 {
+        panic("SDL3 could not initialize")
+    }
+    if ttf_init() == 0 {
+        sdl_quit()
+        panic("SDL3_ttf could not initialize")
+    }
+    ttf_quit()
+    sdl_quit()
+}

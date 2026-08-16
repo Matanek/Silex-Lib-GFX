@@ -1,0 +1,32 @@
+use GFX.Application
+
+struct RunnerProbe {
+    var started:bool
+}
+
+func startup(probe:&RunnerProbe) {
+    assert(!probe.started)
+    probe.started = true
+}
+
+func run_once(application:Application) int {
+    application.run_schedule(Application.Schedule.startup)
+    return 42
+}
+
+func verify_runner() {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(RunnerProbe(started:false))
+    application.add_system(Application.Schedule.startup, startup)
+    application.with_runner(run_once)
+    assert(application.run() == 42)
+    if true {
+        let probe:@RunnerProbe = resources.get<RunnerProbe>()
+        assert(probe.started)
+    }
+}
+
+test "replace the default runner" {
+    verify_runner()
+}

@@ -1,0 +1,30 @@
+use GFX.Application
+use GFX.Application.FramePacing
+use STD.Time.Stopwatch
+
+struct Frames {
+    var count:int
+}
+
+func count_frames(frames:&Frames, controller:&Application.Controller) {
+    frames.count++
+    if frames.count == 120 { controller.stop() }
+}
+
+test "pace an application without requiring a renderer" {
+    var stopwatch = Stopwatch()
+    stopwatch.start()
+
+    var application = Application()
+    application.resources().insert(Frames(count:0))
+    application
+        ..add_plugin(FramePacing(1_000))
+        ..add_system(Application.Schedule.update, count_frames)
+        ..run()
+
+    stopwatch.stop()
+    var resources = application.resources()
+    let frames:@Frames = resources.get<Frames>()
+    assert(frames.count == 120)
+    assert(stopwatch.get_elapsed_milliseconds() >= 100.0)
+}

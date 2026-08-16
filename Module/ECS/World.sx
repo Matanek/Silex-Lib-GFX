@@ -1,0 +1,236 @@
+use GFX.ECS.Archetype.Archetype
+use GFX.ECS.ComponentStore.ComponentStore
+use GFX.ECS.Entity.Entity
+use GFX.ECS.EntityRecipe.EntityRecipe
+use GFX.ECS.Record.Record
+
+public class World {
+    private var records:Record[]
+    private var free_indices:int[]
+    private var archetypes:Archetype[]
+    private var components:ComponentStore
+
+    public init() {
+        self.records = []
+        self.free_indices = []
+        self.archetypes = []
+        self.components = ComponentStore()
+    }
+
+    public func spawn(recipe:EntityRecipe) Entity {
+        let entity = self.reserve_entity()
+        var signature:int[] = []
+        var values = recipe.take_components()
+        for var value in values {
+            let component_id = value.apply(self.components, entity)
+            insert_unique_sorted(signature, component_id)
+        }
+        self.place(entity, signature)
+        return entity
+    }
+
+    public func destroy(entity:Entity) {
+        var record = self.require(entity)
+        let location = record.location()
+        self.detach(entity, location.archetype, location.row)
+        self.components.remove_all(entity)
+        record.destroy()
+        self.free_indices.append(entity.index)
+    }
+
+    public func is_alive(entity:Entity) bool {
+        if !entity.is_valid() || entity.index >= self.records.count() { return false }
+        var record = self.records[entity.index]
+        return record.is_alive() && record.generation() == entity.generation
+    }
+
+    public func entities() Entity[] {
+        var result:Entity[] = []
+        var archetypes = self.archetypes
+        for var archetype in archetypes {
+            for entity in archetype_entities(archetype) { result.append(entity) }
+        }
+        return result
+    }
+
+    public func insert<T>(entity:Entity, component:T) {
+        var record = self.require(entity)
+        let already_present = self.components.has<T>(entity)
+        let component_id = self.components.insert(entity, component)
+        if already_present { return }
+        var source = self.archetypes[record.location().archetype]
+        var signature = source.components()
+        insert_unique_sorted(signature, component_id)
+        let location = record.location()
+        self.move_to(entity, location.archetype, location.row, signature)
+    }
+
+    public func has<T>(entity:Entity) bool {
+        if !self.is_alive(entity) { return false }
+        return self.components.has<T>(entity)
+    }
+
+    public func get<T>(entity:Entity) @T {
+        self.require(entity)
+        return self.components.get<T>(entity)
+    }
+
+    public func update<T>(entity:Entity, callback:func(&T)) {
+        self.require(entity)
+        self.components.update<T>(entity, callback)
+    }
+
+    public func remove<T>(entity:Entity) T? {
+        var record = self.require(entity)
+        if !self.components.has<T>(entity) { return null }
+        let component_id = self.components.type_id<T>()
+        var source = self.archetypes[record.location().archetype]
+        var signature = without(source.components(), component_id)
+        var removed = self.components.remove<T>(entity)
+        let location = record.location()
+        self.move_to(entity, location.archetype, location.row, signature)
+        return removed
+    }
+
+    public func clear() {
+        var index = 0
+        while index < self.records.count() {
+            var record = self.records[index]
+            if record.is_alive() { self.destroy(Entity(index, record.generation())) }
+            index++
+        }
+        self.archetypes = []
+    }
+
+    drop { self.clear() }
+
+    // Compiler-facing query contract. These methods are internal so storage
+    // layout can evolve without changing ECS.Query or application code.
+    internal func query_component_id<T>() int { return self.components.type_id<T>() }
+    internal func query_archetype_count() int { return self.archetypes.count() }
+    internal func query_count(required:@int[]) int {
+        var count = 0
+        var archetypes = self.archetypes
+        for var archetype in archetypes {
+            if archetype.matches(required) { count += archetype.count() }
+        }
+        return count
+    }
+    internal func query_row_start(archetype:int, required:@int[], range_start:int) int {
+        var base = 0
+        var index = 0
+        while index < archetype {
+            if self.archetypes[index].matches(required) { base += self.archetypes[index].count() }
+            index++
+        }
+        if range_start <= base { return 0 }
+        let offset = range_start - base
+        let count = self.archetypes[archetype].count()
+        if offset > count { return count }
+        return offset
+    }
+    internal func query_row_end(archetype:int, required:@int[], range_end:int) int {
+        let count = self.archetypes[archetype].count()
+        if range_end < 0 { return count }
+        var base = 0
+        var index = 0
+        while index < archetype {
+            if self.archetypes[index].matches(required) { base += self.archetypes[index].count() }
+            index++
+        }
+        if range_end <= base { return 0 }
+        let offset = range_end - base
+        if offset > count { return count }
+        return offset
+    }
+    internal func query_matches(archetype:int, required:@int[]) bool {
+        var value = self.archetypes[archetype]
+        return value.matches(required)
+    }
+    internal func query_archetype_has<T>(archetype:int) bool {
+        let component = self.components.type_id<T>()
+        if component < 0 { return false }
+        var value = self.archetypes[archetype]
+        return value.has(component)
+    }
+    internal func query_entity_count(archetype:int) int {
+        var value = self.archetypes[archetype]
+        return value.count()
+    }
+    internal func query_entity(archetype:int, row:int) Entity {
+        var value = self.archetypes[archetype]
+        return value.entity(row)
+    }
+    internal func query_get<T>(entity:Entity) @self:T { return self.components.get<T>(entity) }
+    internal func query_get_mut<T>(entity:Entity) &self:T { return self.components.get_mut<T>(entity) }
+
+    private func reserve_entity() Entity {
+        if !self.free_indices.is_empty() {
+            let index = self.free_indices.take_last()
+            var record = self.records[index]
+            record.revive()
+            return Entity(index, record.generation())
+        }
+        let index = self.records.count()
+        var record = Record(1)
+        self.records.append(record)
+        return Entity(index, 1)
+    }
+
+    private func require(entity:Entity) Record {
+        if !self.is_alive(entity) { panic("GFX.ECS entity is not alive") }
+        return self.records[entity.index]
+    }
+
+    private func place(entity:Entity, signature:int[]) {
+        let archetype = self.find_or_create_archetype(signature)
+        var target = self.archetypes[archetype]
+        let row = target.append(entity)
+        var record = self.records[entity.index]
+        record.place(archetype, row)
+    }
+
+    private func move_to(entity:Entity, archetype:int, row:int, signature:int[]) {
+        self.detach(entity, archetype, row)
+        self.place(entity, signature)
+    }
+
+    private func detach(entity:Entity, archetype:int, row:int) {
+        var source = self.archetypes[archetype]
+        let moved = source.remove(row)
+        if let relocated = moved {
+            var record = self.records[relocated.index]
+            record.place(archetype, row)
+        }
+    }
+
+    private func find_or_create_archetype(signature:int[]) int {
+        var index = 0
+        while index < self.archetypes.count() {
+            if self.archetypes[index].is_exact(signature) { return index }
+            index++
+        }
+        self.archetypes.append(Archetype(signature))
+        return self.archetypes.count() - 1
+    }
+}
+
+func insert_unique_sorted(values:&int[], value:int) {
+    var index = 0
+    while index < values.count() && values[index] < value { index++ }
+    if index < values.count() && values[index] == value { return }
+    values.insert(index, value)
+}
+
+func without(values:@int[], removed:int) int[] {
+    var result:int[] = []
+    for value in values { if value != removed { result.append(value) } }
+    return result
+}
+
+func archetype_entities(archetype:Archetype) Entity[] {
+    var result:Entity[] = []
+    var index = 0
+    while index < archetype.count() { result.append(archetype.entity(index)); index++ }
+    return result
+}

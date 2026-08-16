@@ -1,0 +1,287 @@
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application
+use GFX.Application.Schedule
+use GFX.Assets.Image
+use GFX.Color
+use GFX.GPU
+use GFX.GPU.Plugin as GPUPlugin
+use GFX.Input.Plugin as InputPlugin
+use GFX.Window.Plugin as WindowPlugin
+use STD.Math
+
+public struct Settings {
+    var title:str
+    var width:int
+    var height:int
+    var background:Color
+    var smooth:bool
+
+    public init(
+        title:str = "GFX image viewer",
+        width:int = 0,
+        height:int = 0,
+        background:Color = Color.slate_950(),
+        smooth:bool = true
+    ) {
+        self.title = title
+        self.width = width
+        self.height = height
+        self.background = background
+        self.smooth = smooth
+    }
+}
+
+public class View {
+    private var current_image:Image
+    private var current_revision:int
+
+    public init(image:Image) {
+        self.current_image = image
+        self.current_revision = 1
+    }
+
+    public func image() @Image { return self.current_image }
+    public func revision() int { return self.current_revision }
+
+    public func replace(image:Image) {
+        self.current_image = image
+        self.current_revision++
+    }
+}
+
+class RenderState {
+    private var texture:GPU.Texture? = null
+    private var sampler:GPU.Sampler? = null
+    private var pipeline:GPU.GraphicsPipeline? = null
+    private let background:Color
+    private var uploaded_revision:int
+
+    internal init(
+        device:@GPU.Device,
+        surface:@GPU.Surface,
+        view:@View,
+        settings:Settings
+    ) {
+        let image = view.image()
+        var texture = image_texture(device, image)
+        upload_image(device, texture, image)
+        var filter = GPU.Filter.nearest
+        if settings.smooth { filter = GPU.Filter.linear }
+        var sampler = device.sampler(GPU.SamplerSettings(
+            min_filter:filter,
+            mag_filter:filter,
+            address_u:GPU.AddressMode.clamp_to_edge,
+            address_v:GPU.AddressMode.clamp_to_edge,
+            name:"GFX.Viewer sampler"
+        ))
+        let program = GPU.ShaderProgram.hlsl(file:"../Shaders/Viewer/Image.hlsl")
+        var targets:GPU.ColorTargetFormat[] = []
+        targets.append(GPU.ColorTargetFormat(format:surface.format()))
+        var pipeline = device.graphics_pipeline(
+            program,
+            GPU.GraphicsPipelineSettings(
+                color_targets:targets,
+                name:"GFX.Viewer image pipeline"
+            )
+        )
+        self.texture = texture
+        self.sampler = sampler
+        self.pipeline = pipeline
+        self.background = settings.background
+        self.uploaded_revision = view.revision()
+    }
+
+    internal func refresh(device:@GPU.Device, view:@View) {
+        if self.uploaded_revision == view.revision() { return }
+        let image = view.image()
+        var replace_texture = true
+        if let current = self.texture {
+            replace_texture = current.width() != image.width() || current.height() != image.height()
+        }
+        if replace_texture {
+            device.wait_until_idle()
+            self.texture = image_texture(device, image)
+        }
+        if let current = self.texture {
+            upload_image(device, current, image)
+            self.uploaded_revision = view.revision()
+            return
+        }
+        panic("GFX.Viewer has no image texture")
+    }
+
+    internal func draw(pass:&GPU.RenderPass, image:@Image) {
+        let drawable = pass.size()
+        let available_width = drawable.width as float
+        let available_height = drawable.height as float
+        let image_width = image.width() as float
+        let image_height = image.height() as float
+        var scale = Math.min(
+            available_width / image_width,
+            available_height / image_height
+        )
+        // An image viewer must preserve the image's pixels by default. The
+        // historical Viewer never enlarged a small image; doing so made the
+        // rasterized Drawing examples look aliased and hid their real output.
+        scale = Math.min(scale, 1.0)
+        let width = image_width * scale
+        let height = image_height * scale
+        pass.viewport(
+            (available_width - width) * 0.5,
+            (available_height - height) * 0.5,
+            width,
+            height
+        )
+        if let pipeline = self.pipeline {
+            if let texture = self.texture {
+                if let sampler = self.sampler {
+                    pass.bind(pipeline)
+                    pass.fragment_sampler(0, texture, sampler)
+                    pass.draw(6)
+                    return
+                }
+            }
+        }
+        panic("GFX.Viewer has no GPU presentation state")
+    }
+
+    internal func clear_color() Color { return self.background }
+}
+
+public struct Plugin:PluginProtocol {
+    private let initial_image:Image
+    private let settings:Settings
+
+    public init(image:Image, settings:Settings = Settings()) {
+        self.initial_image = image
+        self.settings = settings
+    }
+
+    func id() str { return "GFX.Viewer.Plugin" }
+
+    func build(application:Application) {
+        let width = viewer_extent(
+            self.settings.width,
+            self.initial_image.width(),
+            48,
+            320,
+            1280
+        )
+        let height = viewer_extent(
+            self.settings.height,
+            self.initial_image.height(),
+            48,
+            240,
+            800
+        )
+        application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = self.settings.title
+            ..width = width
+            ..height = height
+        ))
+        application.add_plugin(InputPlugin())
+        application.add_plugin(GPUPlugin(GPUPlugin.Settings()
+            ..present_on_start = false
+        ))
+        application.resources().insert(View(self.initial_image))
+        application.resources().insert(self.settings)
+        application.add_system(Schedule.startup, start_viewer)
+        application.add_system(Schedule.render, render_viewer)
+        application.add_system(Schedule.shutdown, stop_viewer)
+    }
+}
+
+public func show(
+    image:Image,
+    title:str = "GFX image viewer"
+) int {
+    var application = Application()
+    application.add_plugin(Plugin(image, Settings(title:title)))
+    return application.run()
+}
+
+func start_viewer(application:Application) {
+    var resources = application.resources()
+    let settings = resources.remove<Settings>()
+    if let configured = settings {
+        var state:RenderState? = null
+        {
+            let device = resources.get<GPU.Device>()
+            let surface = resources.get<GPU.Surface>()
+            let view = resources.get<View>()
+            state = RenderState(device, surface, view, configured)
+        }
+        if let ready = state {
+            resources.insert(ready)
+            return
+        }
+    }
+    panic("GFX.Viewer has no settings")
+}
+
+func render_viewer(
+    device:@GPU.Device,
+    surface:@GPU.Surface,
+    view:@View,
+    state:&RenderState
+) {
+    state.refresh(device, view)
+    var commands = device.commands()
+    if var pass = commands.render(surface, state.clear_color()) {
+        state.draw(pass, view.image())
+        pass.finish()
+    }
+    commands.submit()
+}
+
+func stop_viewer(application:Application) {
+    var resources = application.resources()
+    var state = resources.remove<RenderState>()
+    assert(state != null)
+    var view = resources.remove<View>()
+    assert(view != null)
+}
+
+func image_texture(device:@GPU.Device, image:@Image) GPU.Texture {
+    return device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:image.width(),
+        height:image.height(),
+        usage:GPU.TextureUsage.for_sampling(),
+        name:"GFX.Viewer image"
+    ))
+}
+
+func upload_image(device:@GPU.Device, texture:GPU.Texture, image:@Image) {
+    var pixels = image.pixels()
+    var upload = device.upload_buffer(pixels.count(), "GFX.Viewer image upload")
+    upload.write(@pixels[0:pixels.count()])
+    var commands = device.commands()
+    var transfer = commands.copy()
+    transfer.upload(
+        upload,
+        GPU.TextureRegion(
+            texture:texture,
+            width:image.width(),
+            height:image.height()
+        ),
+        image.width(),
+        image.height()
+    )
+    transfer.finish()
+    commands.submit()
+}
+
+func viewer_extent(
+    requested:int,
+    content:int,
+    padding:int,
+    minimum:int,
+    maximum:int
+) int {
+    if requested > 0 { return requested }
+    let padded = content + padding
+    if padded < minimum { return minimum }
+    if padded > maximum { return maximum }
+    return padded
+}

@@ -1,0 +1,113 @@
+use GFX.Application
+
+struct FoundationPlugin:Application.Plugin {
+    func id() str {
+        return "Foundation"
+    }
+
+    func build(application:Application) {
+        application.add_system(Application.Schedule.startup, foundation_startup)
+        application.add_system(Application.Schedule.shutdown, foundation_shutdown)
+    }
+}
+
+struct GamePlugin:Application.Plugin {
+    let marker:int = 0
+
+    func id() str {
+        return "Game"
+    }
+
+    func build(application:Application) {
+        application.add_plugin(FoundationPlugin())
+        application.add_system(Application.Schedule.startup, game_startup)
+        application.add_after_system(Application.Schedule.startup, after_startup)
+        application.add_system(Application.Schedule.update, update)
+        application.add_system(Application.Schedule.shutdown, game_shutdown)
+        application.add_after_system(Application.Schedule.shutdown, after_shutdown)
+    }
+}
+
+struct ScheduleTrace {
+    var step:int
+}
+
+func foundation_startup(trace:&ScheduleTrace) {
+    assert(trace.step == 0)
+    trace.step = 1
+}
+
+func game_startup(trace:&ScheduleTrace) {
+    assert(trace.step == 1)
+    trace.step = 2
+}
+
+func after_startup(trace:&ScheduleTrace) {
+    assert(trace.step == 2)
+    trace.step = 3
+}
+
+func update(trace:&ScheduleTrace, controller:&Application.Controller) {
+    assert(trace.step == 3)
+    trace.step = 4
+    controller.stop()
+}
+
+func foundation_shutdown(trace:&ScheduleTrace) {
+    assert(trace.step == 5)
+    trace.step = 6
+}
+
+func game_shutdown(trace:&ScheduleTrace) {
+    assert(trace.step == 4)
+    trace.step = 5
+}
+
+func after_shutdown(trace:&ScheduleTrace) {
+    assert(trace.step == 6)
+    trace.step = 7
+}
+
+test "add and replace an application resource fluently" {
+    var application = Application()
+        ..add_resource(ScheduleTrace(step:1))
+        ..add_resource(ScheduleTrace(step:2))
+    let trace = application.resources().get<ScheduleTrace>()
+    assert(trace.step == 2)
+}
+
+func legacy_stop(application:Application) {
+    application.stop()
+}
+
+func verify_application() {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(ScheduleTrace(step:0))
+    application.add_plugin(GamePlugin())
+    application.add_plugin(GamePlugin())
+    assert(!resources.has<GamePlugin>())
+
+    var compatibility = Application()
+    compatibility.install(FoundationPlugin())
+    assert(compatibility.has_plugin("Foundation"))
+
+    assert(application.has_plugin("Foundation"))
+    assert(application.has_plugin("Game"))
+    let plugins = application.installed_plugins()
+    assert(plugins.count() == 2)
+    assert(application.run() == 0)
+    if true {
+        let trace:@ScheduleTrace = resources.get<ScheduleTrace>()
+        assert(trace.step == 7)
+    }
+
+    var legacy = Application()
+    legacy.add_system(Application.Schedule.update, legacy_stop)
+    assert(legacy.run() == 0)
+
+}
+
+test "compose plugins and schedules" {
+    verify_application()
+}

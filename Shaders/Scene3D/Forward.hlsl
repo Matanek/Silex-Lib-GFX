@@ -1,0 +1,398 @@
+struct VertexInput {
+    float3 position : TEXCOORD0;
+    float3 normal : TEXCOORD1;
+    float2 uv : TEXCOORD2;
+    float4 color : TEXCOORD3;
+};
+
+cbuffer DrawUniforms : register(b0, space1) {
+    float4x4 model;
+    float4x4 viewProjection;
+    float4 materialAlbedo;
+};
+
+cbuffer MaterialUniforms : register(b0, space3) {
+    float4 materialSurface;
+    float4 materialEmission;
+    float4 cameraPosition;
+};
+
+struct LightData {
+    float4 directionIntensity;
+    float4 colorType;
+    float4 positionReach;
+    float4 anglesFalloffSoftness;
+    float4 projection;
+};
+
+cbuffer LightingUniforms : register(b1, space3) {
+    float4 ambientLight;
+    float4 lightingSettings;
+    LightData lights[16];
+};
+
+cbuffer ShadowUniforms : register(b3, space3) {
+    float4 shadowSettings[16];
+    float4 shadowSlots[16];
+    float4x4 shadowMatrices[16];
+    float4 shadowAtlasRects[16];
+    float4 pointShadowAtlasRects[96];
+};
+
+cbuffer ToneMappingUniforms : register(b2, space3) {
+    float4 toneMappingSettings;
+    float4 toneMappingComparison;
+};
+
+Texture2D<float> shadowAtlas : register(t0, space2);
+SamplerState shadowSampler : register(s0, space2);
+
+struct VertexOutput {
+    float3 worldPosition : TEXCOORD0;
+    float3 worldNormal : TEXCOORD1;
+    float4 color : COLOR0;
+    float4 position : SV_Position;
+};
+
+VertexOutput vertex_main(VertexInput input) {
+    VertexOutput output;
+    const float4 world = mul(model, float4(input.position, 1.0));
+    output.position = mul(viewProjection, world);
+    output.worldPosition = world.xyz;
+    output.worldNormal = normalize(mul((float3x3)model, input.normal));
+    output.color = input.color * materialAlbedo;
+    return output;
+}
+
+static const float pbrPi = 3.14159265;
+
+float distribution_ggx(float3 normal, float3 halfDirection, float roughness) {
+    const float alpha = roughness * roughness;
+    const float alphaSquared = alpha * alpha;
+    const float normalHalfDot = saturate(dot(normal, halfDirection));
+    const float denominator = normalHalfDot * normalHalfDot *
+        (alphaSquared - 1.0) + 1.0;
+    return alphaSquared / max(pbrPi * denominator * denominator, 0.00001);
+}
+
+float geometry_schlick(float amount, float roughness) {
+    const float r = roughness + 1.0;
+    const float k = r * r / 8.0;
+    return amount / max(amount * (1.0 - k) + k, 0.00001);
+}
+
+float3 fresnel_schlick(float amount, float3 reflectance) {
+    return reflectance + (1.0 - reflectance) * pow(1.0 - amount, 5.0);
+}
+
+void projector_basis(float3 forward, out float3 right, out float3 up) {
+    const float3 reference = abs(dot(forward, float3(0.0, 1.0, 0.0))) > 0.95
+        ? float3(0.0, 0.0, 1.0)
+        : float3(0.0, 1.0, 0.0);
+    right = normalize(cross(forward, reference));
+    up = normalize(cross(right, forward));
+}
+
+float boundary(float distanceToBoundary, float softness) {
+    if (softness <= 0.0001) return distanceToBoundary >= 0.0 ? 1.0 : 0.0;
+    return smoothstep(0.0, softness, distanceToBoundary);
+}
+
+float distance_attenuation(float distanceToLight, float reach, float falloff) {
+    if (distanceToLight >= reach) return 0.0;
+    const float core = max(reach - falloff, 0.0);
+    if (falloff <= 0.0001 || distanceToLight <= core) return 1.0;
+    const float amount = saturate((reach - distanceToLight) / falloff);
+    return amount * amount * (3.0 - 2.0 * amount);
+}
+
+float projector_attenuation(LightData light, float3 delta) {
+    const float3 direction = normalize(light.directionIntensity.xyz);
+    const float axial = dot(delta, direction);
+    const float kind = light.colorType.w;
+    if (kind < 2.5) {
+        if (axial <= 0.0) return 0.0;
+        const float cone = dot(normalize(delta), direction);
+        return smoothstep(
+            light.anglesFalloffSoftness.y,
+            light.anglesFalloffSoftness.x,
+            cone
+        );
+    }
+    const float lengthValue = max(light.projection.z, 0.0001);
+    const float softness = max(light.anglesFalloffSoftness.w, 0.0);
+    const float falloff = max(light.anglesFalloffSoftness.z, 0.0);
+    const float depth = boundary(axial, softness * lengthValue) *
+        boundary(lengthValue + falloff - axial, falloff);
+    float3 right;
+    float3 up;
+    projector_basis(direction, right, up);
+    if (kind < 4.5) {
+        const float halfWidth = max(light.projection.x * 0.5, 0.0001);
+        const float halfHeight = max(light.projection.y * 0.5, 0.0001);
+        return depth *
+            boundary(halfWidth - abs(dot(delta, right)), softness * halfWidth) *
+            boundary(halfHeight - abs(dot(delta, up)), softness * halfHeight);
+    }
+    const float radius = max(light.projection.w, 0.0001);
+    const float radial = length(delta - direction * axial);
+    return depth * boundary(radius - radial, softness * radius);
+}
+
+int point_shadow_face(float3 direction) {
+    const float3 absoluteDirection = abs(direction);
+    if (absoluteDirection.x >= absoluteDirection.y && absoluteDirection.x >= absoluteDirection.z) {
+        return direction.x >= 0.0 ? 0 : 1;
+    }
+    if (absoluteDirection.y >= absoluteDirection.x && absoluteDirection.y >= absoluteDirection.z) {
+        return direction.y >= 0.0 ? 2 : 3;
+    }
+    return direction.z >= 0.0 ? 4 : 5;
+}
+
+float2 point_shadow_uv_for_face(float3 direction, int face) {
+    const float3 sampleDirection = normalize(direction);
+    const float3 absoluteDirection = abs(sampleDirection);
+    float2 uv = float2(0.0, 0.0);
+    if (face == 0) uv = float2(-sampleDirection.z, -sampleDirection.y) / absoluteDirection.x;
+    if (face == 1) uv = float2(sampleDirection.z, -sampleDirection.y) / absoluteDirection.x;
+    if (face == 2) uv = float2(sampleDirection.x, sampleDirection.z) / absoluteDirection.y;
+    if (face == 3) uv = float2(sampleDirection.x, -sampleDirection.z) / absoluteDirection.y;
+    if (face == 4) uv = float2(sampleDirection.x, -sampleDirection.y) / absoluteDirection.z;
+    if (face == 5) uv = float2(-sampleDirection.x, -sampleDirection.y) / absoluteDirection.z;
+    return uv * 0.9826972631 * 0.5 + 0.5;
+}
+
+float atlas_shadow_depth(float2 uv, float4 rect, float localTexel) {
+    const float2 atlasTexel = float2(localTexel * rect.x, localTexel * rect.y);
+    const float2 atlasMin = rect.zw + atlasTexel * 0.5;
+    const float2 atlasMax = rect.zw + rect.xy - atlasTexel * 0.5;
+    const float2 atlasUv = uv * rect.xy + rect.zw;
+    return shadowAtlas.Sample(shadowSampler, clamp(atlasUv, atlasMin, atlasMax));
+}
+
+float pcf_shadow(float2 uv, float4 rect, float receiverDepth, float texel, float softness) {
+    const float radius = max(1.0, 1.0 + softness * 2.0);
+    float visibility = 0.0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y) {
+        [unroll]
+        for (int x = -1; x <= 1; ++x) {
+            const float storedDepth = atlas_shadow_depth(
+                uv + float2(float(x), float(y)) * texel * radius,
+                rect,
+                texel
+            );
+            visibility += receiverDepth <= storedDepth ? 1.0 : 0.0;
+        }
+    }
+    return visibility / 9.0;
+}
+
+float point_face_shadow(
+    float3 direction,
+    int face,
+    int firstFace,
+    float receiverDepth,
+    float texel,
+    float softness
+) {
+    return pcf_shadow(
+        point_shadow_uv_for_face(direction, face),
+        pointShadowAtlasRects[firstFace + face],
+        receiverDepth,
+        texel,
+        softness
+    );
+}
+
+float shadow_visibility(
+    int lightIndex,
+    float3 worldPosition,
+    float3 normal,
+    float3 lightDirection
+) {
+    const float4 settings = shadowSettings[lightIndex];
+    if (settings.x < 0.5) return 1.0;
+    const int firstFace = (int)shadowSlots[lightIndex].x;
+    const float3 offsetPosition = worldPosition + normal * settings.w;
+    const float texel = max(settings.z, 0.00001);
+    const float normalLightDot = saturate(dot(normal, lightDirection));
+    if (settings.x > 1.5) {
+        const float3 toFragment = offsetPosition - lights[lightIndex].positionReach.xyz;
+        const float distanceToLight = length(toFragment);
+        const float range = max(lights[lightIndex].positionReach.w, 0.0001);
+        if (distanceToLight <= 0.0001 || distanceToLight >= range) return 1.0;
+        const float bias = max(
+            max(settings.y * (1.0 - normalLightDot), settings.y * 0.2),
+            texel * 4.0 / max(normalLightDot, 0.25)
+        );
+        const float receiverDepth = distanceToLight / range - bias;
+        const float softness = shadowSlots[lightIndex].w;
+        const float3 absoluteDirection = abs(toFragment);
+        const float dominant = max(
+            absoluteDirection.x,
+            max(absoluteDirection.y, absoluteDirection.z)
+        );
+        const float seamWidth = min(
+            texel * max(1.0, 1.0 + softness * 2.0) * 8.0,
+            0.05
+        );
+        const float adjacentThreshold = dominant * (1.0 - seamWidth);
+        const int dominantFace = point_shadow_face(toFragment);
+        float visibility = point_face_shadow(
+            toFragment,
+            dominantFace,
+            firstFace,
+            receiverDepth,
+            texel,
+            softness
+        );
+        // Both samples come from the valid 91-degree overlap. Preserve an
+        // occluder reported by either face; choosing the brightest sample
+        // leaks light as a thin line along cubemap seams.
+        if (dominantFace != 0 && dominantFace != 1
+            && absoluteDirection.x >= adjacentThreshold) {
+            const int face = toFragment.x >= 0.0 ? 0 : 1;
+            visibility = min(visibility, point_face_shadow(
+                toFragment, face, firstFace, receiverDepth, texel, softness
+            ));
+        }
+        if (dominantFace != 2 && dominantFace != 3
+            && absoluteDirection.y >= adjacentThreshold) {
+            const int face = toFragment.y >= 0.0 ? 2 : 3;
+            visibility = min(visibility, point_face_shadow(
+                toFragment, face, firstFace, receiverDepth, texel, softness
+            ));
+        }
+        if (dominantFace != 4 && dominantFace != 5
+            && absoluteDirection.z >= adjacentThreshold) {
+            const int face = toFragment.z >= 0.0 ? 4 : 5;
+            visibility = min(visibility, point_face_shadow(
+                toFragment, face, firstFace, receiverDepth, texel, softness
+            ));
+        }
+        return visibility;
+    }
+    const float4 clip = mul(shadowMatrices[lightIndex], float4(offsetPosition, 1.0));
+    if (clip.w <= 0.0001) return 1.0;
+    const float3 ndc = clip.xyz / clip.w;
+    const float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    const float4 rect = shadowAtlasRects[lightIndex];
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
+        || ndc.z < 0.0 || ndc.z > 1.0) return 1.0;
+    const float bias = max(settings.y * (1.0 - normalLightDot), settings.y);
+    return pcf_shadow(uv, rect, ndc.z - bias, texel, shadowSlots[lightIndex].w);
+}
+
+float3 evaluate_light(
+    int lightIndex,
+    LightData light,
+    float3 position,
+    float3 normal,
+    float3 viewDirection,
+    float3 albedo,
+    float metallic,
+    float roughness
+) {
+    float3 lightDirection;
+    float attenuation = 1.0;
+    const float kind = light.colorType.w;
+    if (kind < 0.5) {
+        lightDirection = normalize(-light.directionIntensity.xyz);
+    } else {
+        const float3 delta = light.positionReach.xyz - position;
+        const float distanceToLight = length(delta);
+        if (distanceToLight <= 0.0001) return 0.0;
+        lightDirection = delta / distanceToLight;
+        if (kind < 1.5) {
+            const float radius = max(light.projection.w, 0.0001);
+            const float fade = max(light.anglesFalloffSoftness.z, 0.0001);
+            attenuation = 1.0 - smoothstep(radius, radius + fade, distanceToLight);
+        } else if (kind < 2.5) {
+            attenuation = distance_attenuation(
+                distanceToLight,
+                light.positionReach.w,
+                light.anglesFalloffSoftness.z
+            ) * projector_attenuation(light, -delta);
+        } else {
+            attenuation = projector_attenuation(light, -delta);
+        }
+    }
+    const float normalLight = saturate(dot(normal, lightDirection));
+    if (normalLight <= 0.0 || attenuation <= 0.0) return 0.0;
+    const float3 halfDirection = normalize(viewDirection + lightDirection);
+    const float3 reflectance = lerp(0.04, albedo, metallic);
+    const float distribution = distribution_ggx(normal, halfDirection, roughness);
+    const float geometry = geometry_schlick(saturate(dot(normal, viewDirection)), roughness) *
+        geometry_schlick(normalLight, roughness);
+    const float3 fresnel = fresnel_schlick(
+        saturate(dot(halfDirection, viewDirection)),
+        reflectance
+    );
+    const float3 specular = distribution * geometry * fresnel /
+        max(4.0 * saturate(dot(normal, viewDirection)) * normalLight, 0.0001);
+    const float3 diffuse = (1.0 - fresnel) * (1.0 - metallic) * albedo / pbrPi;
+    const float visibility = shadow_visibility(
+        lightIndex,
+        position,
+        normal,
+        lightDirection
+    );
+    return (diffuse + specular) * light.colorType.rgb *
+        light.directionIntensity.w * normalLight * attenuation * visibility;
+}
+
+float3 tone_map(float3 color) {
+    color = max(color, 0.0) * exp2(toneMappingSettings.y);
+    if (toneMappingSettings.x < 0.5) return saturate(color);
+    if (toneMappingSettings.x < 1.5) {
+        const float whitePoint = toneMappingSettings.z;
+        const float luminance = dot(color, float3(0.2126, 0.7152, 0.0722));
+        if (luminance <= 0.000001) return 0.0;
+        float mappedLuminance;
+        if (whitePoint > 0.0) {
+            mappedLuminance = (luminance *
+                (1.0 + luminance / (whitePoint * whitePoint))) /
+                (1.0 + luminance);
+        } else {
+            mappedLuminance = luminance / (1.0 + luminance);
+        }
+        color = saturate(color * (mappedLuminance / luminance));
+    } else {
+        color = saturate((color * (2.51 * color + 0.03)) /
+            (color * (2.43 * color + 0.59) + 0.14));
+    }
+    const float3 low = color * 12.92;
+    const float3 high = 1.055 * pow(color, 1.0 / 2.4) - 0.055;
+    return float3(
+        color.r <= 0.0031308 ? low.r : high.r,
+        color.g <= 0.0031308 ? low.g : high.g,
+        color.b <= 0.0031308 ? low.b : high.b
+    );
+}
+
+float4 fragment_main(VertexOutput input) : SV_Target0 {
+    const float3 normal = normalize(input.worldNormal);
+    const float3 viewDirection = normalize(cameraPosition.xyz - input.worldPosition);
+    const float metallic = saturate(materialSurface.x);
+    const float roughness = clamp(materialSurface.y, 0.04, 1.0);
+    const float occlusion = saturate(materialSurface.z);
+    const float3 albedo = input.color.rgb;
+    float3 color = albedo * ambientLight.rgb * ambientLight.a * occlusion;
+    const int count = min((int)lightingSettings.x, 16);
+    for (int index = 0; index < count; ++index) {
+        color += evaluate_light(
+            index,
+            lights[index],
+            input.worldPosition,
+            normal,
+            viewDirection,
+            albedo,
+            metallic,
+            roughness
+        );
+    }
+    color += materialEmission.rgb * materialSurface.w;
+    return float4(tone_map(color), input.color.a);
+}

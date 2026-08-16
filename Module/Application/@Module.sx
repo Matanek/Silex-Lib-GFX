@@ -1,0 +1,598 @@
+use Interop.C
+use STD.Threading
+
+// Stores one application-owned value per concrete type. The compiler provides
+// the storage and implementations while this declaration defines the public API.
+public intrinsic class Resources {
+    // Inserts a resource or replaces the resource of the same type. Replacing a
+    // resource releases the previous value after active borrows have ended.
+    public func insert<T>(value:T)
+
+    // Retains a class value and consumes a structure value. Used internally so
+    // add_plugin gives stateful class plugins application lifetime.
+    internal func retain_class<T>(value:T)
+
+    // Returns whether a resource of type T is currently stored.
+    public func has<T>() bool
+
+    // Borrows the resource of type T for reading, or panics when it is absent.
+    public func get<T>() @T
+
+    // Borrows the resource of type T for mutation, or panics when it is absent.
+    public func get_mut<T>() &T
+
+    // Borrows the resource of type T for reading when it is present.
+    public func try_get<T>() @T?
+
+    // Borrows the resource of type T for mutation when it is present.
+    public func try_get_mut<T>() &T?
+
+    // Removes and returns the resource of type T, transferring ownership to the
+    // caller, or returns null when it is absent.
+    public func remove<T>() T?
+
+    // Removes every resource and releases their values in reverse insertion order.
+    public func clear()
+}
+
+public enum Schedule {
+    initialize
+    startup
+    pre_update
+    update
+    post_update
+    render
+    shutdown
+    finalize
+}
+
+public protocol Plugin {
+    func id() str
+    func build(application:Application)
+}
+
+class RegisteredSystem {
+    internal let schedule:Schedule
+    internal let after:bool
+    internal let callback:func(Application)
+    internal let typed_callback:func(Application, int)
+    internal let reads:str[]
+    internal let writes:str[]
+    internal let flags:uint
+
+    internal init(
+        schedule:Schedule,
+        after:bool,
+        callback:func(Application),
+        typed_callback:func(Application, int),
+        reads:str[],
+        writes:str[],
+        flags:uint
+    ) {
+        self.schedule = schedule
+        self.after = after
+        self.callback = callback
+        self.typed_callback = typed_callback
+        self.reads = reads
+        self.writes = writes
+        self.flags = flags
+    }
+
+    internal func has_flag(flag:uint) bool { return (self.flags & flag) != 0 }
+
+    internal func execute(application:Application, order:int) {
+        if self.has_flag(16) {
+            self.typed_callback(application, order)
+        } else {
+            self.callback(application)
+        }
+    }
+}
+
+class SystemStage {
+    internal var systems:int[]
+    internal init() {
+        self.systems = []
+    }
+}
+
+class SchedulePlan {
+    internal let schedule:Schedule
+    internal let after:bool
+    internal var stages:SystemStage[]
+
+    internal init(schedule:Schedule, after:bool) {
+        self.schedule = schedule
+        self.after = after
+        self.stages = []
+    }
+}
+
+struct SystemJob:Threading.Job {
+    let application_address:uint
+    var system:RegisteredSystem
+    let order:int
+
+    func execute() {
+        var application = C.object_from_address<Application>(self.application_address)
+        self.system.execute(application, self.order)
+    }
+}
+
+struct QueryJob:Threading.ParallelJob {
+    let application_address:uint
+    let system_order:int
+    let commands_address:uint
+    let callback:func(Application, int, int, int, uint);
+
+    func execute(start:int, end:int) {
+        var application = C.object_from_address<Application>(self.application_address)
+        self.callback(application, self.system_order, start, end, self.commands_address)
+    }
+}
+
+public class Controller {
+    private var running:bool
+
+    internal init() {
+        self.running = false
+    }
+
+    public func stop() {
+        self.running = false
+    }
+
+    internal func start() {
+        self.running = true
+    }
+
+    internal func is_running() bool {
+        return self.running
+    }
+}
+
+public class Application {
+    private var resource_store:Resources
+    private var registered_systems:RegisteredSystem[]
+    private var installed_plugin_ids:str[]
+    private var installing_plugins:str[]
+    private var current_runner:func(Application) int
+    private var configuration_locked:bool
+    private var executor:Threading.Executor
+    private var schedule_plans:SchedulePlan[]
+    private var schedule_plan_builds:int
+    private var query_local_dispatches:int
+    private var query_parallel_dispatches:int
+
+    public init() {
+        self.resource_store = Resources()
+        self.registered_systems = []
+        self.installed_plugin_ids = []
+        self.installing_plugins = []
+        self.current_runner = run_default
+        self.configuration_locked = false
+        self.executor = Threading.Executor()
+        self.schedule_plans = []
+        self.schedule_plan_builds = 0
+        self.query_local_dispatches = 0
+        self.query_parallel_dispatches = 0
+        self.resource_store.insert(Controller())
+    }
+
+    public init(worker_count:int) {
+        self.resource_store = Resources()
+        self.registered_systems = []
+        self.installed_plugin_ids = []
+        self.installing_plugins = []
+        self.current_runner = run_default
+        self.configuration_locked = false
+        self.executor = Threading.Executor(worker_count)
+        self.schedule_plans = []
+        self.schedule_plan_builds = 0
+        self.query_local_dispatches = 0
+        self.query_parallel_dispatches = 0
+        self.resource_store.insert(Controller())
+    }
+
+    public func resources() Resources {
+        return self.resource_store
+    }
+
+    public func add_resource<T>(value:T) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a resource after run")
+        }
+        self.resource_store.insert(move value)
+        return self
+    }
+
+    drop {
+        self.resource_store.clear()
+    }
+
+    public func add_plugin<T:Plugin>(plugin:T) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a plugin after run")
+        }
+
+        let id = plugin.id()
+        if contains(self.installed_plugin_ids, id) {
+            return self
+        }
+        if contains(self.installing_plugins, id) {
+            panic("Application plugin dependency cycle: " + id)
+        }
+
+        var installing = self.installing_plugins
+        installing.append(id)
+        self.installing_plugins = installing
+        plugin.build(self)
+        self.resource_store.retain_class(move plugin)
+        installing = self.installing_plugins
+        let completed = installing.take_last()
+        self.installing_plugins = installing
+        assert(completed == id)
+        var installed = self.installed_plugin_ids
+        installed.append(id)
+        self.installed_plugin_ids = installed
+        return self
+    }
+
+    // Compatibility alias. New code should use the canonical add_plugin name.
+    public func install<T:Plugin>(plugin:T) Application {
+        return self.add_plugin(plugin)
+    }
+
+    public func has_plugin(id:str) bool {
+        return contains(self.installed_plugin_ids, id)
+    }
+
+    public func installed_plugins() str[] {
+        return self.installed_plugin_ids
+    }
+
+    public func add_system(schedule:Schedule, callback:func(Application)) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a system after run")
+        }
+        var systems = self.registered_systems
+        systems.append(RegisteredSystem(
+            schedule:schedule,
+            after:false,
+            callback:callback,
+            typed_callback:ignore_typed_system,
+            reads:[],
+            writes:[],
+            flags:11 as uint
+        ))
+        self.registered_systems = systems
+        return self
+    }
+
+    public func add_system<System>(schedule:Schedule, callback:System) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    public func add_after_system(schedule:Schedule, callback:func(Application)) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a system after run")
+        }
+        var systems = self.registered_systems
+        systems.append(RegisteredSystem(
+            schedule:schedule,
+            after:true,
+            callback:callback,
+            typed_callback:ignore_typed_system,
+            reads:[],
+            writes:[],
+            flags:11 as uint
+        ))
+        self.registered_systems = systems
+        return self
+    }
+
+    public func add_after_system<System>(schedule:Schedule, callback:System) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    internal func __silex_add_system(
+        schedule:Schedule,
+        callback:func(Application, int),
+        after:bool,
+        reads:str[],
+        writes:str[],
+        flags:uint
+    ) Application {
+        if self.configuration_locked {
+            panic("Application cannot add a system after run")
+        }
+        var systems = self.registered_systems
+        systems.append(RegisteredSystem(
+            schedule:schedule,
+            after:after,
+            callback:ignore_application_system,
+            typed_callback:callback,
+            reads:reads,
+            writes:writes,
+            flags:flags + 16
+        ))
+        self.registered_systems = systems
+        return self
+    }
+
+    internal func __silex_run_query(
+        count:int,
+        system_order:int,
+        commands_address:uint,
+        callback:func(Application, int, int, int, uint)
+    ) {
+        if count < 64 {
+            self.query_local_dispatches++
+            callback(self, system_order, 0, count, commands_address)
+            return
+        }
+        self.query_parallel_dispatches++
+        self.executor.submit_parallel(
+            count,
+            QueryJob(
+                application_address:C.object_address(self),
+                system_order:system_order,
+                commands_address:commands_address,
+                callback:callback
+            )
+        ).complete()
+    }
+
+    public func with_runner(runner:func(Application) int) Application {
+        if self.configuration_locked {
+            panic("Application cannot replace its runner after run")
+        }
+        self.current_runner = runner
+        return self
+    }
+
+    public func run() int {
+        if self.configuration_locked {
+            panic("Application can only run once")
+        }
+        self.configuration_locked = true
+        self.build_schedule_plans()
+        return self.current_runner(self)
+    }
+
+    public func run_schedule(schedule:Schedule) {
+        let reversed = schedule == Schedule.shutdown || schedule == Schedule.finalize
+        if !reversed && self.configuration_locked {
+            self.run_plan(schedule, false)
+            self.run_plan(schedule, true)
+        } else {
+            self.run_systems(schedule, false, reversed)
+            self.run_systems(schedule, true, reversed)
+        }
+    }
+
+    public func stop() {
+        var resources = self.resource_store
+        var controller:&Controller = resources.get_mut<Controller>()
+        controller.stop()
+    }
+
+    public func is_running() bool {
+        var resources = self.resource_store
+        let controller:@Controller = resources.get<Controller>()
+        return controller.is_running()
+    }
+
+    internal func start() {
+        var resources = self.resource_store
+        var controller:&Controller = resources.get_mut<Controller>()
+        controller.start()
+    }
+
+    internal func scheduler_plan_build_count() int { return self.schedule_plan_builds }
+
+    internal func scheduler_stage_count(schedule:Schedule, after:bool) int {
+        for plan in self.schedule_plans {
+            if plan.schedule == schedule && plan.after == after { return plan.stages.count() }
+        }
+        return 0
+    }
+
+    internal func scheduler_worker_system_count(schedule:Schedule, after:bool) int {
+        var count = 0
+        for plan in self.schedule_plans {
+            if plan.schedule != schedule || plan.after != after { continue }
+            for stage in plan.stages {
+                for system_index in stage.systems {
+                    var system = self.registered_systems[system_index]
+                    if system.has_flag(4) { count++ }
+                }
+            }
+        }
+        return count
+    }
+
+    internal func scheduler_parallel_query_system_count(schedule:Schedule, after:bool) int {
+        var count = 0
+        for system in self.registered_systems {
+            if system.schedule == schedule && system.after == after && system.has_flag(32) { count++ }
+        }
+        return count
+    }
+
+    internal func query_local_dispatch_count() int { return self.query_local_dispatches }
+    internal func query_parallel_dispatch_count() int { return self.query_parallel_dispatches }
+    private func run_systems(schedule:Schedule, after:bool, reversed:bool) {
+        if reversed {
+            var index = self.registered_systems.count() - 1
+            while index >= 0 {
+                var system = self.registered_systems[index]
+                if system.schedule == schedule && system.after == after {
+                    system.execute(self, index)
+                }
+                index--
+            }
+            return
+        }
+
+        var index = 0
+        while index < self.registered_systems.count() {
+            var system = self.registered_systems[index]
+            if system.schedule == schedule && system.after == after {
+                system.execute(self, index)
+            }
+            index++
+        }
+    }
+
+    private func build_schedule_plans() {
+        self.schedule_plan_builds++
+        self.schedule_plans = []
+        self.build_schedule_plan(Schedule.initialize, false)
+        self.build_schedule_plan(Schedule.initialize, true)
+        self.build_schedule_plan(Schedule.startup, false)
+        self.build_schedule_plan(Schedule.startup, true)
+        self.build_schedule_plan(Schedule.pre_update, false)
+        self.build_schedule_plan(Schedule.pre_update, true)
+        self.build_schedule_plan(Schedule.update, false)
+        self.build_schedule_plan(Schedule.update, true)
+        self.build_schedule_plan(Schedule.post_update, false)
+        self.build_schedule_plan(Schedule.post_update, true)
+        self.build_schedule_plan(Schedule.render, false)
+        self.build_schedule_plan(Schedule.render, true)
+    }
+
+    private func build_schedule_plan(schedule:Schedule, after:bool) {
+        var plan = SchedulePlan(schedule, after)
+        var planned_systems:int[] = []
+        var planned_stages:int[] = []
+        var system_index = 0
+        while system_index < self.registered_systems.count() {
+            var system = self.registered_systems[system_index]
+            if system.schedule == schedule && system.after == after {
+                var stage_index = 0
+                var previous_index = 0
+                while previous_index < planned_systems.count() {
+                    if systems_conflict(self.registered_systems[planned_systems[previous_index]], system) {
+                        let required = planned_stages[previous_index] + 1
+                        if required > stage_index { stage_index = required }
+                    }
+                    previous_index++
+                }
+                while stage_index >= plan.stages.count() {
+                    plan.stages.append(SystemStage())
+                }
+                var stage = plan.stages[stage_index]
+                stage.systems.append(system_index)
+                planned_systems.append(system_index)
+                planned_stages.append(stage_index)
+            }
+            system_index++
+        }
+        self.schedule_plans.append(plan)
+    }
+
+    private func run_plan(schedule:Schedule, after:bool) {
+        var plan_index = 0
+        while plan_index < self.schedule_plans.count() {
+            var plan = self.schedule_plans[plan_index]
+            if plan.schedule == schedule && plan.after == after {
+                var stage_index = 0
+                while stage_index < plan.stages.count() {
+                    var stage = plan.stages[stage_index]
+                    self.run_stage(stage)
+                    stage_index++
+                }
+                return
+            }
+            plan_index++
+        }
+    }
+
+    private func run_stage(stage:SystemStage) {
+        var has_parallel_system = false
+        for system_index in stage.systems {
+            if self.registered_systems[system_index].has_flag(4) {
+                has_parallel_system = true
+                break
+            }
+        }
+        if !has_parallel_system {
+            for system_index in stage.systems {
+                var system = self.registered_systems[system_index]
+                system.execute(self, system_index)
+            }
+            return
+        }
+        var handles:Threading.JobHandle<SystemJob>[] = []
+        var fences:Threading.Fence[] = []
+        for system_index in stage.systems {
+            var system = self.registered_systems[system_index]
+            if system.has_flag(4) {
+                var handle = self.executor.submit(SystemJob(
+                    application_address:C.object_address(self),
+                    system:system,
+                    order:system_index
+                ))
+                fences.append(handle.fence())
+                handles.append(handle)
+            }
+        }
+        for system_index in stage.systems {
+            var system = self.registered_systems[system_index]
+            if !system.has_flag(4) { system.execute(self, system_index) }
+        }
+        for fence in fences { fence.complete() }
+        var handle_index = 0
+        while handle_index < handles.count() {
+            var handle = handles[handle_index]
+            var completed = handle.complete()
+            handle_index++
+        }
+    }
+}
+
+func ignore_application_system(application:Application) {}
+func ignore_typed_system(application:Application, order:int) {}
+
+func systems_conflict(left:RegisteredSystem, right:RegisteredSystem) bool {
+    if left.has_flag(8) || right.has_flag(8) { return true }
+    if (left.has_flag(2) && right.has_flag(1)) || (right.has_flag(2) && left.has_flag(1)) { return true }
+    return access_conflicts(left.reads, left.writes, right.reads, right.writes)
+}
+
+func access_conflicts(left_reads:@str[], left_writes:@str[], right_reads:@str[], right_writes:@str[]) bool {
+    for name in left_writes {
+        if contains(right_reads, name) || contains(right_writes, name) { return true }
+    }
+    for name in right_writes {
+        if contains(left_reads, name) || contains(left_writes, name) { return true }
+    }
+    return false
+}
+
+func contains(values:@str[], expected:str) bool {
+    for value in values {
+        if value == expected {
+            return true
+        }
+    }
+    return false
+}
+
+func run_default(application:Application) int {
+    application.start()
+    application.run_schedule(Schedule.initialize)
+    application.run_schedule(Schedule.startup)
+
+    while application.is_running() {
+        application.run_schedule(Schedule.pre_update)
+        application.run_schedule(Schedule.update)
+        application.run_schedule(Schedule.post_update)
+        application.run_schedule(Schedule.render)
+    }
+
+    application.run_schedule(Schedule.shutdown)
+    application.run_schedule(Schedule.finalize)
+    return 0
+}

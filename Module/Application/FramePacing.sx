@@ -1,0 +1,63 @@
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+use Interop.Boundary
+use Interop.C
+
+class State {
+    internal let frame_nanoseconds:uint
+    internal var deadline_nanoseconds:uint
+
+    internal init(frames_per_second:int) {
+        self.frame_nanoseconds = (1_000_000_000 / frames_per_second) as uint
+        self.deadline_nanoseconds = 0 as uint
+    }
+}
+
+public struct FramePacing:PluginProtocol {
+    private let frames_per_second:int
+
+    public init(frames_per_second:int = 60) {
+        if frames_per_second < 1 || frames_per_second > 1_000 {
+            panic("GFX.Application.FramePacing rate must be between 1 and 1000 frames per second")
+        }
+        self.frames_per_second = frames_per_second
+    }
+
+    func id() str { return "GFX.Application.FramePacing" }
+
+    func build(application:Application) {
+        application.resources().insert(State(self.frames_per_second))
+        application.add_after_system(Schedule.render, pace_frame)
+        application.add_system(Schedule.shutdown, stop_pacing)
+    }
+}
+
+func pace_frame(state:&State) {
+    let now = sdl_get_ticks_ns()
+    if state.deadline_nanoseconds == 0 as uint {
+        state.deadline_nanoseconds = now
+    }
+    state.deadline_nanoseconds += state.frame_nanoseconds
+    if state.deadline_nanoseconds > now {
+        sdl_delay_precise(state.deadline_nanoseconds - now)
+    } else {
+        state.deadline_nanoseconds = now
+    }
+}
+
+func stop_pacing(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<State>()
+    assert(removed != null)
+}
+
+let sdl_delay_precise = C.function<func(uint) void>(
+    library:Boundary.SDL3,
+    name:"SDL_DelayPrecise"
+)
+
+let sdl_get_ticks_ns = C.function<func() uint>(
+    library:Boundary.SDL3,
+    name:"SDL_GetTicksNS"
+)

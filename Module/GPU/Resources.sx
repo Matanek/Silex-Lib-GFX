@@ -1,0 +1,437 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Color
+use GFX.GPU.Types
+use GFX.GPU.Device
+use GFX.GPU.Device.gpu_error
+use GFX.GPU.Properties.Properties
+
+public struct BufferSettings {
+    let size:int
+    var usage:Types.BufferUsage = Types.BufferUsage()
+    var name:str? = null
+}
+
+public struct TextureSettings {
+    var format:Types.TextureFormat? = null
+    let width:int
+    let height:int
+    var usage:Types.TextureUsage = Types.TextureUsage()
+    var type:Types.TextureType? = null
+    var layers_or_depth:int = 1
+    var mip_levels:int = 1
+    var samples:Types.Samples? = null
+    var name:str? = null
+    var optimized_clear:Color? = null
+    var optimized_depth_clear:float? = null
+    var optimized_stencil_clear:uint8? = null
+}
+
+public struct SamplerSettings {
+    var min_filter:Types.Filter? = null
+    var mag_filter:Types.Filter? = null
+    var mipmap_filter:Types.MipmapFilter? = null
+    var address_u:Types.AddressMode? = null
+    var address_v:Types.AddressMode? = null
+    var address_w:Types.AddressMode? = null
+    var mip_bias:float = 0.0
+    var max_anisotropy:float = 1.0
+    var compare:Types.Compare? = null
+    var minimum_lod:float = 0.0
+    var maximum_lod:float = 1000.0
+    var anisotropic:bool = false
+    var comparison:bool = false
+    var name:str? = null
+}
+
+public struct TransferBufferSettings {
+    let size:int
+    let direction:Types.TransferDirection
+    var name:str? = null
+}
+
+public class Buffer {
+    private let device_handle:uint
+    private let handle:uint
+    private var device_owner:Device? = null
+    private let byte_count:int
+    private var current_usage:Types.BufferUsage? = null
+
+    internal init(device:Device, settings:BufferSettings) {
+        if settings.size <= 0 { panic("GFX.GPU buffer size must be positive") }
+        let usage = Types.buffer_usage_flags(settings.usage)
+        if usage == 0 { panic("GFX.GPU buffer requires at least one usage") }
+        var properties = Properties()
+        if let name = settings.name { properties.text("SDL.gpu.buffer.create.name", name) }
+        var storage:uint[2]
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let stored_usage = C.store<uint32>(address, 0 as uint, usage)
+        let stored_size = C.store<uint32>(address, 4 as uint, settings.size as uint32)
+        let stored_properties = C.store<uint32>(address, 8 as uint, properties.native_handle())
+        let handle = C.address_bits(sdl_create_gpu_buffer(
+            C.pointer_bits(device.native_handle()), C.pointer_bits(address)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not create a buffer: " + gpu_error()) }
+        self.device_handle = device.native_handle()
+        self.handle = handle
+        self.device_owner = device
+        self.byte_count = settings.size
+        self.current_usage = settings.usage
+    }
+
+    drop {
+        sdl_release_gpu_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        self.device_owner = null
+    }
+
+    public func size() int { return self.byte_count }
+    public func usage() Types.BufferUsage { return required_buffer_usage(self.current_usage) }
+    public func name(value:str) {
+        sdl_set_gpu_buffer_name(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), C.terminated_pointer(value))
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+public class Texture {
+    private let device_handle:uint
+    private let handle:uint
+    private var device_owner:Device? = null
+    private var current_settings:TextureSettings? = null
+
+    internal init(device:Device, settings:TextureSettings) {
+        validate_texture(settings)
+        var properties = Properties()
+        if let name = settings.name { properties.text("SDL.gpu.texture.create.name", name) }
+        if let clear = settings.optimized_clear {
+            properties.decimal("SDL.gpu.texture.create.d3d12.clear.r", clear.r)
+            properties.decimal("SDL.gpu.texture.create.d3d12.clear.g", clear.g)
+            properties.decimal("SDL.gpu.texture.create.d3d12.clear.b", clear.b)
+            properties.decimal("SDL.gpu.texture.create.d3d12.clear.a", clear.a)
+        }
+        if let depth = settings.optimized_depth_clear { properties.decimal("SDL.gpu.texture.create.d3d12.clear.depth", depth) }
+        if let stencil = settings.optimized_stencil_clear { properties.number("SDL.gpu.texture.create.d3d12.clear.stencil", stencil as int) }
+        var storage:uint[5]
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let stored_type = C.store<int32>(address, 0 as uint, texture_type(settings.type).raw_value as int32)
+        let stored_format = C.store<int32>(address, 4 as uint, required_format(settings.format).raw_value as int32)
+        let stored_usage = C.store<uint32>(address, 8 as uint, Types.texture_usage_flags(settings.usage))
+        let stored_width = C.store<uint32>(address, 12 as uint, settings.width as uint32)
+        let stored_height = C.store<uint32>(address, 16 as uint, settings.height as uint32)
+        let stored_depth = C.store<uint32>(address, 20 as uint, settings.layers_or_depth as uint32)
+        let stored_levels = C.store<uint32>(address, 24 as uint, settings.mip_levels as uint32)
+        let stored_samples = C.store<int32>(address, 28 as uint, sample_count(settings.samples).raw_value as int32)
+        let stored_properties = C.store<uint32>(address, 32 as uint, properties.native_handle())
+        let handle = C.address_bits(sdl_create_gpu_texture(
+            C.pointer_bits(device.native_handle()), C.pointer_bits(address)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not create a texture: " + gpu_error()) }
+        self.device_handle = device.native_handle()
+        self.handle = handle
+        self.device_owner = device
+        self.current_settings = settings
+    }
+
+    drop {
+        sdl_release_gpu_texture(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        self.device_owner = null
+    }
+
+    public func format() Types.TextureFormat { return required_format(required_texture_settings(self.current_settings).format) }
+    public func type() Types.TextureType { return texture_type(required_texture_settings(self.current_settings).type) }
+    public func usage() Types.TextureUsage { return required_texture_settings(self.current_settings).usage }
+    public func width() int { return required_texture_settings(self.current_settings).width }
+    public func height() int { return required_texture_settings(self.current_settings).height }
+    public func layers_or_depth() int { return required_texture_settings(self.current_settings).layers_or_depth }
+    public func mip_levels() int { return required_texture_settings(self.current_settings).mip_levels }
+    public func samples() Types.Samples { return sample_count(required_texture_settings(self.current_settings).samples) }
+    public func byte_count() int {
+        return texture_byte_count(self.format(), self.width(), self.height(), self.layers_or_depth())
+    }
+    public func name(value:str) {
+        sdl_set_gpu_texture_name(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), C.terminated_pointer(value))
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+public func texel_block_size(format:Types.TextureFormat) int {
+    return sdl_gpu_texture_format_texel_block_size(format.raw_value as int32) as int
+}
+
+public func texture_byte_count(format:Types.TextureFormat, width:int, height:int, layers_or_depth:int = 1) int {
+    if width <= 0 || height <= 0 || layers_or_depth <= 0 { panic("GFX.GPU texture dimensions must be positive") }
+    return sdl_calculate_gpu_texture_format_size(
+        format.raw_value as int32, width as uint32, height as uint32, layers_or_depth as uint32
+    ) as int
+}
+
+public func pixel_format(format:Types.TextureFormat) Types.PixelFormat {
+    return decoded_pixel_format(sdl_get_pixel_format_from_gpu_texture_format(format.raw_value as int32))
+}
+
+public func texture_format(format:Types.PixelFormat) Types.TextureFormat {
+    return decoded_texture_format(sdl_get_gpu_texture_format_from_pixel_format(encoded_pixel_format(format)))
+}
+
+public class Sampler {
+    private let device_handle:uint
+    private let handle:uint
+    private var device_owner:Device? = null
+
+    internal init(device:Device, settings:SamplerSettings) {
+        var properties = Properties()
+        if let name = settings.name { properties.text("SDL.gpu.sampler.create.name", name) }
+        var storage:uint[7]
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let min_filter = C.store<int32>(address, 0 as uint, filter(settings.min_filter).raw_value as int32)
+        let mag_filter = C.store<int32>(address, 4 as uint, filter(settings.mag_filter).raw_value as int32)
+        let mipmap = C.store<int32>(address, 8 as uint, mipmap_filter(settings.mipmap_filter).raw_value as int32)
+        let address_u = C.store<int32>(address, 12 as uint, address_mode(settings.address_u).raw_value as int32)
+        let address_v = C.store<int32>(address, 16 as uint, address_mode(settings.address_v).raw_value as int32)
+        let address_w = C.store<int32>(address, 20 as uint, address_mode(settings.address_w).raw_value as int32)
+        let bias = C.store<float32>(address, 24 as uint, settings.mip_bias as float32)
+        let anisotropy = C.store<float32>(address, 28 as uint, settings.max_anisotropy as float32)
+        let compare = C.store<int32>(address, 32 as uint, compare_mode(settings.compare).raw_value as int32)
+        let minimum_lod = C.store<float32>(address, 36 as uint, settings.minimum_lod as float32)
+        let maximum_lod = C.store<float32>(address, 40 as uint, settings.maximum_lod as float32)
+        let enable_anisotropy = C.store<uint8>(address, 44 as uint, Types.native_bool(settings.anisotropic) as uint8)
+        let enable_compare = C.store<uint8>(address, 45 as uint, Types.native_bool(settings.comparison) as uint8)
+        let stored_properties = C.store<uint32>(address, 48 as uint, properties.native_handle())
+        let handle = C.address_bits(sdl_create_gpu_sampler(
+            C.pointer_bits(device.native_handle()), C.pointer_bits(address)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not create a sampler: " + gpu_error()) }
+        self.device_handle = device.native_handle()
+        self.handle = handle
+        self.device_owner = device
+    }
+
+    drop {
+        sdl_release_gpu_sampler(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        self.device_owner = null
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+public class TransferBuffer {
+    private let device_handle:uint
+    private let handle:uint
+    private var device_owner:Device? = null
+    private let byte_count:int
+    private var current_direction:Types.TransferDirection? = null
+
+    internal init(device:Device, settings:TransferBufferSettings) {
+        if settings.size <= 0 { panic("GFX.GPU transfer buffer size must be positive") }
+        var properties = Properties()
+        if let name = settings.name { properties.text("SDL.gpu.transferbuffer.create.name", name) }
+        var storage:uint[2]
+        let address = C.address_bits(C.mutable_pointer(storage))
+        let usage = C.store<int32>(address, 0 as uint, settings.direction.raw_value as int32)
+        let stored_size = C.store<uint32>(address, 4 as uint, settings.size as uint32)
+        let stored_properties = C.store<uint32>(address, 8 as uint, properties.native_handle())
+        let handle = C.address_bits(sdl_create_gpu_transfer_buffer(
+            C.pointer_bits(device.native_handle()), C.pointer_bits(address)
+        ))
+        if handle == 0 as uint { panic("GFX.GPU could not create a transfer buffer: " + gpu_error()) }
+        self.device_handle = device.native_handle()
+        self.handle = handle
+        self.device_owner = device
+        self.byte_count = settings.size
+        self.current_direction = settings.direction
+    }
+
+    drop {
+        sdl_release_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        self.device_owner = null
+    }
+
+    public func size() int { return self.byte_count }
+    public func direction() Types.TransferDirection { return required_direction(self.current_direction) }
+
+    public func write(bytes:@uint8[..], offset:int = 0, cycle:bool = false) {
+        if required_direction(self.current_direction) != Types.TransferDirection.upload { panic("GFX.GPU can only write an upload transfer buffer") }
+        validate_range(self.byte_count, offset, bytes.count())
+        let address = C.address_bits(sdl_map_gpu_transfer_buffer(
+            C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), Types.native_bool(cycle)
+        ))
+        if address == 0 as uint { panic("GFX.GPU could not map an upload transfer buffer: " + gpu_error()) }
+        var index = 0
+        while index < bytes.count() {
+            let stored = C.store<uint8>(address, (offset + index) as uint, bytes[index])
+            index++
+        }
+        sdl_unmap_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+    }
+
+    public func write_packed(bytes:str, count:int, offset:int = 0, cycle:bool = false) {
+        if required_direction(self.current_direction) != Types.TransferDirection.upload { panic("GFX.GPU can only write an upload transfer buffer") }
+        validate_range(self.byte_count, offset, count)
+        if count < 0 || count as uint > C.byte_count(bytes) { panic("GFX.GPU packed upload exceeds its source bytes") }
+        let address = C.address_bits(sdl_map_gpu_transfer_buffer(
+            C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), Types.native_bool(cycle)
+        ))
+        if address == 0 as uint { panic("GFX.GPU could not map an upload transfer buffer: " + gpu_error()) }
+        let copied = C.address_bits(sdl_memcpy(
+            C.pointer_bits(address + offset as uint),
+            C.pointer(bytes),
+            count as C.Size
+        ))
+        sdl_unmap_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+    }
+
+    public func read(offset:int = 0, count:int = -1) uint8[] {
+        if required_direction(self.current_direction) != Types.TransferDirection.download { panic("GFX.GPU can only read a download transfer buffer") }
+        var resolved_count = count
+        if resolved_count < 0 { resolved_count = self.byte_count - offset }
+        validate_range(self.byte_count, offset, resolved_count)
+        let address = C.address_bits(sdl_map_gpu_transfer_buffer(
+            C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), 0
+        ))
+        if address == 0 as uint { panic("GFX.GPU could not map a download transfer buffer: " + gpu_error()) }
+        var result:uint8[] = []
+        var index = 0
+        while index < resolved_count {
+            result.append(C.load<uint8>(address, (offset + index) as uint))
+            index++
+        }
+        sdl_unmap_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
+        return result
+    }
+
+    internal func native_handle() uint { return self.handle }
+    internal func owner_handle() uint { return self.device_handle }
+}
+
+extend Device {
+    public func buffer(settings:BufferSettings) Buffer { return Buffer(self, settings) }
+    public func texture(settings:TextureSettings) Texture { return Texture(self, settings) }
+    public func sampler(settings:SamplerSettings = SamplerSettings()) Sampler { return Sampler(self, settings) }
+    public func transfer_buffer(settings:TransferBufferSettings) TransferBuffer { return TransferBuffer(self, settings) }
+    public func upload_buffer(size:int, name:str? = null) TransferBuffer {
+        return TransferBuffer(self, TransferBufferSettings(size:size, direction:Types.TransferDirection.upload, name:name))
+    }
+    public func download_buffer(size:int, name:str? = null) TransferBuffer {
+        return TransferBuffer(self, TransferBufferSettings(size:size, direction:Types.TransferDirection.download, name:name))
+    }
+}
+
+local func validate_texture(settings:TextureSettings) {
+    if required_format(settings.format) == Types.TextureFormat.invalid { panic("GFX.GPU texture format cannot be invalid") }
+    if settings.width <= 0 || settings.height <= 0 || settings.layers_or_depth <= 0 || settings.mip_levels <= 0 {
+        panic("GFX.GPU texture dimensions and mip levels must be positive")
+    }
+    if Types.texture_usage_flags(settings.usage) == 0 { panic("GFX.GPU texture requires at least one usage") }
+}
+
+local func validate_range(capacity:int, offset:int, count:int) {
+    if offset < 0 || count < 0 || offset + count > capacity { panic("GFX.GPU transfer range is outside its buffer") }
+}
+
+local func texture_type(value:Types.TextureType?) Types.TextureType {
+    if let selected = value { return selected }
+    return Types.TextureType.texture_2d
+}
+local func sample_count(value:Types.Samples?) Types.Samples {
+    if let selected = value { return selected }
+    return Types.Samples.one
+}
+local func filter(value:Types.Filter?) Types.Filter {
+    if let selected = value { return selected }
+    return Types.Filter.linear
+}
+local func mipmap_filter(value:Types.MipmapFilter?) Types.MipmapFilter {
+    if let selected = value { return selected }
+    return Types.MipmapFilter.linear
+}
+local func address_mode(value:Types.AddressMode?) Types.AddressMode {
+    if let selected = value { return selected }
+    return Types.AddressMode.repeat
+}
+local func compare_mode(value:Types.Compare?) Types.Compare {
+    if let selected = value { return selected }
+    return Types.Compare.always
+}
+local func required_format(value:Types.TextureFormat?) Types.TextureFormat {
+    if let selected = value { return selected }
+    panic("GFX.GPU texture format is required")
+}
+local func required_buffer_usage(value:Types.BufferUsage?) Types.BufferUsage {
+    if let selected = value { return selected }
+    panic("GFX.GPU buffer has no usage")
+}
+local func required_texture_settings(value:TextureSettings?) TextureSettings {
+    if let selected = value { return selected }
+    panic("GFX.GPU texture has no settings")
+}
+local func required_direction(value:Types.TransferDirection?) Types.TransferDirection {
+    if let selected = value { return selected }
+    panic("GFX.GPU transfer buffer has no direction")
+}
+
+local func encoded_pixel_format(value:Types.PixelFormat) uint32 {
+    match value {
+        unknown => { return 0 }
+        bgra4444 => { return 0x1582_1002 as uint32 }
+        bgr565 => { return 0x1555_1002 as uint32 }
+        bgra5551 => { return 0x1584_1002 as uint32 }
+        rgba32 => { return 0x1676_2004 as uint32 }
+        bgra32 => { return 0x1636_2004 as uint32 }
+        rgbx32 => { return 0x1656_1804 as uint32 }
+        bgrx32 => { return 0x1616_1804 as uint32 }
+        abgr2101010 => { return 0x1677_2004 as uint32 }
+        rgba64 => { return 0x1820_4008 as uint32 }
+        rgba64_float => { return 0x1a20_4008 as uint32 }
+        rgba128_float => { return 0x1b20_8010 as uint32 }
+    }
+}
+
+local func decoded_pixel_format(value:uint32) Types.PixelFormat {
+    if value == 0x1582_1002 as uint32 { return Types.PixelFormat.bgra4444 }
+    if value == 0x1555_1002 as uint32 { return Types.PixelFormat.bgr565 }
+    if value == 0x1584_1002 as uint32 { return Types.PixelFormat.bgra5551 }
+    if value == 0x1676_2004 as uint32 { return Types.PixelFormat.rgba32 }
+    if value == 0x1636_2004 as uint32 { return Types.PixelFormat.bgra32 }
+    if value == 0x1656_1804 as uint32 { return Types.PixelFormat.rgbx32 }
+    if value == 0x1616_1804 as uint32 { return Types.PixelFormat.bgrx32 }
+    if value == 0x1677_2004 as uint32 { return Types.PixelFormat.abgr2101010 }
+    if value == 0x1820_4008 as uint32 { return Types.PixelFormat.rgba64 }
+    if value == 0x1a20_4008 as uint32 { return Types.PixelFormat.rgba64_float }
+    if value == 0x1b20_8010 as uint32 { return Types.PixelFormat.rgba128_float }
+    return Types.PixelFormat.unknown
+}
+
+local func decoded_texture_format(value:int32) Types.TextureFormat {
+    if value == 4 { return Types.TextureFormat.rgba8_unorm }
+    if value == 7 { return Types.TextureFormat.rgba16_unorm }
+    if value == 8 { return Types.TextureFormat.rgb10a2_unorm }
+    if value == 9 { return Types.TextureFormat.b5g6r5_unorm }
+    if value == 10 { return Types.TextureFormat.b5g5r5a1_unorm }
+    if value == 11 { return Types.TextureFormat.bgra4_unorm }
+    if value == 12 { return Types.TextureFormat.bgra8_unorm }
+    if value == 29 { return Types.TextureFormat.rgba16_float }
+    if value == 32 { return Types.TextureFormat.rgba32_float }
+    return Types.TextureFormat.invalid
+}
+
+let sdl_create_gpu_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateGPUBuffer")
+let sdl_release_gpu_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseGPUBuffer")
+let sdl_set_gpu_buffer_name = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_SetGPUBufferName")
+let sdl_create_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateGPUTexture")
+let sdl_release_gpu_texture = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseGPUTexture")
+let sdl_set_gpu_texture_name = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_SetGPUTextureName")
+let sdl_calculate_gpu_texture_format_size = C.function<func(int32, uint32, uint32, uint32) uint32>(library:Boundary.SDL3, name:"SDL_CalculateGPUTextureFormatSize")
+let sdl_gpu_texture_format_texel_block_size = C.function<func(int32) uint32>(library:Boundary.SDL3, name:"SDL_GPUTextureFormatTexelBlockSize")
+let sdl_get_pixel_format_from_gpu_texture_format = C.function<func(int32) uint32>(library:Boundary.SDL3, name:"SDL_GetPixelFormatFromGPUTextureFormat")
+let sdl_get_gpu_texture_format_from_pixel_format = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetGPUTextureFormatFromPixelFormat")
+let sdl_create_gpu_sampler = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateGPUSampler")
+let sdl_release_gpu_sampler = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseGPUSampler")
+let sdl_create_gpu_transfer_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateGPUTransferBuffer")
+let sdl_release_gpu_transfer_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_ReleaseGPUTransferBuffer")
+let sdl_map_gpu_transfer_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, int32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_MapGPUTransferBuffer")
+let sdl_unmap_gpu_transfer_buffer = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_UnmapGPUTransferBuffer")
+let sdl_memcpy = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Size) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_memcpy")

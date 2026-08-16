@@ -1,0 +1,7 @@
+use GFX.GPU
+
+test "compile the built-in Scene3D forward shader" {
+    let program = GPU.ShaderProgram.hlsl(
+        file:"../../Shaders/Scene3D/Forward.hlsl"
+    )
+}

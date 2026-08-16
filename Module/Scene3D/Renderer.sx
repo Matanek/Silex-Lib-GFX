@@ -1,0 +1,548 @@
+use GFX.ECS
+use GFX.GPU
+use GFX.Scene3D.Camera
+use GFX.Scene3D.Gizmos
+use GFX.Scene3D.Grid
+use GFX.Scene3D.Lighting
+use GFX.Scene3D.Material
+use GFX.Scene3D.Mesh
+use GFX.Scene3D.MeshHandle
+use GFX.Scene3D.Meshes
+use GFX.Scene3D.Packing
+use GFX.Scene3D.Shadows
+use GFX.Scene3D.ToneMapping
+use GFX.Scene3D.Transform
+use STD.Math
+
+class CachedMesh {
+    internal let index:int
+    internal let generation:int
+    internal var revision:int
+    internal var vertices:GPU.Buffer? = null
+    internal var indices:GPU.Buffer? = null
+    internal var vertex_upload:GPU.TransferBuffer? = null
+    internal var index_upload:GPU.TransferBuffer? = null
+    internal var vertex_capacity:int
+    internal var index_capacity:int
+    internal var index_count:int
+
+    internal init(handle:MeshHandle) {
+        self.index = handle.index()
+        self.generation = handle.generation()
+        self.revision = 0
+        self.vertex_capacity = 0
+        self.index_capacity = 0
+        self.index_count = 0
+    }
+}
+
+struct Draw {
+    internal let cache:int
+    internal let model:Math.Mat4
+    internal let material:Material
+}
+
+internal class Renderer {
+    private var pipeline:GPU.GraphicsPipeline? = null
+    private var shadow_pipeline:GPU.GraphicsPipeline? = null
+    private var point_shadow_pipeline:GPU.GraphicsPipeline? = null
+    private var gizmo_pipeline:GPU.GraphicsPipeline? = null
+    private var grid_pipeline:GPU.GraphicsPipeline? = null
+    private var meshes:CachedMesh[]
+    private var draws:Draw[]
+    private var lighting:Lighting.Frame
+    private var shadows:Shadows.Frame
+    private var gizmos:Gizmos.Frame
+    private var view_projection:Math.Mat4
+    private var camera_position:Math.Vec3
+    private var camera_view:Shadows.CameraView? = null
+    private var camera_ready:bool
+    private var viewport:Math.Vec2
+    private var tone_mapping:ToneMapping
+    private var lighting_uniform:str
+    private var shadow_uniform:str
+    private var tone_mapping_uniform:str
+    private var shadow_texture:GPU.Texture? = null
+    private var shadow_sampler:GPU.Sampler? = null
+    private var shadow_atlas_size:int
+    private var gizmo_vertices:GPU.Buffer? = null
+    private var gizmo_upload:GPU.TransferBuffer? = null
+    private var gizmo_capacity:int
+    private var gizmo_count:int
+    private var grid:Grid? = null
+
+    internal init() {
+        self.meshes = []
+        self.draws = []
+        self.lighting = Lighting.Frame()
+        self.shadows = Shadows.Frame()
+        self.gizmos = Gizmos.Frame()
+        self.view_projection = Math.Mat4.identity()
+        self.camera_position = Math.Vec3()
+        self.camera_ready = false
+        self.viewport = Math.Vec2(1.0)
+        self.tone_mapping = ToneMapping.aces()
+        self.lighting_uniform = "\0"
+        self.shadow_uniform = "\0"
+        self.tone_mapping_uniform = "\0"
+        self.shadow_atlas_size = 0
+        self.gizmo_capacity = 0
+        self.gizmo_count = 0
+    }
+
+    internal func start(device:@GPU.Device, surface:@GPU.Surface) {
+        var buffers:GPU.VertexBufferLayout[] = []
+        buffers.append(GPU.VertexBufferLayout(slot:0, pitch:48))
+        var attributes:GPU.VertexAttribute[] = []
+        attributes.append(GPU.VertexAttribute(location:0, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:0))
+        attributes.append(GPU.VertexAttribute(location:1, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:12))
+        attributes.append(GPU.VertexAttribute(location:2, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:24))
+        attributes.append(GPU.VertexAttribute(location:3, buffer_slot:0, format:GPU.VertexFormat.float_32x4, offset:32))
+        var targets:GPU.ColorTargetFormat[] = []
+        targets.append(GPU.ColorTargetFormat(format:surface.format()))
+        self.pipeline = device.graphics_pipeline(
+            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Forward.hlsl"),
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:buffers,
+                attributes:attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.back),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less_or_equal,
+                    depth_test:true,
+                    depth_write:true
+                ),
+                color_targets:targets,
+                depth_stencil_format:GPU.TextureFormat.depth16,
+                name:"GFX.Scene3D forward meshes"
+            )
+        )
+        self.shadow_pipeline = device.graphics_pipeline(
+            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Shadow.hlsl"),
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:buffers,
+                attributes:attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less,
+                    depth_test:true,
+                    depth_write:true
+                ),
+                depth_stencil_format:GPU.TextureFormat.depth32_float,
+                name:"GFX.Scene3D projected shadows"
+            )
+        )
+        self.point_shadow_pipeline = device.graphics_pipeline(
+            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/PointShadow.hlsl"),
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:buffers,
+                attributes:attributes,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less,
+                    depth_test:true,
+                    depth_write:true
+                ),
+                depth_stencil_format:GPU.TextureFormat.depth32_float,
+                name:"GFX.Scene3D point shadows"
+            )
+        )
+        var gizmo_buffers:GPU.VertexBufferLayout[] = []
+        gizmo_buffers.append(GPU.VertexBufferLayout(slot:0, pitch:28))
+        var gizmo_attributes:GPU.VertexAttribute[] = []
+        gizmo_attributes.append(GPU.VertexAttribute(
+            location:0,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x3,
+            offset:0
+        ))
+        gizmo_attributes.append(GPU.VertexAttribute(
+            location:1,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x4,
+            offset:12
+        ))
+        self.gizmo_pipeline = device.graphics_pipeline(
+            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/LightGizmos.hlsl"),
+            GPU.GraphicsPipelineSettings(
+                vertex_buffers:gizmo_buffers,
+                attributes:gizmo_attributes,
+                primitive:GPU.Primitive.lines,
+                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                depth_stencil:GPU.DepthStencilState(
+                    depth_compare:GPU.Compare.less_or_equal,
+                    depth_test:true,
+                    depth_write:false
+                ),
+                color_targets:targets,
+                depth_stencil_format:GPU.TextureFormat.depth16,
+                name:"GFX.Scene3D light gizmos"
+            )
+        )
+        if self.grid != null {
+            var grid_targets:GPU.ColorTargetFormat[] = []
+            grid_targets.append(GPU.ColorTargetFormat(
+                format:surface.format(),
+                blend:GPU.BlendState(
+                    source_color:GPU.BlendFactor.source_alpha,
+                    destination_color:GPU.BlendFactor.one_minus_source_alpha,
+                    source_alpha:GPU.BlendFactor.one,
+                    destination_alpha:GPU.BlendFactor.one_minus_source_alpha,
+                    enabled:true
+                )
+            ))
+            self.grid_pipeline = device.graphics_pipeline(
+                GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Grid.hlsl"),
+                GPU.GraphicsPipelineSettings(
+                    rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                    depth_stencil:GPU.DepthStencilState(
+                        depth_compare:GPU.Compare.less_or_equal,
+                        depth_test:true,
+                        depth_write:false
+                    ),
+                    color_targets:grid_targets,
+                    depth_stencil_format:GPU.TextureFormat.depth16,
+                    name:"GFX.Scene3D viewport grid"
+                )
+            )
+        }
+        self.ensure_shadow_resources(device, 1)
+    }
+
+    internal func prepare(
+        device:@GPU.Device,
+        world:@ECS.World,
+        catalog:@Meshes
+    ) {
+        self.draws.clear()
+        self.camera_ready = false
+        self.camera_view = null
+        self.lighting.rebuild(world)
+        self.gizmos.rebuild(world)
+        self.find_camera(world)
+        for entity in world.entities() {
+            if world.has<Transform>(entity) && world.has<Mesh>(entity) {
+                let mesh = world.get<Mesh>(entity)
+                if mesh.visible && catalog.contains(mesh.asset) {
+                    var cache = self.cache_for(mesh.asset)
+                    self.refresh(device, cache, catalog, mesh.asset)
+                    var material = Material()
+                    if world.has<Material>(entity) { material = world.get<Material>(entity) }
+                    self.draws.append(Draw(
+                        cache:self.index_of(cache),
+                        model:world.get<Transform>(entity).matrix(),
+                        material:material
+                    ))
+                }
+            }
+        }
+        self.shadows.rebuild(self.lighting, self.camera_view)
+        self.lighting_uniform = Packing.lighting(self.lighting)
+        self.shadow_uniform = Packing.shadows(self.lighting, self.shadows)
+        self.tone_mapping_uniform = Packing.tone_mapping(self.tone_mapping)
+        self.prepare_gizmos(device)
+        self.render_shadows(device)
+    }
+
+    internal func set_viewport(size:Math.Vec2) {
+        self.viewport = size
+    }
+
+    internal func set_tone_mapping(value:ToneMapping) {
+        self.tone_mapping = value
+    }
+
+    internal func set_grid(value:Grid) { self.grid = value }
+
+    internal func draw(pass:@GPU.RenderPass) {
+        if !self.camera_ready { return }
+        if let pipeline = self.pipeline {
+            pass.bind(pipeline)
+            var lighting = self.lighting_uniform
+            var shadows = self.shadow_uniform
+            var tone_mapping = self.tone_mapping_uniform
+            pass.fragment_uniform(1, lighting, 1312)
+            pass.fragment_uniform(2, tone_mapping, 32)
+            pass.fragment_uniform(3, shadows, 3328)
+            if let texture = self.shadow_texture {
+                if let sampler = self.shadow_sampler {
+                    pass.fragment_sampler(0, texture, sampler)
+                }
+            }
+            for draw in self.draws {
+                var cache = self.meshes[draw.cache]
+                if let vertices = cache.vertices {
+                    if let indices = cache.indices {
+                        var vertex_uniform = Packing.draw(
+                            draw.model,
+                            self.view_projection,
+                            draw.material.albedo
+                        )
+                        var material_uniform = Packing.material(
+                            draw.material,
+                            self.camera_position
+                        )
+                        pass.vertex_uniform(0, vertex_uniform, 144)
+                        pass.fragment_uniform(0, material_uniform, 48)
+                        pass.vertex_buffer(0, vertices)
+                        pass.index_buffer(indices, GPU.IndexType.thirty_two_bits)
+                        pass.draw_indexed(cache.index_count)
+                    }
+                }
+            }
+        }
+        self.draw_grid(pass)
+        self.draw_gizmos(pass)
+    }
+
+    private func find_camera(world:@ECS.World) {
+        let pixels = self.viewport
+        var aspect = 1.0
+        if pixels.y > 0.0 { aspect = pixels.x / pixels.y }
+        var selected = false
+        var selected_order = 0
+        for entity in world.entities() {
+            if world.has<Transform>(entity) && world.has<Camera>(entity) {
+                let camera = world.get<Camera>(entity)
+                if camera.is_active() && (!selected || camera.render_order() < selected_order) {
+                    let transform = world.get<Transform>(entity)
+                    self.view_projection = camera.projection(aspect)
+                        .multiply(camera.view(transform))
+                    self.camera_position = transform.position
+                    self.camera_view = Shadows.CameraView(
+                        position:transform.position,
+                        rotation:transform.rotation,
+                        vertical_fov:camera.vertical_fov,
+                        near_plane:camera.near_plane,
+                        far_plane:camera.far_plane,
+                        aspect_ratio:aspect
+                    )
+                    self.camera_ready = true
+                    selected = true
+                    selected_order = camera.render_order()
+                }
+            }
+        }
+    }
+
+    private func ensure_shadow_resources(device:@GPU.Device, size:int) {
+        if self.shadow_texture == null || self.shadow_atlas_size != size {
+            self.shadow_texture = device.texture(GPU.TextureSettings(
+                format:GPU.TextureFormat.depth32_float,
+                width:size,
+                height:size,
+                usage:GPU.TextureUsage(sampled:true, depth_stencil_target:true),
+                name:"GFX.Scene3D shadow atlas",
+                optimized_depth_clear:1.0
+            ))
+            self.shadow_atlas_size = size
+        }
+        if self.shadow_sampler == null {
+            self.shadow_sampler = device.sampler(GPU.SamplerSettings(
+                min_filter:GPU.Filter.linear,
+                mag_filter:GPU.Filter.linear,
+                address_u:GPU.AddressMode.clamp_to_edge,
+                address_v:GPU.AddressMode.clamp_to_edge,
+                name:"GFX.Scene3D shadow sampler"
+            ))
+        }
+    }
+
+    private func prepare_gizmos(device:@GPU.Device) {
+        self.gizmo_count = self.gizmos.count()
+        if self.gizmo_count > 0 {
+            let byte_count = self.gizmo_count * 28
+            var bytes = Packing.gizmo_vertices(self.gizmos)
+            if self.gizmo_vertices == null || self.gizmo_capacity < byte_count {
+                self.gizmo_upload = device.upload_buffer(
+                    byte_count,
+                    "GFX.Scene3D light gizmo upload"
+                )
+                self.gizmo_vertices = device.buffer(GPU.BufferSettings(
+                    size:byte_count,
+                    usage:GPU.BufferUsage.vertex(),
+                    name:"GFX.Scene3D light gizmo vertices"
+                ))
+                self.gizmo_capacity = byte_count
+            }
+            if let upload = self.gizmo_upload {
+                if let vertices = self.gizmo_vertices {
+                    upload.write_packed(bytes, byte_count, cycle:true)
+                    copy_buffer(device, upload, vertices, byte_count)
+                }
+            }
+        }
+    }
+
+    private func render_shadows(device:@GPU.Device) {
+        if self.shadows.face_count() == 0 { return }
+        self.ensure_shadow_resources(device, 2048)
+        if let texture = self.shadow_texture {
+            var commands = device.commands()
+            var colors:GPU.ColorTarget[] = []
+            var pass = commands.render(colors, GPU.DepthTarget(
+                texture:texture,
+                clear_depth:1.0,
+                depth_load:GPU.Load.clear,
+                depth_store:GPU.Store.preserve,
+                cycle:false
+            ))
+            let tile = self.shadow_atlas_size / self.shadows.grid()
+            for face in self.shadows.all_faces() {
+                if face.point {
+                    if let pipeline = self.point_shadow_pipeline { pass.bind(pipeline) }
+                } else {
+                    if let pipeline = self.shadow_pipeline { pass.bind(pipeline) }
+                }
+                let slot = face.face_index + self.shadows.first_face(face.light_index)
+                let x = (slot % self.shadows.grid()) * tile
+                let y = (slot / self.shadows.grid()) * tile
+                pass.viewport(x as float, y as float, tile as float, tile as float)
+                pass.scissor(x, y, tile, tile)
+                for draw in self.draws {
+                    var cache = self.meshes[draw.cache]
+                    if let vertices = cache.vertices {
+                        if let indices = cache.indices {
+                            if face.point {
+                                var uniform = Packing.point_shadow_draw(
+                                    draw.model,
+                                    face.view_projection,
+                                    face.light_position_range
+                                )
+                                pass.vertex_uniform(0, uniform, 144)
+                                pass.fragment_uniform(0, uniform, 144)
+                            } else {
+                                var uniform = Packing.shadow_draw(
+                                    draw.model,
+                                    face.view_projection
+                                )
+                                pass.vertex_uniform(0, uniform, 128)
+                            }
+                            pass.vertex_buffer(0, vertices)
+                            pass.index_buffer(indices, GPU.IndexType.thirty_two_bits)
+                            pass.draw_indexed(cache.index_count)
+                        }
+                    }
+                }
+            }
+            pass.finish()
+            var completed = commands.submit_and_track()
+            completed.wait()
+        }
+    }
+
+    private func draw_gizmos(pass:@GPU.RenderPass) {
+        if !self.camera_ready || self.gizmo_count == 0 { return }
+        if let pipeline = self.gizmo_pipeline {
+            if let vertices = self.gizmo_vertices {
+                pass.bind(pipeline)
+                var camera = Packing.matrix(self.view_projection)
+                pass.vertex_uniform(0, camera, 64)
+                pass.vertex_buffer(0, vertices)
+                pass.draw(self.gizmo_count)
+            }
+        }
+    }
+
+    private func draw_grid(pass:@GPU.RenderPass) {
+        if !self.camera_ready { return }
+        if let configured = self.grid {
+            if let pipeline = self.grid_pipeline {
+                pass.bind(pipeline)
+                var uniform = Packing.grid(
+                    self.view_projection.inverted(),
+                    self.view_projection,
+                    configured
+                )
+                pass.vertex_uniform(0, uniform, 224)
+                pass.draw(3)
+            }
+        }
+    }
+
+    private func cache_for(handle:MeshHandle) CachedMesh {
+        var index = 0
+        while index < self.meshes.count() {
+            var cache = self.meshes[index]
+            if cache.index == handle.index() && cache.generation == handle.generation() {
+                return cache
+            }
+            index++
+        }
+        var created = CachedMesh(handle)
+        self.meshes.append(created)
+        return created
+    }
+
+    private func index_of(cache:@CachedMesh) int {
+        var index = 0
+        while index < self.meshes.count() {
+            if self.meshes[index].index == cache.index &&
+                self.meshes[index].generation == cache.generation
+            {
+                return index
+            }
+            index++
+        }
+        panic("GFX.Scene3D mesh cache is missing")
+    }
+
+    private func refresh(
+        device:@GPU.Device,
+        cache:&CachedMesh,
+        catalog:@Meshes,
+        handle:MeshHandle
+    ) {
+        let revision = catalog.revision(handle)
+        if cache.revision == revision { return }
+        let mesh = catalog.snapshot(handle)
+        let vertex_count = mesh.vertex_count() * 48
+        let index_count = mesh.index_count() * 4
+        var vertex_bytes = Packing.vertices(mesh)
+        var index_bytes = Packing.indices(mesh)
+        if cache.vertices == null || cache.vertex_capacity < vertex_count {
+            cache.vertex_upload = device.upload_buffer(vertex_count, "GFX.Scene3D mesh vertex upload")
+            cache.vertices = device.buffer(GPU.BufferSettings(
+                size:vertex_count,
+                usage:GPU.BufferUsage.vertex(),
+                name:"GFX.Scene3D mesh vertices"
+            ))
+            cache.vertex_capacity = vertex_count
+        }
+        if cache.indices == null || cache.index_capacity < index_count {
+            cache.index_upload = device.upload_buffer(index_count, "GFX.Scene3D mesh index upload")
+            cache.indices = device.buffer(GPU.BufferSettings(
+                size:index_count,
+                usage:GPU.BufferUsage.index(),
+                name:"GFX.Scene3D mesh indices"
+            ))
+            cache.index_capacity = index_count
+        }
+        if let vertex_upload = cache.vertex_upload {
+            if let vertices = cache.vertices {
+                vertex_upload.write_packed(vertex_bytes, vertex_count, cycle:true)
+                copy_buffer(device, vertex_upload, vertices, vertex_count)
+            }
+        }
+        if let index_upload = cache.index_upload {
+            if let indices = cache.indices {
+                index_upload.write_packed(index_bytes, index_count, cycle:true)
+                copy_buffer(device, index_upload, indices, index_count)
+            }
+        }
+        cache.index_count = mesh.index_count()
+        cache.revision = revision
+    }
+}
+
+local func copy_buffer(
+    device:@GPU.Device,
+    upload:@GPU.TransferBuffer,
+    destination:@GPU.Buffer,
+    count:int
+) {
+    var commands = device.commands()
+    var pass = commands.copy()
+    pass.upload(upload, destination, count)
+    pass.finish()
+    commands.submit()
+}

@@ -1,0 +1,135 @@
+use GFX.Application
+use GFX.ECS
+
+struct Value { var number:int }
+struct Added { var number:int }
+
+func update_and_destroy(commands:&ECS.Commands, query:ECS.Query<(ECS.Entity, &Value)>) {
+    for (entity, value) in query {
+        value.number++
+        if value.number % 3 == 1 { commands.destroy(entity) }
+    }
+}
+
+func run_update(application:Application) int {
+    application.run_schedule(Application.Schedule.update)
+    application.run_schedule(Application.Schedule.post_update)
+    return 0
+}
+
+func seed(application:Application, count:int) ECS.Entity[] {
+    var result:ECS.Entity[] = []
+    var resources = application.resources()
+    var world:&ECS.World = resources.get_mut<ECS.World>()
+    var index = 0
+    while index < count {
+        var recipe = ECS.EntityRecipe()..with(Value(number:index))
+        result.append(world.spawn(recipe))
+        index++
+    }
+    return result
+}
+
+func run_case(count:int) int[] {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Application.Schedule.update, update_and_destroy)
+        ..with_runner(run_update)
+    let entities = seed(application, count)
+    assert(application.run() == 0)
+    var survivors:int[] = []
+    var resources = application.resources()
+    let world:@ECS.World = resources.get<ECS.World>()
+    var index = 0
+    while index < entities.count() {
+        let entity = entities[index]
+        if index % 3 == 0 {
+            assert(!world.is_alive(entity))
+        } else {
+            assert(world.is_alive(entity))
+            assert(world.get<Value>(entity).number == index + 1)
+            survivors.append(entity.index)
+        }
+        index++
+    }
+    return survivors
+}
+
+test "preserve results for small and large queries" {
+    let small = run_case(31)
+    assert(small.count() == 20)
+    let large = run_case(257)
+    assert(large.count() == 171)
+}
+
+test "preserve component results and command order between executions" {
+    let first = run_case(257)
+    let second = run_case(257)
+    assert(first.count() == second.count())
+    var index = 0
+    while index < first.count() {
+        assert(first[index] == second[index])
+        index++
+    }
+}
+
+func spawn_from_parallel_stage(commands:&ECS.Commands) {
+    var recipe = ECS.EntityRecipe()..with(Value(number:10_000))
+    commands.spawn(recipe)
+}
+
+func destroy_multiples_of_three(commands:&ECS.Commands, query:ECS.Query<(ECS.Entity, @Value)>) {
+    for (entity, value) in query {
+        if value.number % 3 == 0 { commands.destroy(entity) }
+    }
+}
+
+func remove_multiples_of_five(commands:&ECS.Commands, query:ECS.Query<(ECS.Entity, @Value)>) {
+    for (entity, value) in query {
+        if value.number % 5 == 0 { commands.remove<Value>(entity) }
+    }
+}
+
+func insert_odd_markers(commands:&ECS.Commands, query:ECS.Query<(ECS.Entity, @Value)>) {
+    for (entity, value) in query {
+        if value.number % 2 == 1 { commands.insert(entity, Added(number:1)) }
+    }
+}
+
+test "stress deterministic structural commands and generation reuse" {
+    var repetition = 0
+    while repetition < 8 {
+        var application = Application()
+            ..add_plugin(ECS.Plugin())
+            ..add_system(Application.Schedule.update, spawn_from_parallel_stage)
+            ..add_system(Application.Schedule.update, destroy_multiples_of_three)
+            ..add_system(Application.Schedule.update, remove_multiples_of_five)
+            ..add_system(Application.Schedule.update, insert_odd_markers)
+            ..with_runner(run_update)
+        let entities = seed(application, 193)
+        assert(application.run() == 0)
+        var resources = application.resources()
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        var destroyed = 0
+        var index = 0
+        while index < entities.count() {
+            let entity = entities[index]
+            if index % 3 == 0 {
+                destroyed++
+                assert(!world.is_alive(entity))
+            } else {
+                assert(world.is_alive(entity))
+                assert(world.has<Value>(entity) == (index % 5 != 0))
+                assert(world.has<Added>(entity) == (index % 2 == 1))
+            }
+            index++
+        }
+        let spawned = world.entities()
+        assert(spawned.count() == entities.count() - destroyed + 1)
+        var replacement = ECS.EntityRecipe()..with(Value(number:-1))
+        let reused = world.spawn(replacement)
+        assert(reused.generation > 1)
+        assert(world.is_alive(reused))
+        repetition++
+    }
+}

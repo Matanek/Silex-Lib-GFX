@@ -1,0 +1,199 @@
+use Interop.C
+use Interop.Boundary
+use STD.Math
+
+public struct Id {
+    let value:uint32
+}
+
+public enum Orientation {
+    unknown
+    landscape
+    landscape_flipped
+    portrait
+    portrait_flipped
+}
+
+public struct Mode {
+    let display:Id
+    let size:Math.Vec2
+    let pixel_density:float
+    let refresh_rate:float
+    let refresh_numerator:int
+    let refresh_denominator:int
+}
+
+public struct Info {
+    let id:Id
+    let name:str
+    let bounds:Math.Rect
+    let usable_bounds:Math.Rect
+    let natural_orientation:Orientation
+    let orientation:Orientation
+    let content_scale:float
+    let hdr_enabled:bool
+}
+
+public class Displays {
+    public init() {
+        initialize_runtime()
+    }
+
+    drop {
+        shutdown_runtime()
+    }
+
+    public func all() Id[] {
+        var count:int32 = 0
+        let address = C.address_bits(sdl_get_displays(C.mutable_pointer(count)))
+        if address == 0 as uint {
+            panic("GFX.Display could not enumerate platform displays")
+        }
+
+        var result:Id[] = []
+        var index = 0
+        while index < count as int {
+            result.append(Id(value:C.load<uint32>(address, (index as uint) * 4)))
+            index++
+        }
+        sdl_free(C.pointer_bits(address))
+        return result
+    }
+
+    public func primary() Id {
+        let value = sdl_get_primary_display()
+        if value == 0 { panic("GFX.Display could not identify the primary display") }
+        return Id(value:value)
+    }
+
+    public func info(display:Id) Info {
+        let name_address = C.address_bits(sdl_get_display_name(display.value))
+        if name_address == 0 as uint { panic("GFX.Display could not query the display name") }
+
+        let properties = sdl_get_display_properties(display.value)
+        let result = Info(
+            id:display,
+            name:copy_text(name_address),
+            bounds:display_rect(display, false),
+            usable_bounds:display_rect(display, true),
+            natural_orientation:orientation(sdl_get_natural_orientation(display.value)),
+            orientation:orientation(sdl_get_current_orientation(display.value)),
+            content_scale:sdl_get_display_content_scale(display.value),
+            hdr_enabled:sdl_get_boolean_property(
+                properties,
+                C.terminated_pointer("SDL.display.HDR_enabled"),
+                0
+            ) != 0
+        )
+        return result
+    }
+
+    public func modes(display:Id) Mode[] {
+        var count:int32 = 0
+        let root = C.address_bits(sdl_get_fullscreen_modes(display.value, C.mutable_pointer(count)))
+        if root == 0 as uint {
+            panic("GFX.Display could not enumerate fullscreen modes")
+        }
+
+        var result:Mode[] = []
+        var index = 0
+        while index < count as int {
+            let mode_address = C.load<uint>(root, (index as uint) * 8)
+            result.append(read_mode(mode_address))
+            index++
+        }
+        sdl_free(C.pointer_bits(root))
+        return result
+    }
+
+    public func desktop_mode(display:Id) Mode {
+        return required_mode(C.address_bits(sdl_get_desktop_mode(display.value)), "query its desktop mode")
+    }
+
+    public func current_mode(display:Id) Mode {
+        return required_mode(C.address_bits(sdl_get_current_mode(display.value)), "query its current mode")
+    }
+}
+
+func display_rect(display:Id, usable:bool) Math.Rect {
+    var storage:uint[2]
+    var success = 0
+    if usable {
+        success = sdl_get_display_usable_bounds(display.value, C.mutable_pointer(storage))
+    } else {
+        success = sdl_get_display_bounds(display.value, C.mutable_pointer(storage))
+    }
+    if success == 0 { panic("GFX.Display could not query display bounds") }
+    let address = C.address_bits(C.mutable_pointer(storage))
+    return Math.Rect(
+        C.load<int32>(address, 0 as uint) as float,
+        C.load<int32>(address, 4 as uint) as float,
+        C.load<int32>(address, 8 as uint) as float,
+        C.load<int32>(address, 12 as uint) as float
+    )
+}
+
+func orientation(value:int32) Orientation {
+    if value == 1 { return Orientation.landscape }
+    if value == 2 { return Orientation.landscape_flipped }
+    if value == 3 { return Orientation.portrait }
+    if value == 4 { return Orientation.portrait_flipped }
+    return Orientation.unknown
+}
+
+func required_mode(address:uint, action:str) Mode {
+    if address == 0 as uint { panic("GFX.Display could not " + action) }
+    return read_mode(address)
+}
+
+func read_mode(address:uint) Mode {
+    return Mode(
+        display:Id(value:C.load<uint32>(address, 0 as uint)),
+        size:Math.Vec2(
+            C.load<int32>(address, 8 as uint) as float,
+            C.load<int32>(address, 12 as uint) as float
+        ),
+        pixel_density:C.load<float32>(address, 16 as uint) as float,
+        refresh_rate:C.load<float32>(address, 20 as uint) as float,
+        refresh_numerator:C.load<int32>(address, 24 as uint) as int,
+        refresh_denominator:C.load<int32>(address, 28 as uint) as int
+    )
+}
+
+func copy_text(address:uint) str {
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 4096 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    panic("GFX.Display received an invalid platform string")
+}
+
+let sdl_get_displays = C.function<func(C.MutablePointer<int32>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetDisplays")
+let sdl_get_primary_display = C.function<func() uint32>(library:Boundary.SDL3, name:"SDL_GetPrimaryDisplay")
+let sdl_get_display_name = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetDisplayName")
+let sdl_get_display_bounds = C.function<func(uint32, C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_GetDisplayBounds")
+let sdl_get_display_usable_bounds = C.function<func(uint32, C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_GetDisplayUsableBounds")
+let sdl_get_natural_orientation = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetNaturalDisplayOrientation")
+let sdl_get_current_orientation = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_GetCurrentDisplayOrientation")
+let sdl_get_display_content_scale = C.function<func(uint32) float32>(library:Boundary.SDL3, name:"SDL_GetDisplayContentScale")
+let sdl_get_display_properties = C.function<func(uint32) uint32>(library:Boundary.SDL3, name:"SDL_GetDisplayProperties")
+let sdl_get_boolean_property = C.function<func(uint32, C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_GetBooleanProperty")
+let sdl_get_fullscreen_modes = C.function<func(uint32, C.MutablePointer<int32>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetFullscreenDisplayModes")
+let sdl_get_desktop_mode = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetDesktopDisplayMode")
+let sdl_get_current_mode = C.function<func(uint32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetCurrentDisplayMode")
+let sdl_free = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_free")
+
+func initialize_runtime() {
+    if sdl_init_subsystem(0x0000_4020 as uint32) == 0 {
+        panic("GFX.Display could not initialize the SDL platform subsystems")
+    }
+}
+
+func shutdown_runtime() { sdl_quit_subsystem(0x0000_4020 as uint32) }
+
+let sdl_init_subsystem = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_InitSubSystem")
+let sdl_quit_subsystem = C.function<func(uint32) void>(library:Boundary.SDL3, name:"SDL_QuitSubSystem")

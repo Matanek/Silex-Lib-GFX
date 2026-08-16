@@ -1,0 +1,115 @@
+use GFX.Application
+use GFX.Color
+use GFX.GPU
+use GFX.Window
+use GFX.GPU.Plugin as GPUPlugin
+use GFX.Input.Plugin as InputPlugin
+use GFX.Window.Plugin as WindowPlugin
+use Interop.C
+use Interop.Boundary
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+let sdl_get_windows = C.function<func(C.MutablePointer<int32>) C.Pointer<uint8> >(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindows"
+)
+
+let sdl_free = C.function<func(C.Pointer<uint8>) void>(
+    library:Boundary.SDL3,
+    name:"SDL_free"
+)
+
+struct Rendered {
+    var frames:int
+}
+
+struct WindowCount {
+    var value:int
+}
+
+test "leave GPU presentation pacing disabled by default" {
+    let settings = GPUPlugin.Settings()
+    assert(settings.frame_interval_ms == 0)
+}
+
+func render_once(device:@GPU.Device, surface:@GPU.Surface, rendered:&Rendered, controller:&Application.Controller) {
+    assert(surface.is_presentable())
+    var commands = device.commands()
+    commands.clear(surface, Color.blue_950())
+    commands.submit()
+    rendered.frames++
+    controller.stop()
+}
+
+func request_close(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func count_windows(count:&WindowCount) {
+    var native_count:int32 = 0
+    let windows = C.address_bits(sdl_get_windows(C.mutable_pointer(native_count)))
+    count.value = native_count as int
+    if windows != 0 as uint { sdl_free(C.pointer_bits(windows)) }
+}
+
+test "add GPU presentation after configuring a window" {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(Rendered(frames:0))
+    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+        ..title = "GPU plugin test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.add_plugin(InputPlugin())
+    application.add_plugin(GPUPlugin(GPUPlugin.Settings()
+        ..present_on_start = false
+        ..frame_interval_ms = 0
+    ))
+    application.add_system(Application.Schedule.render, render_once)
+    assert(application.run() == 0)
+    let rendered:@Rendered = resources.get<Rendered>()
+    assert(rendered.frames == 1)
+}
+
+test "keep automatic window closing with an explicit window plugin" {
+    Application()
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = "GPU close test"
+            ..width = 64
+            ..height = 64
+            ..hidden = true
+        ))
+        ..add_plugin(InputPlugin())
+        ..add_plugin(GPUPlugin())
+        ..add_system(Application.Schedule.startup, request_close)
+        ..run()
+}
+
+test "use the explicitly added window plugin" {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(WindowCount(value:0))
+    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+        ..title = "Configured GPU window"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.add_plugin(InputPlugin())
+    application.add_plugin(GPUPlugin())
+    application.add_system(Application.Schedule.startup, count_windows)
+    application.add_system(Application.Schedule.startup, request_close)
+    application.run()
+    let count:@WindowCount = resources.get<WindowCount>()
+    assert(count.value == 1)
+}

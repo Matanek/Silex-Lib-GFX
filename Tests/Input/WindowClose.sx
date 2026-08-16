@@ -1,0 +1,79 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Application.Plugin
+use GFX.Application
+use GFX.Application.Controller
+use GFX.Application.Schedule
+use GFX.Window
+use GFX.Input
+use GFX.Input.State as InputState
+use GFX.Input.Plugin as InputPlugin
+use GFX.Window.Plugin as WindowPlugin
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+struct CloseProbePlugin:Plugin {
+    let id_value:str
+    let manual:bool
+
+    func id() str { return self.id_value }
+
+    func build(application:Application) {
+        application.add_system(Schedule.startup, push_close_request)
+        if self.manual {
+            application.add_system(Schedule.update, stop_manually)
+        }
+    }
+}
+
+func push_close_request(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func stop_manually(
+    input:@InputState,
+    window:@Window,
+    controller:&Controller
+) {
+    for event in input.events() {
+        match event {
+            window_close_requested(request) => {
+                assert(request.window == window.id())
+                controller.stop()
+                return
+            }
+            else => {}
+        }
+    }
+    panic("manual close request was not observable")
+}
+
+test "close a window automatically" {
+    Application()
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = "Automatic close"
+            ..hidden = true
+        ))
+        ..add_plugin(InputPlugin())
+        ..add_plugin(CloseProbePlugin(id_value:"AutomaticProbe", manual:false))
+        ..run()
+}
+
+test "observe a close request manually" {
+    Application()
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = "Manual close"
+            ..hidden = true
+            ..close_behavior = WindowPlugin.CloseBehavior.manual
+        ))
+        ..add_plugin(InputPlugin())
+        ..add_plugin(CloseProbePlugin(id_value:"ManualProbe", manual:true))
+        ..run()
+}

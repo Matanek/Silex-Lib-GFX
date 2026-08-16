@@ -1,0 +1,80 @@
+use GFX.Color
+use Interop.C
+use STD.Math
+
+public struct Image {
+    private let image_width:int
+    private let image_height:int
+    private let image_pixels:uint8[]
+    private let packed:str
+
+    public init() {
+        self.image_width = 1
+        self.image_height = 1
+        let pixels:uint8[] = [255, 255, 255, 255]
+        self.image_pixels = pixels
+        self.packed = C.string(@pixels[0:pixels.count()])
+    }
+
+    public init(width:int, height:int, rgba:uint8[]) {
+        require_dimensions(width, height, rgba.count())
+        self.image_width = width
+        self.image_height = height
+        self.image_pixels = rgba
+        self.packed = C.string(@rgba[0:rgba.count()])
+    }
+
+    private init(width:int, height:int, rgba:str) {
+        if width <= 0 || height <= 0 || C.byte_count(rgba) < (width * height * 4) as uint {
+            panic("GFX.Assets image requires one RGBA8 texel per pixel")
+        }
+        self.image_width = width
+        self.image_height = height
+        self.image_pixels = []
+        self.packed = rgba
+    }
+
+    public static func rgba8(width:int, height:int, pixels:uint8[]) Image {
+        return Image(width, height, pixels)
+    }
+
+    public static func packed_rgba8(width:int, height:int, pixels:str) Image {
+        return Image(width, height, pixels)
+    }
+
+    public static func solid(color:Color = Color.white()) Image {
+        let pixels:uint8[] = [
+            channel(color.r),
+            channel(color.g),
+            channel(color.b),
+            channel(color.a)
+        ]
+        return Image(1, 1, pixels)
+    }
+
+    public func width() int { return self.image_width }
+    public func height() int { return self.image_height }
+    public func byte_count() int { return self.image_width * self.image_height * 4 }
+    public func packed_pixels() str { return self.packed }
+
+    public func pixels() uint8[] {
+        if self.image_pixels.count() != 0 { return self.image_pixels }
+        var result:uint8[] = []
+        var index:uint = 0
+        while index < self.byte_count() as uint {
+            result.append(C.byte_at(self.packed, index))
+            index++
+        }
+        return result
+    }
+}
+
+func require_dimensions(width:int, height:int, byte_count:int) {
+    if width <= 0 || height <= 0 || byte_count != width * height * 4 {
+        panic("GFX.Assets image requires one RGBA8 texel per pixel")
+    }
+}
+
+func channel(value:float) uint8 {
+    return Math.round(Math.clamp(value, 0.0, 1.0) * 255.0) as uint8
+}

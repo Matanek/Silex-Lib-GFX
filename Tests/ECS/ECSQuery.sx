@@ -1,0 +1,191 @@
+use GFX.Application
+use GFX.Application.Controller
+use GFX.Application.Schedule
+use GFX.ECS
+
+struct Position { var x:int }
+struct Velocity { let x:int }
+struct Tick { let scale:int }
+
+func spawn_deferred(commands:&ECS.Commands) {
+    var recipe = ECS.EntityRecipe()
+        ..with(Position(x:9))
+    commands.spawn(recipe)
+}
+
+func integrate(tick:@Tick, query:ECS.Query<(@Velocity, &Position)>) {
+    for (velocity, position) in query {
+        position.x += velocity.x * tick.scale
+    }
+}
+
+func destroy_stationary(
+    commands:&ECS.Commands,
+    query:ECS.Query<(ECS.Entity, @Position)>
+) {
+    for (entity, position) in query {
+        if position.x == 7 {
+            commands.destroy(entity)
+            commands.insert(entity, Label(value:"ignored"))
+        }
+    }
+}
+
+func change_structure(
+    commands:&ECS.Commands,
+    query:ECS.Query<(ECS.Entity, @Velocity)>
+) {
+    for (entity, velocity) in query {
+        if velocity.x == 2 {
+            commands.remove<Velocity>(entity)
+            commands.insert(entity, Label(value:"moved"))
+        }
+    }
+}
+
+struct Label { let value:str }
+
+func run_frame(application:Application) int {
+    application.run_schedule(Schedule.update)
+    application.run_schedule(Schedule.post_update)
+    return 0
+}
+
+test "query filters components, mutates in place, and commands flush later" {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Schedule.update, spawn_deferred)
+        ..add_system(Schedule.update, integrate)
+        ..add_system(Schedule.update, destroy_stationary)
+        ..add_system(Schedule.update, change_structure)
+        ..with_runner(run_frame)
+
+    var first = ECS.Entity()
+    var second = ECS.Entity()
+    if true {
+        var resources = application.resources()
+        resources.insert(Tick(scale:1))
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        var moving = ECS.EntityRecipe()
+            ..with(Position(x:40))
+            ..with(Velocity(x:2))
+        first = world.spawn(moving)
+        var stationary = ECS.EntityRecipe()
+            ..with(Position(x:7))
+        second = world.spawn(stationary)
+    }
+    application.run()
+
+    if true {
+        var resources = application.resources()
+        let world:@ECS.World = resources.get<ECS.World>()
+        assert(world.get<Position>(first).x == 42)
+        assert(!world.has<Velocity>(first))
+        assert(world.get<Label>(first).value == "moved")
+        assert(!world.is_alive(second))
+        let remaining = world.entities()
+        assert(remaining.count() == 2)
+    }
+}
+
+func inspect_positions(query:ECS.Query<(ECS.Entity, @Position)>) {
+    for (entity, position) in query {
+        assert(entity.is_valid())
+        assert(position.x == 12)
+    }
+}
+
+func run_query_once(application:Application) int {
+    application.run_schedule(Schedule.update)
+    return 0
+}
+
+func run_query_many(application:Application) int {
+    for frame in 0...1000 { application.run_schedule(Schedule.update) }
+    return 0
+}
+
+test "query injection preserves the resource world across repeated frames" {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Schedule.update, inspect_positions)
+        ..with_runner(run_query_many)
+
+    if true {
+        var resources = application.resources()
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        world.spawn(ECS.EntityRecipe()..with(Position(x:12)))
+    }
+
+    application.run()
+    var resources = application.resources()
+    let world:@ECS.World = resources.get<ECS.World>()
+    let entities = world.entities()
+    assert(entities.count() == 1)
+}
+
+test "query injection preserves the world owned by resources" {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Schedule.update, inspect_positions)
+        ..with_runner(run_query_once)
+
+    if true {
+        var resources = application.resources()
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+        var recipe = ECS.EntityRecipe()
+            ..with(Position(x:12))
+        world.spawn(recipe)
+    }
+
+    application.run()
+
+    if true {
+        var resources = application.resources()
+        let world:@ECS.World = resources.get<ECS.World>()
+        let entities = world.entities()
+        assert(entities.count() == 1)
+    }
+}
+
+class QueryLifetimeProbe {
+    public var entity_count:int
+
+    public init() {
+        self.entity_count = -1
+    }
+}
+
+func spawn_lifetime_entity(world:&ECS.World) {
+    var recipe = ECS.EntityRecipe()
+        ..with(Position(x:12))
+    world.spawn(recipe)
+}
+
+func capture_world_lifetime(
+    world:@ECS.World,
+    probe:&QueryLifetimeProbe,
+    controller:&Controller
+) {
+    let entities = world.entities()
+    probe.entity_count = entities.count()
+    controller.stop()
+}
+
+func query_lifetime_application(probe:QueryLifetimeProbe) Application {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Schedule.startup, spawn_lifetime_entity)
+        ..add_system(Schedule.update, inspect_positions)
+        ..add_after_system(Schedule.update, capture_world_lifetime)
+    var resources = application.resources()
+    resources.insert(probe)
+    return application
+}
+
+test "query injection preserves a world in a temporary fluent application" {
+    var probe = QueryLifetimeProbe()
+    query_lifetime_application(probe)
+        ..run()
+    assert(probe.entity_count == 1)
+}

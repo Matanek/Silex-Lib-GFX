@@ -1,0 +1,104 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Input
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+func add_range(values:&uint32[], first:uint32, last:uint32) {
+    var value = first
+    while value <= last {
+        values.append(value)
+        value++
+    }
+}
+
+func known_event(event:@Input.Event) bool {
+    return match event {
+        unknown(value) => false
+        custom(value) => false
+        else => true
+    }
+}
+
+func push(kind:uint32, timestamp:uint) {
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, kind)
+    let stored_timestamp = C.store<uint>(address, 8 as uint, timestamp)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+test "classify every public SDL 3.4.10 event" {
+    var input = Input()
+    input.update()
+
+    var kinds:uint32[] = []
+    add_range(kinds, 0x100, 0x108)
+    add_range(kinds, 0x151, 0x158)
+    add_range(kinds, 0x202, 0x21a)
+    add_range(kinds, 0x300, 0x309)
+    add_range(kinds, 0x400, 0x405)
+    add_range(kinds, 0x600, 0x608)
+    add_range(kinds, 0x650, 0x65b)
+    add_range(kinds, 0x700, 0x703)
+    add_range(kinds, 0x710, 0x712)
+    kinds.append(0x900 as uint32)
+    add_range(kinds, 0x1000, 0x1004)
+    add_range(kinds, 0x1100, 0x1102)
+    kinds.append(0x1200 as uint32)
+    add_range(kinds, 0x1300, 0x1307)
+    add_range(kinds, 0x1400, 0x1403)
+    add_range(kinds, 0x2000, 0x2002)
+    assert(kinds.count() == 111)
+
+    var timestamp = 1 as uint
+    for kind in kinds {
+        push(kind, timestamp)
+        input.update()
+        if true {
+            let classified = input.events()
+            assert(classified.count() == 1)
+            assert(known_event(classified[0]))
+        }
+        timestamp++
+    }
+    push(0x8000, timestamp)
+    push(0x500, timestamp + 1)
+    input.update()
+
+    if true {
+        let events = input.events()
+        assert(events.count() == 2)
+        match events[0] {
+            custom(value) => { assert(value.kind == 0x8000) }
+            else => { panic("expected custom event") }
+        }
+        match events[1] {
+            unknown(value) => { assert(value.kind == 0x500) }
+            else => { panic("expected future event") }
+        }
+        let reread = input.events()
+        assert(reread.count() == events.count())
+    }
+    input.update()
+    if true {
+        let empty = input.events()
+        assert(empty.count() == 0)
+    }
+}
+
+test "retain a large event burst" {
+    var input = Input()
+    input.update()
+    var index = 0
+    while index < 128 {
+        push(0x100, index as uint)
+        index++
+    }
+    input.update()
+    let events = input.events()
+    assert(events.count() == 128)
+}

@@ -1,0 +1,765 @@
+use Interop.C
+use Interop.Boundary
+use STD.Math
+use GFX.Window.Display
+
+public struct Settings {
+    var title:str = "Window"
+    var width:int = 1280
+    var height:int = 720
+    var resizable:bool = true
+    var fullscreen:bool = false
+    var borderless:bool = false
+    var high_pixel_density:bool = true
+    var hidden:bool = false
+    var maximized:bool = false
+    var minimized:bool = false
+    var always_on_top:bool = false
+    var transparent:bool = false
+    var focusable:bool = true
+    var utility:bool = false
+}
+
+public struct Id {
+    let value:uint32
+}
+
+public struct State {
+    let visible:bool
+    let fullscreen:bool
+    let minimized:bool
+    let maximized:bool
+    let occluded:bool
+    let bordered:bool
+    let resizable:bool
+    let always_on_top:bool
+    let transparent:bool
+    let focusable:bool
+    let keyboard_focused:bool
+    let mouse_focused:bool
+    let mouse_captured:bool
+    let mouse_relative:bool
+    let mouse_grabbed:bool
+    let keyboard_grabbed:bool
+    let modal:bool
+}
+
+public enum Attention {
+    none
+    brief
+    until_focused
+}
+
+public enum ProgressState {
+    none
+    indeterminate
+    normal
+    paused
+    error
+}
+
+public enum PopupKind {
+    menu
+    tooltip
+}
+
+public enum TextInputType {
+    text
+    name
+    email
+    username
+    password_hidden
+    password_visible
+    number
+    pin_hidden
+    pin_visible
+}
+
+public enum Capitalization {
+    none
+    sentences
+    words
+    letters
+}
+
+public struct TextInputSettings {
+    var kind:TextInputType
+    var capitalization:Capitalization
+    var autocorrect:bool
+    var multiline:bool
+}
+
+public struct TextInputArea {
+    let area:Math.Rect
+    let cursor:int
+}
+
+public class Window {
+    private let handle:uint
+    private var current_title:str
+    private var current_parent:Window?
+
+    public init(settings:Settings = Settings()) {
+        validate_size(settings.width, settings.height)
+        validate_settings(settings)
+        initialize_runtime()
+        let handle = create(settings)
+        if handle == 0 as uint {
+            shutdown_runtime()
+            panic("GFX.Window could not create a platform window")
+        }
+        self.handle = handle
+        self.current_title = settings.title
+        self.current_parent = null
+    }
+
+    internal init(handle:uint, parent:Window) {
+        if handle == 0 as uint { panic("GFX.Window could not create a popup window") }
+        initialize_runtime()
+        self.handle = handle
+        self.current_title = ""
+        self.current_parent = parent
+    }
+
+    public static func popup(parent:Window, area:Math.Rect, kind:PopupKind) Window {
+        validate_rect(area)
+        var flags:uint = 0x0008_0000
+        if kind == PopupKind.tooltip { flags = 0x0004_0000 }
+        return Window(
+            C.address_bits(sdl_create_popup_window(
+                C.pointer_bits(parent.handle),
+                checked_coordinate(area.x),
+                checked_coordinate(area.y),
+                checked_dimension(area.w),
+                checked_dimension(area.h),
+                flags
+            )),
+            parent
+        )
+    }
+
+    drop {
+        destroy(self.handle)
+        shutdown_runtime()
+    }
+
+    public func id() Id {
+        return Id(value:id(self.handle))
+    }
+
+    public func presentation_handle() uint {
+        return Platform.presentation_handle(self.handle)
+    }
+
+    public func native_handle() uint { return self.handle }
+
+    public func title() str {
+        return self.current_title
+    }
+
+    public func set_title(title:str) {
+        require_action(set_title(self.handle, title), "set its title")
+        self.current_title = title
+    }
+
+    public func size() Math.Vec2 {
+        return Math.Vec2(width(self.handle, false) as float, height(self.handle, false) as float)
+    }
+
+    public func pixel_size() Math.Vec2 {
+        return Math.Vec2(width(self.handle, true) as float, height(self.handle, true) as float)
+    }
+
+    public func position() Math.Vec2 {
+        var x:int32 = 0
+        var y:int32 = 0
+        require_action(sdl_get_window_position(C.pointer_bits(self.handle), C.mutable_pointer(x), C.mutable_pointer(y)) != 0, "query its position")
+        return Math.Vec2(x as float, y as float)
+    }
+
+    public func set_position(position:Math.Vec2) {
+        require_action(sdl_set_window_position(C.pointer_bits(self.handle), checked_coordinate(position.x), checked_coordinate(position.y)) != 0, "change its position")
+    }
+
+    public func center(display:Display.Id) {
+        let centered = (0x2fff_0000 as uint32) + display.value
+        require_action(sdl_set_window_position(C.pointer_bits(self.handle), centered as int32, centered as int32) != 0, "center on a display")
+    }
+
+    public func display() Display.Id {
+        let value = sdl_get_display_for_window(C.pointer_bits(self.handle))
+        if value == 0 { panic("GFX.Window could not identify its display") }
+        return Display.Id(value:value)
+    }
+
+    public func pixel_density() float { return sdl_get_window_pixel_density(C.pointer_bits(self.handle)) as float }
+    public func display_scale() float { return sdl_get_window_display_scale(C.pointer_bits(self.handle)) as float }
+
+    public func safe_area() Math.Rect { return window_rect(self.handle, true) }
+
+    public func borders() (top:int, left:int, bottom:int, right:int) {
+        var top:int32 = 0
+        var left:int32 = 0
+        var bottom:int32 = 0
+        var right:int32 = 0
+        require_action(sdl_get_window_borders(C.pointer_bits(self.handle), C.mutable_pointer(top), C.mutable_pointer(left), C.mutable_pointer(bottom), C.mutable_pointer(right)) != 0, "query its borders")
+        return (top:top as int, left:left as int, bottom:bottom as int, right:right as int)
+    }
+
+    public func minimum_size() Math.Vec2? { return size_limit(self.handle, true) }
+    public func maximum_size() Math.Vec2? { return size_limit(self.handle, false) }
+
+    public func set_minimum_size(size:Math.Vec2) {
+        require_action(sdl_set_window_minimum_size(C.pointer_bits(self.handle), checked_dimension(size.x), checked_dimension(size.y)) != 0, "change its minimum size")
+    }
+
+    public func clear_minimum_size() { require_action(sdl_set_window_minimum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its minimum size") }
+
+    public func set_maximum_size(size:Math.Vec2) {
+        require_action(sdl_set_window_maximum_size(C.pointer_bits(self.handle), checked_dimension(size.x), checked_dimension(size.y)) != 0, "change its maximum size")
+    }
+
+    public func clear_maximum_size() { require_action(sdl_set_window_maximum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its maximum size") }
+
+    public func aspect_ratio() (minimum:float, maximum:float)? {
+        var minimum:float32 = 0.0
+        var maximum:float32 = 0.0
+        require_action(sdl_get_window_aspect_ratio(C.pointer_bits(self.handle), C.mutable_pointer(minimum), C.mutable_pointer(maximum)) != 0, "query its aspect ratio")
+        if minimum == 0.0 && maximum == 0.0 { return null }
+        return (minimum:minimum as float, maximum:maximum as float)
+    }
+
+    public func set_aspect_ratio(minimum:float, maximum:float) {
+        if minimum < 0.0 || maximum < 0.0 || (maximum > 0.0 && minimum > maximum) {
+            panic("GFX.Window aspect ratios must be positive and ordered")
+        }
+        require_action(sdl_set_window_aspect_ratio(C.pointer_bits(self.handle), minimum as float32, maximum as float32) != 0, "change its aspect ratio")
+    }
+
+    public func clear_aspect_ratio() {
+        require_action(sdl_set_window_aspect_ratio(C.pointer_bits(self.handle), 0.0, 0.0) != 0, "clear its aspect ratio")
+    }
+
+    public func resize(size:Math.Vec2) {
+        require_action(set_size(self.handle, checked_dimension(size.x) as int, checked_dimension(size.y) as int), "change its size")
+    }
+
+    public func show() {
+        require_action(show(self.handle), "show")
+    }
+
+    public func hide() {
+        require_action(hide(self.handle), "hide")
+    }
+
+    public func raise() {
+        require_action(raise(self.handle), "raise")
+    }
+
+    public func sync() {
+        require_action(sync(self.handle), "synchronize")
+    }
+
+    public func maximize() {
+        require_action(maximize(self.handle), "maximize")
+    }
+
+    public func minimize() {
+        require_action(minimize(self.handle), "minimize")
+    }
+
+    public func restore() {
+        require_action(restore(self.handle), "restore")
+    }
+
+    public func set_fullscreen(enabled:bool) {
+        require_action(set_fullscreen(self.handle, enabled), "change fullscreen state")
+    }
+
+    public func fullscreen_mode() Display.Mode? {
+        let address = C.address_bits(sdl_get_window_fullscreen_mode(C.pointer_bits(self.handle)))
+        if address == 0 as uint { return null }
+        return read_display_mode(address)
+    }
+
+    public func set_fullscreen_mode(mode:Display.Mode?) {
+        if let value = mode {
+            var storage:uint[5]
+            require_action(sdl_get_closest_fullscreen_mode(
+                value.display.value,
+                checked_dimension(value.size.x),
+                checked_dimension(value.size.y),
+                value.refresh_rate as float32,
+                1,
+                C.mutable_pointer(storage)
+            ) != 0, "resolve its fullscreen mode")
+            require_action(sdl_set_window_fullscreen_mode(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage)))) != 0, "change its fullscreen mode")
+            return
+        }
+        require_action(sdl_set_window_fullscreen_mode(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "clear its fullscreen mode")
+    }
+
+    public func is_fullscreen() bool {
+        return is_fullscreen(self.handle)
+    }
+
+    public func state() State { return state_from_flags(sdl_get_window_flags(C.pointer_bits(self.handle))) }
+
+    public func set_bordered(enabled:bool) { require_action(sdl_set_window_bordered(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its border") }
+    public func set_resizable(enabled:bool) { require_action(sdl_set_window_resizable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its resizable state") }
+    public func set_always_on_top(enabled:bool) { require_action(sdl_set_window_always_on_top(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its always-on-top state") }
+    public func set_focusable(enabled:bool) { require_action(sdl_set_window_focusable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its focusable state") }
+
+    public func opacity() float { return sdl_get_window_opacity(C.pointer_bits(self.handle)) as float }
+
+    public func set_opacity(value:float) {
+        if value < 0.0 || value > 1.0 { panic("GFX.Window opacity must be between 0.0 and 1.0") }
+        require_action(sdl_set_window_opacity(C.pointer_bits(self.handle), value as float32) != 0, "change its opacity")
+    }
+
+    public func set_mouse_grabbed(enabled:bool) { require_action(sdl_set_window_mouse_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change mouse capture") }
+    public func is_mouse_grabbed() bool { return sdl_get_window_mouse_grab(C.pointer_bits(self.handle)) != 0 }
+    public func set_keyboard_grabbed(enabled:bool) { require_action(sdl_set_window_keyboard_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change keyboard capture") }
+    public func is_keyboard_grabbed() bool { return sdl_get_window_keyboard_grab(C.pointer_bits(self.handle)) != 0 }
+    public func set_relative_mouse(enabled:bool) { require_action(sdl_set_window_relative_mouse(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change relative mouse mode") }
+    public func is_relative_mouse() bool { return sdl_get_window_relative_mouse(C.pointer_bits(self.handle)) != 0 }
+
+    public func confine_mouse(area:Math.Rect) {
+        validate_rect(area)
+        var storage:uint[2]
+        write_rect(C.address_bits(C.mutable_pointer(storage)), area)
+        require_action(sdl_set_window_mouse_rect(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage)))) != 0, "confine the mouse")
+    }
+
+    public func release_mouse_confinement() { require_action(sdl_set_window_mouse_rect(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "release mouse confinement") }
+
+    public func mouse_confinement() Math.Rect? {
+        let address = C.address_bits(sdl_get_window_mouse_rect(C.pointer_bits(self.handle)))
+        if address == 0 as uint { return null }
+        return read_rect(address)
+    }
+
+    public func warp_mouse(position:Math.Vec2) { sdl_warp_mouse(C.pointer_bits(self.handle), position.x as float32, position.y as float32) }
+
+    public func start_text_input() {
+        self.start_text_input(TextInputSettings(
+            kind:TextInputType.text,
+            capitalization:Capitalization.sentences,
+            autocorrect:true,
+            multiline:false
+        ))
+    }
+
+    public func start_text_input(settings:TextInputSettings) {
+        let properties = sdl_create_properties()
+        if properties == 0 { panic("GFX.Window could not create text input settings") }
+        require_property(sdl_set_number_property(properties, C.terminated_pointer("SDL.textinput.type"), text_input_type(settings.kind) as int) != 0, properties)
+        require_property(sdl_set_number_property(properties, C.terminated_pointer("SDL.textinput.capitalization"), capitalization(settings.capitalization) as int) != 0, properties)
+        require_property(sdl_set_boolean_property(properties, C.terminated_pointer("SDL.textinput.autocorrect"), native_bool(settings.autocorrect)) != 0, properties)
+        require_property(sdl_set_boolean_property(properties, C.terminated_pointer("SDL.textinput.multiline"), native_bool(settings.multiline)) != 0, properties)
+        let success = sdl_start_text_input(C.pointer_bits(self.handle), properties) != 0
+        sdl_destroy_properties(properties)
+        require_action(success, "start text input")
+    }
+
+    public func stop_text_input() { require_action(sdl_stop_text_input(C.pointer_bits(self.handle)) != 0, "stop text input") }
+    public func is_text_input_active() bool { return sdl_text_input_active(C.pointer_bits(self.handle)) != 0 }
+    public func clear_text_composition() { require_action(sdl_clear_composition(C.pointer_bits(self.handle)) != 0, "clear text composition") }
+
+    public func set_text_input_area(value:TextInputArea) {
+        validate_rect(value.area)
+        var storage:uint[2]
+        write_rect(C.address_bits(C.mutable_pointer(storage)), value.area)
+        require_action(sdl_set_text_input_area(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage))), value.cursor as int32) != 0, "change text input area")
+    }
+
+    public func text_input_area() TextInputArea {
+        var storage:uint[2]
+        var cursor:int32 = 0
+        require_action(sdl_get_text_input_area(C.pointer_bits(self.handle), C.mutable_pointer(storage), C.mutable_pointer(cursor)) != 0, "query text input area")
+        return TextInputArea(area:read_rect(C.address_bits(C.mutable_pointer(storage))), cursor:cursor as int)
+    }
+
+    public func is_screen_keyboard_shown() bool { return sdl_screen_keyboard_shown(C.pointer_bits(self.handle)) != 0 }
+
+    public func parent() Window? { return self.current_parent }
+
+    public func set_parent(parent:Window) {
+        if parent.handle == self.handle { panic("GFX.Window cannot be its own parent") }
+        if parent.has_ancestor(self.handle) { panic("GFX.Window parent relationships cannot form a cycle") }
+        require_action(sdl_set_window_parent(C.pointer_bits(self.handle), C.pointer_bits(parent.handle)) != 0, "set its parent")
+        self.current_parent = parent
+    }
+
+    private func has_ancestor(candidate:uint) bool {
+        if self.handle == candidate { return true }
+        if let parent = self.current_parent { return parent.has_ancestor(candidate) }
+        return false
+    }
+
+    public func clear_parent() {
+        if self.state().modal { self.set_modal(false) }
+        require_action(sdl_set_window_parent(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "clear its parent")
+        self.current_parent = null
+    }
+
+    public func set_modal(enabled:bool) {
+        if enabled && self.current_parent == null { panic("GFX.Window requires a parent before becoming modal") }
+        require_action(sdl_set_window_modal(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change modal state")
+    }
+
+    public func request_attention(attention:Attention) { require_action(sdl_flash_window(C.pointer_bits(self.handle), attention_value(attention) as int32) != 0, "request attention") }
+
+    public func progress_state() ProgressState { return progress_state(sdl_get_window_progress_state(C.pointer_bits(self.handle))) }
+    public func set_progress_state(value:ProgressState) { require_action(sdl_set_window_progress_state(C.pointer_bits(self.handle), progress_value(value) as int32) != 0, "change progress state") }
+    public func progress() float { return sdl_get_window_progress_value(C.pointer_bits(self.handle)) as float }
+    public func set_progress(value:float) {
+        if value < 0.0 || value > 1.0 { panic("GFX.Window progress must be between 0.0 and 1.0") }
+        require_action(sdl_set_window_progress_value(C.pointer_bits(self.handle), value as float32) != 0, "change progress")
+    }
+
+    public func show_system_menu(position:Math.Vec2) { require_action(sdl_show_window_system_menu(C.pointer_bits(self.handle), checked_coordinate(position.x), checked_coordinate(position.y)) != 0, "show its system menu") }
+}
+
+func validate_size(width:int, height:int) {
+    if width <= 0 || height <= 0 || width > 2147483647 || height > 2147483647 {
+        panic("GFX.Window dimensions must be positive 32-bit integers")
+    }
+}
+
+func validate_settings(settings:Settings) {
+    if settings.maximized && settings.minimized { panic("GFX.Window cannot start both maximized and minimized") }
+    if settings.fullscreen && (settings.maximized || settings.minimized) { panic("GFX.Window fullscreen startup cannot also request a minimized or maximized state") }
+    if settings.utility && settings.fullscreen { panic("GFX.Window utility windows cannot start fullscreen") }
+}
+
+func require_action(success:bool, action:str) {
+    if !success {
+        panic("GFX.Window could not " + action)
+    }
+}
+
+func create(settings:Settings) uint {
+    var flags:uint = 0
+    if settings.fullscreen { flags += 0x0001 }
+    if settings.hidden { flags += 0x0008 }
+    if settings.borderless { flags += 0x0010 }
+    if settings.resizable { flags += 0x0020 }
+    if settings.high_pixel_density { flags += 0x2000 }
+    if settings.minimized { flags += 0x0040 }
+    if settings.maximized { flags += 0x0080 }
+    if settings.always_on_top { flags += 0x0001_0000 }
+    if settings.utility { flags += 0x0002_0000 }
+    if settings.transparent { flags += 0x4000_0000 }
+    if !settings.focusable { flags += 0x8000_0000 }
+    return C.address_bits(sdl_create_window(
+        C.terminated_pointer(settings.title),
+        settings.width as int32,
+        settings.height as int32,
+        flags
+    ))
+}
+
+func destroy(handle:uint) {
+    sdl_destroy_window(C.pointer_bits(handle))
+}
+
+func id(handle:uint) uint32 {
+    return sdl_get_window_id(C.pointer_bits(handle))
+}
+
+func set_title(handle:uint, title:str) bool {
+    return sdl_set_window_title(C.pointer_bits(handle), C.terminated_pointer(title)) != 0
+}
+
+func width(handle:uint, pixels:bool) int {
+    return dimension(handle, pixels, true)
+}
+
+func height(handle:uint, pixels:bool) int {
+    return dimension(handle, pixels, false)
+}
+
+func dimension(handle:uint, pixels:bool, select_width:bool) int {
+    var width:int32 = 0
+    var height:int32 = 0
+    var success:int32 = 0
+    if pixels {
+        success = sdl_get_window_pixel_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height))
+    } else {
+        success = sdl_get_window_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height))
+    }
+    if success == 0 {
+        panic("GFX.Window could not query its size")
+    }
+    if select_width { return width as int }
+    return height as int
+}
+
+func set_size(handle:uint, width:int, height:int) bool {
+    return sdl_set_window_size(C.pointer_bits(handle), width as int32, height as int32) != 0
+}
+
+func show(handle:uint) bool { return sdl_show_window(C.pointer_bits(handle)) != 0 }
+func hide(handle:uint) bool { return sdl_hide_window(C.pointer_bits(handle)) != 0 }
+func raise(handle:uint) bool { return sdl_raise_window(C.pointer_bits(handle)) != 0 }
+func sync(handle:uint) bool { return sdl_sync_window(C.pointer_bits(handle)) != 0 }
+func maximize(handle:uint) bool { return sdl_maximize_window(C.pointer_bits(handle)) != 0 }
+func minimize(handle:uint) bool { return sdl_minimize_window(C.pointer_bits(handle)) != 0 }
+func restore(handle:uint) bool { return sdl_restore_window(C.pointer_bits(handle)) != 0 }
+
+func set_fullscreen(handle:uint, enabled:bool) bool {
+    var requested:int32 = 0
+    if enabled { requested = 1 }
+    return sdl_set_window_fullscreen(C.pointer_bits(handle), requested) != 0
+}
+
+func is_fullscreen(handle:uint) bool {
+    return (sdl_get_window_flags(C.pointer_bits(handle)) & 0x0001) != 0
+}
+
+func checked_coordinate(value:float) int32 {
+    if value != value || value < -2147483648.0 || value >= 2147483648.0 {
+        panic("GFX.Window coordinates must be finite 32-bit values")
+    }
+    return Math.trunc(value) as int32
+}
+
+func checked_dimension(value:float) int32 {
+    let result = checked_coordinate(value)
+    if result <= 0 { panic("GFX.Window dimensions must be positive after truncation") }
+    return result
+}
+
+func native_bool(value:bool) int32 {
+    if value { return 1 }
+    return 0
+}
+
+func window_rect(handle:uint, safe:bool) Math.Rect {
+    var storage:uint[2]
+    var success = 0
+    if safe { success = sdl_get_window_safe_area(C.pointer_bits(handle), C.mutable_pointer(storage)) }
+    if success == 0 { panic("GFX.Window could not query its safe area") }
+    return read_rect(C.address_bits(C.mutable_pointer(storage)))
+}
+
+func read_rect(address:uint) Math.Rect {
+    return Math.Rect(
+        C.load<int32>(address, 0 as uint) as float,
+        C.load<int32>(address, 4 as uint) as float,
+        C.load<int32>(address, 8 as uint) as float,
+        C.load<int32>(address, 12 as uint) as float
+    )
+}
+
+func write_rect(address:uint, value:Math.Rect) {
+    let x = C.store<int32>(address, 0 as uint, checked_coordinate(value.x))
+    let y = C.store<int32>(address, 4 as uint, checked_coordinate(value.y))
+    let width = C.store<int32>(address, 8 as uint, checked_dimension(value.w))
+    let height = C.store<int32>(address, 12 as uint, checked_dimension(value.h))
+}
+
+func validate_rect(value:Math.Rect) {
+    checked_coordinate(value.x)
+    checked_coordinate(value.y)
+    checked_dimension(value.w)
+    checked_dimension(value.h)
+}
+
+func size_limit(handle:uint, minimum:bool) Math.Vec2? {
+    var width:int32 = 0
+    var height:int32 = 0
+    var success = 0
+    if minimum { success = sdl_get_window_minimum_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height)) }
+    else { success = sdl_get_window_maximum_size(C.pointer_bits(handle), C.mutable_pointer(width), C.mutable_pointer(height)) }
+    if success == 0 { panic("GFX.Window could not query its size limits") }
+    if width == 0 && height == 0 { return null }
+    return Math.Vec2(width as float, height as float)
+}
+
+func state_from_flags(flags:uint) State {
+    return State(
+        visible:(flags & 0x0008) == 0,
+        fullscreen:(flags & 0x0001) != 0,
+        minimized:(flags & 0x0040) != 0,
+        maximized:(flags & 0x0080) != 0,
+        occluded:(flags & 0x0004) != 0,
+        bordered:(flags & 0x0010) == 0,
+        resizable:(flags & 0x0020) != 0,
+        always_on_top:(flags & 0x0001_0000) != 0,
+        transparent:(flags & 0x4000_0000) != 0,
+        focusable:(flags & 0x8000_0000) == 0,
+        keyboard_focused:(flags & 0x0200) != 0,
+        mouse_focused:(flags & 0x0400) != 0,
+        mouse_captured:(flags & 0x4000) != 0,
+        mouse_relative:(flags & 0x8000) != 0,
+        mouse_grabbed:(flags & 0x0100) != 0,
+        keyboard_grabbed:(flags & 0x0010_0000) != 0,
+        modal:(flags & 0x1000) != 0
+    )
+}
+
+func text_input_type(value:TextInputType) int {
+    return match value {
+        text => 0; name => 1; email => 2; username => 3
+        password_hidden => 4; password_visible => 5; number => 6
+        pin_hidden => 7; pin_visible => 8
+    }
+}
+
+func capitalization(value:Capitalization) int {
+    return match value { none => 0; sentences => 1; words => 2; letters => 3 }
+}
+
+func require_property(success:bool, properties:uint32) {
+    if !success {
+        sdl_destroy_properties(properties)
+        panic("GFX.Window could not configure text input")
+    }
+}
+
+func attention_value(value:Attention) int {
+    return match value { none => 0; brief => 1; until_focused => 2 }
+}
+
+func progress_value(value:ProgressState) int {
+    return match value { none => 0; indeterminate => 1; normal => 2; paused => 3; error => 4 }
+}
+
+func progress_state(value:int32) ProgressState {
+    if value == 1 { return ProgressState.indeterminate }
+    if value == 2 { return ProgressState.normal }
+    if value == 3 { return ProgressState.paused }
+    if value == 4 { return ProgressState.error }
+    return ProgressState.none
+}
+
+func read_display_mode(address:uint) Display.Mode {
+    return Display.Mode(
+        display:Display.Id(value:C.load<uint32>(address, 0 as uint)),
+        size:Math.Vec2(C.load<int32>(address, 8 as uint) as float, C.load<int32>(address, 12 as uint) as float),
+        pixel_density:C.load<float32>(address, 16 as uint) as float,
+        refresh_rate:C.load<float32>(address, 20 as uint) as float,
+        refresh_numerator:C.load<int32>(address, 24 as uint) as int,
+        refresh_denominator:C.load<int32>(address, 28 as uint) as int
+    )
+}
+
+let sdl_create_window = C.function<
+    func(C.Pointer<uint8>, int32, int32, uint) C.Pointer<uint8>
+>(library:Boundary.SDL3, name:"SDL_CreateWindow")
+
+let sdl_create_popup_window = C.function<
+    func(C.Pointer<uint8>, int32, int32, int32, int32, uint) C.Pointer<uint8>
+>(library:Boundary.SDL3, name:"SDL_CreatePopupWindow")
+
+let sdl_destroy_window = C.function<func(C.Pointer<uint8>) void>(
+    library:Boundary.SDL3,
+    name:"SDL_DestroyWindow"
+)
+
+let sdl_get_window_id = C.function<func(C.Pointer<uint8>) uint32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowID"
+)
+
+let sdl_set_window_title = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowTitle"
+)
+
+let sdl_get_window_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowSize"
+)
+
+let sdl_get_window_pixel_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowSizeInPixels"
+)
+
+let sdl_set_window_size = C.function<func(C.Pointer<uint8>, int32, int32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowSize"
+)
+
+let sdl_show_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_ShowWindow")
+let sdl_hide_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_HideWindow")
+let sdl_raise_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_RaiseWindow")
+let sdl_sync_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SyncWindow")
+let sdl_maximize_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_MaximizeWindow")
+let sdl_minimize_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_MinimizeWindow")
+let sdl_restore_window = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_RestoreWindow")
+
+let sdl_set_window_fullscreen = C.function<func(C.Pointer<uint8>, int32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetWindowFullscreen"
+)
+
+let sdl_get_window_flags = C.function<func(C.Pointer<uint8>) uint>(
+    library:Boundary.SDL3,
+    name:"SDL_GetWindowFlags"
+)
+let sdl_get_closest_fullscreen_mode = C.function<func(uint32, int32, int32, float32, int32, C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_GetClosestFullscreenDisplayMode")
+let sdl_set_window_fullscreen_mode = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetWindowFullscreenMode")
+let sdl_get_window_fullscreen_mode = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetWindowFullscreenMode")
+
+let sdl_get_window_position = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowPosition")
+let sdl_set_window_position = C.function<func(C.Pointer<uint8>, int32, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowPosition")
+let sdl_get_display_for_window = C.function<func(C.Pointer<uint8>) uint32>(library:Boundary.SDL3, name:"SDL_GetDisplayForWindow")
+let sdl_get_window_pixel_density = C.function<func(C.Pointer<uint8>) float32>(library:Boundary.SDL3, name:"SDL_GetWindowPixelDensity")
+let sdl_get_window_display_scale = C.function<func(C.Pointer<uint8>) float32>(library:Boundary.SDL3, name:"SDL_GetWindowDisplayScale")
+let sdl_get_window_safe_area = C.function<func(C.Pointer<uint8>, C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowSafeArea")
+let sdl_get_window_borders = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowBordersSize")
+let sdl_get_window_minimum_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowMinimumSize")
+let sdl_get_window_maximum_size = C.function<func(C.Pointer<uint8>, C.MutablePointer<int32>, C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowMaximumSize")
+let sdl_set_window_minimum_size = C.function<func(C.Pointer<uint8>, int32, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowMinimumSize")
+let sdl_set_window_maximum_size = C.function<func(C.Pointer<uint8>, int32, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowMaximumSize")
+let sdl_get_window_aspect_ratio = C.function<func(C.Pointer<uint8>, C.MutablePointer<float32>, C.MutablePointer<float32>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowAspectRatio")
+let sdl_set_window_aspect_ratio = C.function<func(C.Pointer<uint8>, float32, float32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowAspectRatio")
+let sdl_set_window_bordered = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowBordered")
+let sdl_set_window_resizable = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowResizable")
+let sdl_set_window_always_on_top = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowAlwaysOnTop")
+let sdl_set_window_focusable = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowFocusable")
+let sdl_get_window_opacity = C.function<func(C.Pointer<uint8>) float32>(library:Boundary.SDL3, name:"SDL_GetWindowOpacity")
+let sdl_set_window_opacity = C.function<func(C.Pointer<uint8>, float32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowOpacity")
+let sdl_set_window_mouse_grab = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowMouseGrab")
+let sdl_get_window_mouse_grab = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowMouseGrab")
+let sdl_set_window_keyboard_grab = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowKeyboardGrab")
+let sdl_get_window_keyboard_grab = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowKeyboardGrab")
+let sdl_set_window_relative_mouse = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowRelativeMouseMode")
+let sdl_get_window_relative_mouse = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowRelativeMouseMode")
+let sdl_set_window_mouse_rect = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetWindowMouseRect")
+let sdl_get_window_mouse_rect = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetWindowMouseRect")
+let sdl_warp_mouse = C.function<func(C.Pointer<uint8>, float32, float32) void>(library:Boundary.SDL3, name:"SDL_WarpMouseInWindow")
+let sdl_create_properties = C.function<func() uint32>(library:Boundary.SDL3, name:"SDL_CreateProperties")
+let sdl_destroy_properties = C.function<func(uint32) void>(library:Boundary.SDL3, name:"SDL_DestroyProperties")
+let sdl_set_number_property = C.function<func(uint32, C.Pointer<uint8>, int) int32>(library:Boundary.SDL3, name:"SDL_SetNumberProperty")
+let sdl_set_boolean_property = C.function<func(uint32, C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetBooleanProperty")
+let sdl_start_text_input = C.function<func(C.Pointer<uint8>, uint32) int32>(library:Boundary.SDL3, name:"SDL_StartTextInputWithProperties")
+let sdl_stop_text_input = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_StopTextInput")
+let sdl_text_input_active = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_TextInputActive")
+let sdl_clear_composition = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_ClearComposition")
+let sdl_set_text_input_area = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetTextInputArea")
+let sdl_get_text_input_area = C.function<func(C.Pointer<uint8>, C.MutablePointer<uint>, C.MutablePointer<int32>) int32>(library:Boundary.SDL3, name:"SDL_GetTextInputArea")
+let sdl_screen_keyboard_shown = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_ScreenKeyboardShown")
+let sdl_set_window_parent = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetWindowParent")
+let sdl_set_window_modal = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowModal")
+let sdl_flash_window = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_FlashWindow")
+let sdl_get_window_progress_state = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_GetWindowProgressState")
+let sdl_set_window_progress_state = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowProgressState")
+let sdl_get_window_progress_value = C.function<func(C.Pointer<uint8>) float32>(library:Boundary.SDL3, name:"SDL_GetWindowProgressValue")
+let sdl_set_window_progress_value = C.function<func(C.Pointer<uint8>, float32) int32>(library:Boundary.SDL3, name:"SDL_SetWindowProgressValue")
+let sdl_show_window_system_menu = C.function<func(C.Pointer<uint8>, int32, int32) int32>(library:Boundary.SDL3, name:"SDL_ShowWindowSystemMenu")
+
+func initialize_runtime() {
+    if sdl_init_subsystem(0x0000_4020 as uint32) == 0 {
+        panic("GFX.Window could not initialize the SDL platform subsystems")
+    }
+}
+
+func shutdown_runtime() { sdl_quit_subsystem(0x0000_4020 as uint32) }
+
+let sdl_init_subsystem = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_InitSubSystem")
+let sdl_quit_subsystem = C.function<func(uint32) void>(library:Boundary.SDL3, name:"SDL_QuitSubSystem")

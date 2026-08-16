@@ -1,0 +1,12 @@
+use GFX.Application
+use GFX.Application.FrameTime
+use GFX.Application.Time as TimePlugin
+
+test "add the frame time resource" {
+    var application = Application()
+    application.add_plugin(TimePlugin())
+
+    var resources = application.resources()
+    let time:@FrameTime = resources.get<FrameTime>()
+    assert(time.delta == 0.0)
+}

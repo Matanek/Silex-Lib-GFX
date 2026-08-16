@@ -1,0 +1,164 @@
+use Interop.C
+use Interop.Boundary
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application
+use GFX.Application.Schedule
+use GFX.Window as WindowApi
+
+public enum CloseBehavior {
+    automatic
+    manual
+}
+
+// Shared with input integrations so close behavior remains independent from
+// the concrete event backend.
+public struct ClosePolicy {
+    public let behavior:CloseBehavior
+
+    public init(behavior:CloseBehavior) {
+        self.behavior = behavior
+    }
+}
+
+public struct Settings {
+    var title:str
+    var width:int
+    var height:int
+    var resizable:bool
+    var fullscreen:bool
+    var borderless:bool
+    var high_pixel_density:bool
+    var hidden:bool
+    var maximized:bool
+    var minimized:bool
+    var always_on_top:bool
+    var transparent:bool
+    var focusable:bool
+    var utility:bool
+    var close_behavior:CloseBehavior
+
+    public init() {
+        self.title = "Window"
+        self.width = 1280
+        self.height = 720
+        self.resizable = true
+        self.fullscreen = false
+        self.borderless = false
+        self.high_pixel_density = true
+        self.hidden = false
+        self.maximized = false
+        self.minimized = false
+        self.always_on_top = false
+        self.transparent = false
+        self.focusable = true
+        self.utility = false
+        self.close_behavior = CloseBehavior.automatic
+    }
+}
+
+struct Configuration {
+    let settings:WindowApi.Settings
+    let visible_on_ready:bool
+}
+
+public class Presentation {
+    private let requested:bool
+    private var completed:bool
+
+    internal init(requested:bool) {
+        self.requested = requested
+        self.completed = false
+    }
+
+    public func present(window:&WindowApi) {
+        if self.completed || !self.requested { return }
+        window.show()
+        window.raise()
+        self.completed = true
+    }
+}
+
+public struct Plugin:PluginProtocol {
+    private let settings:Settings
+
+    public init(settings:Settings = Settings()) {
+        self.settings = settings
+    }
+
+    func id() str { return "GFX.Window.Plugin" }
+
+    func build(application:Application) {
+        application.resources().insert(Configuration(
+            settings:WindowApi.Settings(
+                title:self.settings.title,
+                width:self.settings.width,
+                height:self.settings.height,
+                resizable:self.settings.resizable,
+                fullscreen:self.settings.fullscreen,
+                borderless:self.settings.borderless,
+                high_pixel_density:self.settings.high_pixel_density,
+                hidden:true,
+                maximized:self.settings.maximized,
+                minimized:self.settings.minimized,
+                always_on_top:self.settings.always_on_top,
+                transparent:self.settings.transparent,
+                focusable:self.settings.focusable,
+                utility:self.settings.utility
+            ),
+            visible_on_ready:!self.settings.hidden
+        ))
+        application.resources().insert(ClosePolicy(self.settings.close_behavior))
+        application.add_system(Schedule.startup, start_window)
+        application.add_after_system(Schedule.startup, present_without_renderer)
+        application.add_system(Schedule.pre_update, pump_window_events)
+        application.add_system(Schedule.shutdown, stop_window)
+    }
+}
+
+func start_window(application:Application) {
+    var resources = application.resources()
+    let stored_configuration = resources.remove<Configuration>()
+    if let configuration = stored_configuration {
+        var window = WindowApi(configuration.settings)
+        resources.insert(Presentation(configuration.visible_on_ready))
+        resources.insert(window)
+        return
+    }
+    panic("GFX.Window.Plugin has no window settings")
+}
+
+func present_without_renderer(application:Application) {
+    var resources = application.resources()
+    var stored_window = resources.remove<WindowApi>()
+    if var window = stored_window {
+        var stored_presentation = resources.remove<Presentation>()
+        if var presentation = stored_presentation {
+            presentation.present(window)
+            resources.insert(presentation)
+        } else {
+            panic("GFX.Window.Plugin has no presentation state")
+        }
+        resources.insert(window)
+        return
+    }
+    panic("GFX.Window.Plugin could not present its window")
+}
+
+func pump_window_events() {
+    sdl_pump_events()
+}
+
+func stop_window(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<WindowApi>()
+    assert(removed != null)
+    var presentation = resources.remove<Presentation>()
+    assert(presentation != null)
+    var close_policy = resources.remove<ClosePolicy>()
+    assert(close_policy != null)
+}
+
+let sdl_pump_events = C.function<func() void>(
+    library:Boundary.SDL3,
+    name:"SDL_PumpEvents"
+)

@@ -1,0 +1,71 @@
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application
+use GFX.Application.Controller
+use GFX.Application.Schedule
+use GFX.Input as InputApi
+use GFX.Input.State as InputState
+use GFX.Window
+use GFX.Window.Plugin.CloseBehavior
+use GFX.Window.Plugin.ClosePolicy
+
+public struct Plugin:PluginProtocol {
+
+    func id() str { return "GFX.Input.Plugin" }
+
+    func build(application:Application) {
+        application.add_system(Schedule.startup, start_input)
+        application.add_after_system(Schedule.pre_update, update_input)
+        application.add_after_system(Schedule.pre_update, handle_close_request)
+        application.add_system(Schedule.shutdown, stop_input)
+    }
+}
+
+func start_input(application:Application) {
+    var resources = application.resources()
+    var input = InputApi()
+    var state = input.state()
+    resources.insert(state)
+    resources.insert(input)
+}
+
+func update_input(input:&InputApi, state:&InputState) {
+    input.update_state(state)
+}
+
+func handle_close_request(application:Application) {
+    var resources = application.resources()
+    let policy = resources.try_get<ClosePolicy>()
+    let input = resources.try_get<InputState>()
+    let window = resources.try_get<Window>()
+    if policy == null || input == null || window == null { return }
+    if let configured = policy {
+        if configured.behavior != CloseBehavior.automatic { return }
+    }
+    if let state = input {
+        if let active_window = window {
+            for event in state.events() {
+                match event {
+                    quit(meta) => {
+                        application.stop()
+                        return
+                    }
+                    window_close_requested(request) => {
+                        if request.window == active_window.id() {
+                            application.stop()
+                            return
+                        }
+                    }
+                    else => {}
+                }
+            }
+        }
+    }
+}
+
+func stop_input(application:Application) {
+    var resources = application.resources()
+    var removed_state = resources.remove<InputState>()
+    assert(removed_state != null)
+    var removed_input = resources.remove<InputApi>()
+    assert(removed_input != null)
+}

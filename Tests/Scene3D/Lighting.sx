@@ -1,0 +1,24 @@
+use GFX.Color
+use GFX.Scene3D
+use STD.Math
+
+test "keep shadows and gizmos in the public Scene3D lighting vocabulary" {
+    let shadow = Scene3D.Shadow(bias:0.00085, normal_offset:0.003, softness:0.5)
+    let sun = Scene3D.SunLight(
+        direction:Math.Vec3(-0.45, -1.0, -0.3),
+        intensity:1.35,
+        shadow:shadow
+    )
+    let point = Scene3D.PointLight(
+        color:Color.sky_400(),
+        intensity:2.2,
+        radius:2.4,
+        shadow:shadow
+    )
+    let gizmo = Scene3D.PointLightGizmo()
+
+    assert(sun.shadow.enabled)
+    assert(point.shadow.softness == 0.5)
+    assert(gizmo.visible)
+    assert(gizmo.show_radius)
+}

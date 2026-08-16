@@ -1,0 +1,167 @@
+use STD.Math
+use GFX.Window
+use GFX.Window.Display
+use GFX.Input.Keyboard
+use GFX.Input.Pointer
+
+public struct Timestamp { let nanoseconds:uint }
+public struct Meta { let timestamp:Timestamp }
+public enum SystemTheme { unknown; light; dark }
+public struct SystemThemeEvent { let theme:SystemTheme; let timestamp:Timestamp }
+public struct DisplayEvent { let display:Display.Id; let timestamp:Timestamp }
+public struct DisplayOrientationEvent { let display:Display.Id; let orientation:Display.Orientation; let timestamp:Timestamp }
+public struct WindowEvent { let window:Window.Id; let timestamp:Timestamp }
+public struct WindowExposedEvent { let window:Window.Id; let live_resize:bool; let timestamp:Timestamp }
+public struct WindowPositionEvent { let window:Window.Id; let position:Math.Vec2; let timestamp:Timestamp }
+public struct WindowSizeEvent { let window:Window.Id; let size:Math.Vec2; let timestamp:Timestamp }
+public struct WindowDisplayEvent { let window:Window.Id; let display:Display.Id; let timestamp:Timestamp }
+public struct KeyboardDeviceEvent { let keyboard:Keyboard.KeyboardId; let timestamp:Timestamp }
+public struct KeyboardInfo { let id:Keyboard.KeyboardId; let name:str }
+
+public struct KeyEvent {
+    let window:Window.Id
+    let keyboard:Keyboard.KeyboardId
+    let key:Keyboard.Key
+    let keycode:uint32
+    let raw:uint16
+    let repeated:bool
+    let modifiers:Keyboard.Modifiers
+    let timestamp:Timestamp
+}
+
+public struct TextEditingEvent { let window:Window.Id; let text:str; let start:int; let length:int; let timestamp:Timestamp }
+public struct TextCandidatesEvent { let window:Window.Id; let candidates:str[]; let selected:int; let horizontal:bool; let timestamp:Timestamp }
+public struct TextInputEvent { let window:Window.Id; let text:str; let timestamp:Timestamp }
+public struct MouseDeviceEvent { let mouse:Pointer.MouseId; let timestamp:Timestamp }
+public struct MouseInfo { let id:Pointer.MouseId; let name:str }
+public struct MouseMotionEvent { let window:Window.Id; let mouse:Pointer.MouseId; let buttons:uint32; let position:Math.Vec2; let delta:Math.Vec2; let relative:bool; let timestamp:Timestamp }
+public struct MouseButtonEvent { let window:Window.Id; let mouse:Pointer.MouseId; let button:Pointer.MouseButton; let down:bool; let clicks:uint8; let position:Math.Vec2; let timestamp:Timestamp }
+public struct MouseWheelEvent { let window:Window.Id; let mouse:Pointer.MouseId; let delta:Math.Vec2; let integer_delta:Math.Vec2; let position:Math.Vec2; let flipped:bool; let timestamp:Timestamp }
+
+public struct JoystickId { let value:uint32 }
+public enum JoystickKind { unknown(int); gamepad; wheel; arcade_stick; flight_stick; dance_pad; guitar; drum_kit; arcade_pad; throttle }
+public struct JoystickInfo { let id:JoystickId; let name:str; let kind:JoystickKind; let player:int?; let connected:bool }
+public enum Hat {
+    centered; up; right; down; left
+    up_right; down_right; down_left; up_left
+    unknown(uint8)
+}
+public struct JoystickAxisEvent { let joystick:JoystickId; let axis:uint8; let value:float; let timestamp:Timestamp }
+public struct JoystickBallEvent { let joystick:JoystickId; let ball:uint8; let delta:Math.Vec2; let timestamp:Timestamp }
+public struct JoystickHatEvent { let joystick:JoystickId; let hat:uint8; let value:Hat; let timestamp:Timestamp }
+public struct JoystickButtonEvent { let joystick:JoystickId; let button:uint8; let down:bool; let timestamp:Timestamp }
+public struct JoystickDeviceEvent { let joystick:JoystickId; let timestamp:Timestamp }
+public enum PowerState { error; unknown; on_battery; no_battery; charging; charged; unknown_value(int) }
+public struct JoystickBatteryEvent { let joystick:JoystickId; let state:PowerState; let percent:int; let timestamp:Timestamp }
+
+public struct GamepadId { let value:uint32 }
+public enum GamepadKind { unknown(int); standard; xbox_360; xbox_one; playstation_3; playstation_4; playstation_5; switch_pro; joycon_left; joycon_right; joycon_pair; gamecube }
+public struct GamepadInfo { let id:GamepadId; let name:str; let kind:GamepadKind; let player:int?; let connected:bool }
+public enum GamepadAxis { left_x; left_y; right_x; right_y; left_trigger; right_trigger; unknown(uint8) }
+public enum GamepadButton {
+    south; east; west; north; back; guide; start; left_stick; right_stick
+    left_shoulder; right_shoulder; dpad_up; dpad_down; dpad_left; dpad_right
+    misc1; right_paddle1; left_paddle1; right_paddle2; left_paddle2; touchpad
+    misc2; misc3; misc4; misc5; misc6; unknown(uint8)
+}
+public struct GamepadAxisEvent { let gamepad:GamepadId; let axis:GamepadAxis; let value:float; let timestamp:Timestamp }
+public struct GamepadButtonEvent { let gamepad:GamepadId; let button:GamepadButton; let down:bool; let timestamp:Timestamp }
+public struct GamepadDeviceEvent { let gamepad:GamepadId; let timestamp:Timestamp }
+public struct GamepadTouchEvent { let gamepad:GamepadId; let touchpad:int; let finger:int; let position:Math.Vec2; let pressure:float; let timestamp:Timestamp }
+public struct GamepadSensorEvent { let gamepad:GamepadId; let sensor:SensorType; let values:float[]; let sensor_timestamp:Timestamp; let timestamp:Timestamp }
+
+public struct TouchId { let value:uint }
+public struct FingerId { let value:uint }
+public struct TouchEvent { let touch:TouchId; let finger:FingerId; let window:Window.Id; let position:Math.Vec2; let delta:Math.Vec2; let pressure:float; let timestamp:Timestamp }
+public struct PinchEvent { let window:Window.Id; let scale:float; let timestamp:Timestamp }
+
+public struct PenId { let value:uint32 }
+public enum PenAxis { pressure; tilt_x; tilt_y; distance; rotation; slider; tangential_pressure; unknown(uint32) }
+public struct PenProximityEvent { let pen:PenId; let window:Window.Id; let timestamp:Timestamp }
+public struct PenEvent { let pen:PenId; let window:Window.Id; let state:uint32; let position:Math.Vec2; let timestamp:Timestamp }
+public struct PenTouchEvent { let pen:PenId; let window:Window.Id; let state:uint32; let position:Math.Vec2; let eraser:bool; let down:bool; let timestamp:Timestamp }
+public struct PenButtonEvent { let pen:PenId; let window:Window.Id; let state:uint32; let position:Math.Vec2; let button:uint8; let down:bool; let timestamp:Timestamp }
+public struct PenAxisEvent { let pen:PenId; let window:Window.Id; let state:uint32; let position:Math.Vec2; let axis:PenAxis; let value:float; let timestamp:Timestamp }
+public struct PenState {
+    let pen:PenId
+    let window:Window.Id
+    let position:Math.Vec2
+    let input:uint32
+    let in_proximity:bool
+    let down:bool
+    let eraser:bool
+    let buttons:uint
+    let buttons_pressed:uint
+    let buttons_released:uint
+    let pressure:float
+    let tilt_x:float
+    let tilt_y:float
+    let distance:float
+    let rotation:float
+    let slider:float
+    let tangential_pressure:float
+    let timestamp:Timestamp
+}
+
+public struct DropEvent { let window:Window.Id; let position:Math.Vec2; let source:str; let data:str; let timestamp:Timestamp }
+public struct ClipboardEvent { let owned:bool; let mime_types:str[]; let timestamp:Timestamp }
+public struct AudioDeviceId { let value:uint32 }
+public struct AudioDeviceEvent { let device:AudioDeviceId; let recording:bool; let timestamp:Timestamp }
+public struct CameraId { let value:uint32 }
+public struct CameraEvent { let camera:CameraId; let timestamp:Timestamp }
+public struct SensorId { let value:uint32 }
+public enum SensorType { unknown(int); accelerometer; gyroscope; accelerometer_left; gyroscope_left; accelerometer_right; gyroscope_right }
+public struct SensorEvent { let sensor:SensorId; let kind:SensorType; let values:float[]; let sensor_timestamp:Timestamp; let timestamp:Timestamp }
+public struct RenderEvent { let window:Window.Id; let timestamp:Timestamp }
+public struct CustomEvent { let kind:uint32; let window:Window.Id?; let code:int32; let timestamp:Timestamp }
+public struct UnknownEvent { let kind:uint32; let timestamp:Timestamp }
+
+public enum Event {
+    quit(Meta); terminating(Meta); low_memory(Meta)
+    will_enter_background(Meta); did_enter_background(Meta)
+    will_enter_foreground(Meta); did_enter_foreground(Meta)
+    locale_changed(Meta); system_theme_changed(SystemThemeEvent)
+
+    display_orientation_changed(DisplayOrientationEvent)
+    display_added(DisplayEvent); display_removed(DisplayEvent); display_moved(DisplayEvent)
+    display_desktop_mode_changed(DisplayEvent); display_current_mode_changed(DisplayEvent)
+    display_content_scale_changed(DisplayEvent); display_usable_bounds_changed(DisplayEvent)
+
+    window_shown(WindowEvent); window_hidden(WindowEvent); window_exposed(WindowExposedEvent)
+    window_moved(WindowPositionEvent); window_resized(WindowSizeEvent); window_pixel_size_changed(WindowSizeEvent)
+    window_metal_view_resized(WindowSizeEvent); window_minimized(WindowEvent); window_maximized(WindowEvent)
+    window_restored(WindowEvent); window_mouse_entered(WindowEvent); window_mouse_left(WindowEvent)
+    window_focus_gained(WindowEvent); window_focus_lost(WindowEvent); window_close_requested(WindowEvent)
+    window_hit_test(WindowEvent); window_icc_profile_changed(WindowEvent); window_display_changed(WindowDisplayEvent)
+    window_display_scale_changed(WindowEvent); window_safe_area_changed(WindowEvent); window_occluded(WindowEvent)
+    window_entered_fullscreen(WindowEvent); window_left_fullscreen(WindowEvent); window_destroyed(WindowEvent)
+    window_hdr_state_changed(WindowEvent)
+
+    key_pressed(KeyEvent); key_released(KeyEvent); text_editing(TextEditingEvent); text_input(TextInputEvent)
+    keymap_changed(Meta); keyboard_added(KeyboardDeviceEvent); keyboard_removed(KeyboardDeviceEvent)
+    text_editing_candidates(TextCandidatesEvent); screen_keyboard_shown(Meta); screen_keyboard_hidden(Meta)
+    mouse_moved(MouseMotionEvent); mouse_button_pressed(MouseButtonEvent); mouse_button_released(MouseButtonEvent)
+    mouse_wheel(MouseWheelEvent); mouse_added(MouseDeviceEvent); mouse_removed(MouseDeviceEvent)
+
+    joystick_axis_moved(JoystickAxisEvent); joystick_ball_moved(JoystickBallEvent); joystick_hat_moved(JoystickHatEvent)
+    joystick_button_pressed(JoystickButtonEvent); joystick_button_released(JoystickButtonEvent)
+    joystick_added(JoystickDeviceEvent); joystick_removed(JoystickDeviceEvent)
+    joystick_battery_updated(JoystickBatteryEvent); joystick_update_complete(JoystickDeviceEvent)
+
+    gamepad_axis_moved(GamepadAxisEvent); gamepad_button_pressed(GamepadButtonEvent); gamepad_button_released(GamepadButtonEvent)
+    gamepad_added(GamepadDeviceEvent); gamepad_removed(GamepadDeviceEvent); gamepad_remapped(GamepadDeviceEvent)
+    gamepad_touchpad_pressed(GamepadTouchEvent); gamepad_touchpad_moved(GamepadTouchEvent); gamepad_touchpad_released(GamepadTouchEvent)
+    gamepad_sensor_updated(GamepadSensorEvent); gamepad_update_complete(GamepadDeviceEvent); gamepad_steam_handle_updated(GamepadDeviceEvent)
+
+    finger_pressed(TouchEvent); finger_released(TouchEvent); finger_moved(TouchEvent); finger_canceled(TouchEvent)
+    pinch_began(PinchEvent); pinch_updated(PinchEvent); pinch_ended(PinchEvent)
+    clipboard_updated(ClipboardEvent)
+    file_dropped(DropEvent); text_dropped(DropEvent); drop_began(DropEvent); drop_completed(DropEvent); drop_position(DropEvent)
+    audio_device_added(AudioDeviceEvent); audio_device_removed(AudioDeviceEvent); audio_device_format_changed(AudioDeviceEvent)
+    sensor_updated(SensorEvent)
+    pen_entered(PenProximityEvent); pen_left(PenProximityEvent); pen_pressed(PenTouchEvent); pen_released(PenTouchEvent)
+    pen_button_pressed(PenButtonEvent); pen_button_released(PenButtonEvent); pen_moved(PenEvent); pen_axis_changed(PenAxisEvent)
+    camera_device_added(CameraEvent); camera_device_removed(CameraEvent); camera_device_approved(CameraEvent); camera_device_denied(CameraEvent)
+    render_targets_reset(RenderEvent); render_device_reset(RenderEvent); render_device_lost(RenderEvent)
+    custom(CustomEvent); unknown(UnknownEvent)
+}

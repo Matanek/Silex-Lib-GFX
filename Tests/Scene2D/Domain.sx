@@ -1,0 +1,23 @@
+use GFX.Scene2D.Camera
+use GFX.Scene2D.Drawing as SceneDrawing
+use GFX.Scene2D.Grid
+use GFX.Scene2D.Sampling
+use GFX.Scene2D.Sprite
+use GFX.Scene2D.Transform
+use STD.Math
+use GFX.Canvas.Canvas as AuthoredCanvas
+
+test "name 2D concepts through their domain instead of their declarations" {
+    let transform = Transform(position:Math.Vec2(12.0, 8.0))
+    let camera = Camera(zoom:2.0)
+    let grid = Grid(spacing:0.5)
+    var drawing = SceneDrawing(AuthoredCanvas(), 16, 16)
+    var sprite = Sprite(size:Math.Vec2(32.0, 16.0))
+    sprite.sampling(Sampling.pixelated)
+
+    assert(transform.position == Math.Vec2(12.0, 8.0))
+    assert(camera.is_active())
+    assert(grid.spacing == 0.5)
+    assert(drawing.width() == 16)
+    assert(sprite.sampling() == Sampling.pixelated)
+}

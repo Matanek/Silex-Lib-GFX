@@ -1,0 +1,22 @@
+use GFX.Assets as AssetStore
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+
+public struct Plugin:PluginProtocol {
+    func id() str { return "GFX.Assets.Plugin" }
+
+    func build(application:Application) {
+        application.resources().insert(AssetStore.Images())
+        application.resources().insert(AssetStore.SpriteSheets())
+        application.add_system(Schedule.shutdown, stop_assets)
+    }
+}
+
+func stop_assets(application:Application) {
+    var resources = application.resources()
+    var images = resources.remove<AssetStore.Images>()
+    var sprite_sheets = resources.remove<AssetStore.SpriteSheets>()
+    assert(images != null)
+    assert(sprite_sheets != null)
+}

@@ -1,0 +1,89 @@
+use GFX.Color
+use GFX.Canvas.Canvas as AuthoredCanvas
+use GFX.Canvas.Snapshot
+use GFX.Scene2D.Transform
+use STD.Math
+
+// Retained vector content placed in the 2D world. The authored Canvas stays
+// renderer-independent; Scene2D only owns its transform, size and ordering.
+public struct Drawing {
+    private var retained:Snapshot
+    private var current_revision:int
+    private let drawing_width:int
+    private let drawing_height:int
+    var size:Math.Vec2
+    var pivot:Math.Vec2
+    var color:Color
+    var layer:int
+    var depth:float
+    var visible:bool
+
+    public init(canvas:AuthoredCanvas, width:int, height:int) {
+        if width <= 0 || height <= 0 {
+            panic("GFX.Scene2D.Drawing dimensions must be positive")
+        }
+        self.retained = canvas.snapshot(width, height)
+        self.current_revision = 1
+        self.drawing_width = width
+        self.drawing_height = height
+        self.size = Math.Vec2()
+        self.pivot = Math.Vec2(0.5)
+        self.color = Color.white()
+        self.layer = 0
+        self.depth = 0.0
+        self.visible = true
+    }
+
+    public func replace(canvas:AuthoredCanvas) {
+        self.retained = canvas.snapshot(self.drawing_width, self.drawing_height)
+        self.current_revision++
+    }
+
+    public func snapshot() Snapshot { return self.retained }
+    public func revision() int { return self.current_revision }
+    public func width() int { return self.drawing_width }
+    public func height() int { return self.drawing_height }
+
+    internal func display_size() Math.Vec2 {
+        if self.size.x > 0.0 && self.size.y > 0.0 { return self.size }
+        return Math.Vec2(self.drawing_width as float, self.drawing_height as float)
+    }
+
+    internal func model(transform:@Transform) Math.Mat4 {
+        let displayed = self.display_size()
+        let placement = Math.Mat4.transform(
+            Math.Vec3(
+                -self.pivot.x * displayed.x,
+                -self.pivot.y * displayed.y,
+                self.depth
+            ),
+            Math.Quat.identity().to_mat3(),
+            Math.Vec3(
+                displayed.x / self.drawing_width as float,
+                displayed.y / self.drawing_height as float,
+                1.0
+            )
+        )
+        return transform.matrix().multiply(placement)
+    }
+
+    internal func text_size(content:Math.Vec2) Math.Vec2 {
+        let displayed = self.display_size()
+        return Math.Vec2(
+            content.x * displayed.x / self.drawing_width as float,
+            content.y * displayed.y / self.drawing_height as float
+        )
+    }
+
+    internal func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
+        let displayed = self.display_size()
+        let resolved = self.text_size(content)
+        if resolved.x <= 0.0 || resolved.y <= 0.0 { return Math.Vec2() }
+        return Math.Vec2(
+            (self.pivot.x * displayed.x - origin.x * displayed.x /
+                self.drawing_width as float) / resolved.x,
+            (self.pivot.y * displayed.y - origin.y * displayed.y /
+                self.drawing_height as float) / resolved.y
+        )
+    }
+}

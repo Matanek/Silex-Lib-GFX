@@ -1,0 +1,10 @@
+struct Position { var x:int; var y:int }
+struct Vertex { var position:Position }
+
+test "mutate fields after collection indexing" {
+    var vertices:Vertex[] = [Vertex(position:Position(x:1, y:2))]
+    vertices[0].position.x = 7
+    vertices[0].position.y += 3
+    assert(vertices[0].position.x == 7)
+    assert(vertices[0].position.y == 5)
+}

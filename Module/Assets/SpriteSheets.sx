@@ -1,0 +1,52 @@
+use GFX.Assets.SpriteSheet as SpriteSheet
+use GFX.Assets.SpriteSheetHandle as SpriteSheetHandle
+
+internal class SpriteSheetEntry {
+    internal let sheet:SpriteSheet
+    internal var generation:int
+    internal var active:bool
+
+    internal init(sheet:SpriteSheet) {
+        self.sheet = sheet
+        self.generation = 1
+        self.active = true
+    }
+}
+
+public class SpriteSheets {
+    private var entries:SpriteSheetEntry[]
+
+    public init() { self.entries = [] }
+
+    public func add(sheet:SpriteSheet) SpriteSheetHandle {
+        if sheet.is_empty() { panic("GFX cannot add a sprite sheet without animations") }
+        var entries = self.entries
+        entries.append(SpriteSheetEntry(sheet))
+        self.entries = entries
+        return SpriteSheetHandle(entries.count() - 1, 1)
+    }
+
+    public func contains(handle:SpriteSheetHandle) bool {
+        if !handle.is_valid() || handle.asset_index >= self.entries.count() { return false }
+        var entry = self.entries[handle.asset_index]
+        return entry.active && entry.generation == handle.asset_generation
+    }
+
+    public func get(handle:SpriteSheetHandle) @SpriteSheet {
+        self.require(handle)
+        return self.entries[handle.asset_index].sheet
+    }
+
+    public func remove(handle:SpriteSheetHandle) bool {
+        if !self.contains(handle) { return false }
+        var entry = self.entries[handle.asset_index]
+        entry.active = false
+        entry.generation++
+        return true
+    }
+
+    private func require(handle:SpriteSheetHandle) SpriteSheetEntry {
+        if !self.contains(handle) { panic("GFX sprite sheet handle is stale or invalid") }
+        return self.entries[handle.asset_index]
+    }
+}

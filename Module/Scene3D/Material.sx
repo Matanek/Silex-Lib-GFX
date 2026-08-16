@@ -1,0 +1,30 @@
+use GFX.Color
+
+public struct Material {
+    var albedo:Color
+    var metallic:float
+    var roughness:float
+    var occlusion:float
+    var emission:Color
+    var emission_intensity:float
+
+    public init(
+        albedo:Color = Color.white(),
+        metallic:float = 0.0,
+        roughness:float = 0.5,
+        occlusion:float = 1.0,
+        emission:Color = Color.black(),
+        emission_intensity:float = 0.0
+    ) {
+        self.albedo = albedo
+        self.metallic = metallic
+        self.roughness = roughness
+        self.occlusion = occlusion
+        self.emission = emission
+        self.emission_intensity = emission_intensity
+    }
+
+    public static func unlit(color:Color = Color.white()) Material {
+        return Material(albedo:color, roughness:1.0)
+    }
+}

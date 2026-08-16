@@ -1,0 +1,39 @@
+use GFX.Application
+use GFX.Assets
+use GFX.Color
+use GFX.Viewer
+use GFX.Window
+use GFX.Window.Plugin as WindowPlugin
+use Interop.Boundary
+use Interop.C
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+func replace_and_close(view:&Viewer.View, window:@Window) {
+    view.replace(Assets.Image.solid(Color.indigo_500()))
+    assert(view.revision() == 2)
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+test "display and replace an image through the public viewer" {
+    var application = Application()
+    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+        ..title = "GFX.Viewer test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.add_plugin(Viewer.Plugin(Assets.Image.solid(Color.sky_400())))
+    assert(application.has_plugin("GFX.Window.Plugin"))
+    assert(application.has_plugin("GFX.Input.Plugin"))
+    assert(application.has_plugin("GFX.GPU.Plugin"))
+    application.add_system(Application.Schedule.startup, replace_and_close)
+    application.run()
+}

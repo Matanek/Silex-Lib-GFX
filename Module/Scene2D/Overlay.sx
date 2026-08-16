@@ -1,0 +1,111 @@
+use GFX.Color
+use GFX.Canvas
+use GFX.Canvas.Snapshot
+use STD.Math
+
+// A retained vector drawing placed directly in the application viewport.
+// Overlay belongs to Scene2D because its position, layering and presentation
+// are scene concerns; Canvas remains independent from every renderer.
+public struct Overlay {
+    private var retained:Snapshot
+    private var current_revision:int
+    private let drawing_width:int
+    private let drawing_height:int
+    var anchor:Math.Vec2
+    var position:Math.Vec2
+    var size:Math.Vec2
+    var pivot:Math.Vec2
+    var rotation:float
+    var color:Color
+    var layer:int
+    var visible:bool
+
+    public init(drawing:Canvas, width:int, height:int) {
+        if width <= 0 || height <= 0 {
+            panic("GFX.Scene2D.Overlay dimensions must be positive")
+        }
+        self.retained = drawing.snapshot(width, height)
+        self.current_revision = 1
+        self.drawing_width = width
+        self.drawing_height = height
+        self.anchor = Math.Vec2()
+        self.position = Math.Vec2()
+        self.size = Math.Vec2()
+        self.pivot = Math.Vec2()
+        self.rotation = 0.0
+        self.color = Color.white()
+        self.layer = 0
+        self.visible = true
+    }
+
+    public func replace(drawing:Canvas) {
+        self.retained = drawing.snapshot(self.drawing_width, self.drawing_height)
+        self.current_revision++
+    }
+
+    public func width() int { return self.drawing_width }
+    public func height() int { return self.drawing_height }
+
+    // Replacement renderers can consume the same retained content and use the
+    // revision as their cache key without depending on the built-in renderer.
+    public func snapshot() Snapshot { return self.retained }
+    public func revision() int { return self.current_revision }
+    internal func display_size() Math.Vec2 {
+        if self.size.x > 0.0 && self.size.y > 0.0 { return self.size }
+        return Math.Vec2(self.drawing_width as float, self.drawing_height as float)
+    }
+    internal func model(viewport:Math.Vec2) Math.Mat4 {
+        let displayed = self.display_size()
+        let anchored = self.anchored_position(viewport)
+        let placed = Math.Mat4.transform(
+            Math.Vec3(anchored.x, anchored.y, 0.0),
+            Math.Quat.angle_axis(self.rotation, Math.Vec3.back()).to_mat3(),
+            Math.Vec3(
+                displayed.x / self.drawing_width as float,
+                displayed.y / self.drawing_height as float,
+                1.0
+            )
+        )
+        let pivoted = Math.Mat4.transform(
+            Math.Vec3(
+                -self.pivot.x * self.drawing_width as float,
+                -self.pivot.y * self.drawing_height as float,
+                0.0
+            ),
+            Math.Quat.identity().to_mat3(),
+            Math.Vec3(1.0)
+        )
+        return placed.multiply(pivoted)
+    }
+    internal func text_model(viewport:Math.Vec2) Math.Mat4 {
+        let anchored = self.anchored_position(viewport)
+        return Math.Mat4.transform(
+            Math.Vec3(anchored.x, anchored.y, 0.0),
+            Math.Quat.angle_axis(self.rotation, Math.Vec3.back()).to_mat3(),
+            Math.Vec3(1.0)
+        )
+    }
+    internal func text_size(content:Math.Vec2) Math.Vec2 {
+        let displayed = self.display_size()
+        return Math.Vec2(
+            content.x * displayed.x / self.drawing_width as float,
+            content.y * displayed.y / self.drawing_height as float
+        )
+    }
+    internal func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
+        let displayed = self.display_size()
+        let resolved = self.text_size(content)
+        if resolved.x <= 0.0 || resolved.y <= 0.0 { return Math.Vec2() }
+        return Math.Vec2(
+            (self.pivot.x * displayed.x - origin.x * displayed.x / self.drawing_width as float) / resolved.x,
+            (self.pivot.y * displayed.y - origin.y * displayed.y / self.drawing_height as float) / resolved.y
+        )
+    }
+
+    private func anchored_position(viewport:Math.Vec2) Math.Vec2 {
+        return Math.Vec2(
+            viewport.x * self.anchor.x + self.position.x,
+            viewport.y * self.anchor.y + self.position.y
+        )
+    }
+}

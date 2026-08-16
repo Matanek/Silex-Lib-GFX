@@ -1,0 +1,468 @@
+use GFX.Color
+use GFX.GPU
+
+test "move bytes through a GPU buffer" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    var upload = device.upload_buffer(8)
+    var source:uint8[] = []
+    source.append(3 as uint8)
+    source.append(5 as uint8)
+    source.append(8 as uint8)
+    source.append(13 as uint8)
+    source.append(21 as uint8)
+    source.append(34 as uint8)
+    source.append(55 as uint8)
+    source.append(89 as uint8)
+    upload.write(@source[0:source.count()])
+
+    var buffer = device.buffer(GPU.BufferSettings(
+        size:source.count(),
+        usage:GPU.BufferUsage.vertex()
+    ))
+    var download = device.download_buffer(source.count())
+    var commands = device.commands()
+    var transfer = commands.copy()
+    transfer.upload(upload, buffer, source.count())
+    transfer.download(buffer, download, source.count())
+    transfer.finish()
+    var completed = commands.submit_and_track()
+    completed.wait()
+
+    let result = download.read()
+    assert(result.count() == source.count())
+    var index = 0
+    while index < result.count() {
+        assert(result[index] == source[index])
+        index++
+    }
+}
+
+test "render and blit between offscreen textures" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let usage = GPU.TextureUsage(sampled:true, color_target:true)
+    var source = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:16,
+        height:16,
+        usage:usage,
+        name:"GPU test source"
+    ))
+    var destination = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:16,
+        height:16,
+        usage:usage,
+        name:"GPU test destination"
+    ))
+    var sampler = device.sampler()
+    assert(source.byte_count() == 1024)
+
+    var commands = device.commands()
+    var pass = commands.render(GPU.ColorTarget(
+        texture:source,
+        clear:Color.indigo_900()
+    ))
+    pass.finish()
+    commands.blit(
+        GPU.BlitRegion(texture:source, width:16, height:16),
+        GPU.BlitRegion(texture:destination, width:16, height:16)
+    )
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "draw a triangle through a graphics pipeline" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let vertex_source = "#include <metal_stdlib>\nusing namespace metal; struct VertexOutput { float4 position [[position]]; }; vertex VertexOutput vertex_main(uint vertex_id [[vertex_id]]) { const float2 positions[3] = { float2(0.0, -0.5), float2(0.5, 0.5), float2(-0.5, 0.5) }; VertexOutput output; output.position = float4(positions[vertex_id], 0.0, 1.0); return output; }"
+    let fragment_source = "#include <metal_stdlib>\nusing namespace metal; fragment float4 fragment_main() { return float4(0.2, 0.6, 1.0, 1.0); }"
+    var vertex = device.shader(GPU.ShaderStage.vertex, GPU.ShaderFormat.msl, vertex_source, GPU.ShaderSettings(entry:"vertex_main"))
+    var fragment = device.shader(GPU.ShaderStage.fragment, GPU.ShaderFormat.msl, fragment_source, GPU.ShaderSettings(entry:"fragment_main"))
+    var targets:GPU.ColorTargetFormat[] = []
+    targets.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+    var pipeline = device.graphics_pipeline(vertex, fragment, GPU.GraphicsPipelineSettings(
+        color_targets:targets
+    ))
+    var target = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:32,
+        height:32,
+        usage:GPU.TextureUsage.as_color_target()
+    ))
+    var commands = device.commands()
+    var pass = commands.render(GPU.ColorTarget(texture:target))
+    pass.bind(pipeline)
+    pass.draw(3)
+    pass.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "compile and select a portable HLSL graphics program" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let program = GPU.ShaderProgram.hlsl(file:"Shaders/Portable.hlsl")
+    var targets:GPU.ColorTargetFormat[] = []
+    targets.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+    var pipeline = device.graphics_pipeline(program, GPU.GraphicsPipelineSettings(
+        color_targets:targets,
+        name:"Portable HLSL graphics test"
+    ))
+    var target = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:32,
+        height:32,
+        usage:GPU.TextureUsage.as_color_target()
+    ))
+    var commands = device.commands()
+    var pass = commands.render(GPU.ColorTarget(texture:target))
+    pass.bind(pipeline)
+    pass.draw(3)
+    pass.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "dispatch compute work and read its result" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let compute_source = "#include <metal_stdlib>\nusing namespace metal; kernel void compute_main(device uchar *values [[buffer(0)]], uint index [[thread_position_in_grid]]) { values[index] = values[index] + 1; }"
+    var pipeline = device.compute_pipeline(GPU.ShaderFormat.msl, compute_source, GPU.ComputePipelineSettings(
+        entry:"compute_main",
+        read_write_storage_buffers:1
+    ))
+    var upload = device.upload_buffer(4)
+    var values:uint8[] = []
+    values.append(1 as uint8)
+    values.append(2 as uint8)
+    values.append(3 as uint8)
+    values.append(4 as uint8)
+    upload.write(@values[0:values.count()])
+    var buffer = device.buffer(GPU.BufferSettings(
+        size:4,
+        usage:GPU.BufferUsage(compute_write:true)
+    ))
+    var download = device.download_buffer(4)
+    var commands = device.commands()
+    var upload_pass = commands.copy()
+    upload_pass.upload(upload, buffer, 4)
+    upload_pass.finish()
+    var writable:GPU.WritableBuffer[] = []
+    writable.append(GPU.WritableBuffer(buffer:buffer))
+    var writable_textures:GPU.WritableTexture[] = []
+    var compute = commands.compute(writable_textures, writable)
+    compute.bind(pipeline)
+    compute.dispatch(4)
+    compute.finish()
+    var download_pass = commands.copy()
+    download_pass.download(buffer, download, 4)
+    download_pass.finish()
+    var completed = commands.submit_and_track()
+    completed.wait()
+    let result = download.read()
+    assert(result[0] == 2 as uint8)
+    assert(result[1] == 3 as uint8)
+    assert(result[2] == 4 as uint8)
+    assert(result[3] == 5 as uint8)
+}
+
+test "compile and select a portable HLSL compute program" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let program = GPU.ComputeProgram.hlsl(file:"Shaders/Portable.hlsl")
+    var pipeline = device.compute_pipeline(program, "Portable HLSL compute test")
+    var writable_textures:GPU.WritableTexture[] = []
+    var writable_buffers:GPU.WritableBuffer[] = []
+    var commands = device.commands()
+    var compute = commands.compute(writable_textures, writable_buffers)
+    compute.bind(pipeline)
+    compute.dispatch(1)
+    compute.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "inspect device and texture format capabilities" {
+    let settings = GPU.DeviceSettings(debug:true, prefer_low_power:true)
+    assert(GPU.Device.is_supported(settings))
+    var device = GPU.Device(settings)
+    let info = device.info()
+    assert(device.driver() != "")
+    assert(GPU.texel_block_size(GPU.TextureFormat.rgba8_unorm) == 4)
+    assert(GPU.texture_byte_count(GPU.TextureFormat.rgba8_unorm, 8, 4) == 128)
+    assert(GPU.pixel_format(GPU.TextureFormat.rgba8_unorm) == GPU.PixelFormat.rgba32)
+    assert(GPU.texture_format(GPU.PixelFormat.rgba32) == GPU.TextureFormat.rgba8_unorm)
+    var sampler = device.sampler(GPU.SamplerSettings(name:"Named GPU test sampler"))
+    var transfer = device.transfer_buffer(GPU.TransferBufferSettings(
+        size:16,
+        direction:GPU.TransferDirection.upload,
+        name:"Named GPU test transfer"
+    ))
+}
+
+test "wait for groups of submitted work" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    var first_commands = device.commands()
+    var first = first_commands.submit_and_track()
+    var second_commands = device.commands()
+    var second = second_commands.submit_and_track()
+    var fences:GPU.Fence[] = []
+    fences.append(first)
+    fences.append(second)
+    device.wait_until_any(@fences[0:fences.count()])
+    device.wait_until_all(@fences[0:fences.count()])
+}
+
+test "render to multiple color targets" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let vertex_source = "#include <metal_stdlib>\nusing namespace metal; struct VertexOutput { float4 position [[position]]; }; vertex VertexOutput vertex_main(uint vertex_id [[vertex_id]]) { const float2 positions[3] = { float2(0.0, -0.5), float2(0.5, 0.5), float2(-0.5, 0.5) }; VertexOutput output; output.position = float4(positions[vertex_id], 0.0, 1.0); return output; }"
+    let fragment_source = "#include <metal_stdlib>\nusing namespace metal; struct FragmentOutput { float4 first [[color(0)]]; float4 second [[color(1)]]; }; fragment FragmentOutput fragment_main() { FragmentOutput output; output.first = float4(1.0, 0.0, 0.0, 1.0); output.second = float4(0.0, 0.0, 1.0, 1.0); return output; }"
+    var vertex = device.shader(GPU.ShaderStage.vertex, GPU.ShaderFormat.msl, vertex_source, GPU.ShaderSettings(entry:"vertex_main", name:"MRT vertex"))
+    var fragment = device.shader(GPU.ShaderStage.fragment, GPU.ShaderFormat.msl, fragment_source, GPU.ShaderSettings(entry:"fragment_main", name:"MRT fragment"))
+    var formats:GPU.ColorTargetFormat[] = []
+    formats.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+    formats.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+    var pipeline = device.graphics_pipeline(vertex, fragment, GPU.GraphicsPipelineSettings(
+        color_targets:formats,
+        name:"MRT pipeline"
+    ))
+    var first = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:16,
+        height:16,
+        usage:GPU.TextureUsage.as_color_target()
+    ))
+    var second = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:16,
+        height:16,
+        usage:GPU.TextureUsage.as_color_target()
+    ))
+    var targets:GPU.ColorTarget[] = []
+    targets.append(GPU.ColorTarget(texture:first))
+    targets.append(GPU.ColorTarget(texture:second))
+    var commands = device.commands()
+    var pass = commands.render(targets)
+    pass.bind(pipeline)
+    pass.draw(3)
+    pass.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "resolve multisampling with a depth target" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    if device.supports(GPU.TextureFormat.rgba8_unorm, GPU.Samples.four) && device.supports(GPU.TextureFormat.depth16, GPU.Samples.four) {
+        let vertex_source = "#include <metal_stdlib>\nusing namespace metal; struct VertexOutput { float4 position [[position]]; }; vertex VertexOutput vertex_main(uint vertex_id [[vertex_id]]) { const float2 positions[3] = { float2(0.0, -0.5), float2(0.5, 0.5), float2(-0.5, 0.5) }; VertexOutput output; output.position = float4(positions[vertex_id], 0.5, 1.0); return output; }"
+        let fragment_source = "#include <metal_stdlib>\nusing namespace metal; fragment float4 fragment_main() { return float4(0.3, 0.8, 0.4, 1.0); }"
+        var vertex = device.shader(GPU.ShaderStage.vertex, GPU.ShaderFormat.msl, vertex_source, GPU.ShaderSettings(entry:"vertex_main"))
+        var fragment = device.shader(GPU.ShaderStage.fragment, GPU.ShaderFormat.msl, fragment_source, GPU.ShaderSettings(entry:"fragment_main"))
+        var formats:GPU.ColorTargetFormat[] = []
+        formats.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+        var pipeline = device.graphics_pipeline(vertex, fragment, GPU.GraphicsPipelineSettings(
+            multisample:GPU.MultisampleState(samples:GPU.Samples.four),
+            depth_stencil:GPU.DepthStencilState(depth_test:true, depth_write:true),
+            color_targets:formats,
+            depth_stencil_format:GPU.TextureFormat.depth16
+        ))
+        var multisampled = device.texture(GPU.TextureSettings(
+            format:GPU.TextureFormat.rgba8_unorm,
+            width:16,
+            height:16,
+            usage:GPU.TextureUsage.as_color_target(),
+            samples:GPU.Samples.four
+        ))
+        var resolved = device.texture(GPU.TextureSettings(
+            format:GPU.TextureFormat.rgba8_unorm,
+            width:16,
+            height:16,
+            usage:GPU.TextureUsage.as_color_target()
+        ))
+        var depth = device.texture(GPU.TextureSettings(
+            format:GPU.TextureFormat.depth16,
+            width:16,
+            height:16,
+            usage:GPU.TextureUsage.as_depth_target(),
+            samples:GPU.Samples.four
+        ))
+        var targets:GPU.ColorTarget[] = []
+        targets.append(GPU.ColorTarget(
+            texture:multisampled,
+            store:GPU.Store.resolve,
+            resolve:resolved
+        ))
+        var commands = device.commands()
+        var pass = commands.render(targets, GPU.DepthTarget(texture:depth))
+        pass.bind(pipeline)
+        pass.draw(3)
+        pass.finish()
+        commands.submit()
+        device.wait_until_idle()
+    }
+}
+
+test "dispatch compute work to multiple writable buffers" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let compute_source = "#include <metal_stdlib>\nusing namespace metal; kernel void compute_main(device uint *first [[buffer(0)]], device uint *second [[buffer(1)]]) { first[0] = 21; second[0] = 34; }"
+    var pipeline = device.compute_pipeline(GPU.ShaderFormat.msl, compute_source, GPU.ComputePipelineSettings(
+        entry:"compute_main",
+        read_write_storage_buffers:2,
+        name:"Multiple writable buffers"
+    ))
+    var first = device.buffer(GPU.BufferSettings(size:4, usage:GPU.BufferUsage(compute_write:true)))
+    var second = device.buffer(GPU.BufferSettings(size:4, usage:GPU.BufferUsage(compute_write:true)))
+    var writable:GPU.WritableBuffer[] = []
+    writable.append(GPU.WritableBuffer(buffer:first))
+    writable.append(GPU.WritableBuffer(buffer:second))
+    var textures:GPU.WritableTexture[] = []
+    var commands = device.commands()
+    var compute = commands.compute(textures, writable)
+    compute.bind(pipeline)
+    compute.dispatch(1)
+    compute.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "upload download and generate texture mipmaps" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    var pixels:uint8[] = []
+    var index = 0
+    while index < 64 {
+        pixels.append(index as uint8)
+        index++
+    }
+    var upload = device.upload_buffer(64)
+    upload.write(@pixels[0:pixels.count()])
+    var download = device.download_buffer(64)
+    var texture = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:4,
+        height:4,
+        mip_levels:3,
+        usage:GPU.TextureUsage(sampled:true, color_target:true),
+        name:"Mipmapped transfer test"
+    ))
+    var commands = device.commands()
+    var upload_pass = commands.copy()
+    upload_pass.upload(
+        upload,
+        GPU.TextureRegion(texture:texture, width:4, height:4),
+        4,
+        4
+    )
+    upload_pass.finish()
+    commands.generate_mipmaps(texture)
+    var download_pass = commands.copy()
+    download_pass.download(
+        GPU.TextureRegion(texture:texture, width:4, height:4),
+        download,
+        4,
+        4
+    )
+    download_pass.finish()
+    var completed = commands.submit_and_track()
+    completed.wait()
+    let result = download.read()
+    assert(result[0] == 0 as uint8)
+    assert(result[63] == 63 as uint8)
+}
+
+test "issue indexed instanced and indirect draws" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let vertex_source = "#include <metal_stdlib>\nusing namespace metal; struct VertexOutput { float4 position [[position]]; }; vertex VertexOutput vertex_main(uint vertex_id [[vertex_id]]) { const float2 positions[3] = { float2(0.0, -0.5), float2(0.5, 0.5), float2(-0.5, 0.5) }; VertexOutput output; output.position = float4(positions[vertex_id], 0.0, 1.0); return output; }"
+    let fragment_source = "#include <metal_stdlib>\nusing namespace metal; fragment float4 fragment_main(constant float4 &tint [[buffer(0)]]) { return tint; }"
+    var vertex = device.shader(GPU.ShaderStage.vertex, GPU.ShaderFormat.msl, vertex_source, GPU.ShaderSettings(entry:"vertex_main"))
+    var fragment = device.shader(GPU.ShaderStage.fragment, GPU.ShaderFormat.msl, fragment_source, GPU.ShaderSettings(entry:"fragment_main", uniform_buffers:1))
+    var formats:GPU.ColorTargetFormat[] = []
+    formats.append(GPU.ColorTargetFormat(format:GPU.TextureFormat.rgba8_unorm))
+    var pipeline = device.graphics_pipeline(vertex, fragment, GPU.GraphicsPipelineSettings(color_targets:formats))
+    var vertex_buffer = device.buffer(GPU.BufferSettings(size:4, usage:GPU.BufferUsage.vertex()))
+    var index_buffer = device.buffer(GPU.BufferSettings(size:6, usage:GPU.BufferUsage.index()))
+    var draw_buffer = device.buffer(GPU.BufferSettings(size:16, usage:GPU.BufferUsage.indirect_commands()))
+    var indexed_draw_buffer = device.buffer(GPU.BufferSettings(size:20, usage:GPU.BufferUsage.indirect_commands()))
+    var index_bytes:uint8[] = [0 as uint8, 0 as uint8, 1 as uint8, 0 as uint8, 2 as uint8, 0 as uint8]
+    var draw_bytes:uint8[] = [
+        3 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        1 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        0 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        0 as uint8, 0 as uint8, 0 as uint8, 0 as uint8
+    ]
+    var indexed_draw_bytes:uint8[] = [
+        3 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        1 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        0 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        0 as uint8, 0 as uint8, 0 as uint8, 0 as uint8,
+        0 as uint8, 0 as uint8, 0 as uint8, 0 as uint8
+    ]
+    var index_upload = device.upload_buffer(index_bytes.count())
+    var draw_upload = device.upload_buffer(draw_bytes.count())
+    var indexed_draw_upload = device.upload_buffer(indexed_draw_bytes.count())
+    index_upload.write(@index_bytes[0:index_bytes.count()])
+    draw_upload.write(@draw_bytes[0:draw_bytes.count()])
+    indexed_draw_upload.write(@indexed_draw_bytes[0:indexed_draw_bytes.count()])
+    var target = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:16,
+        height:16,
+        usage:GPU.TextureUsage.as_color_target()
+    ))
+    var commands = device.commands()
+    var transfer = commands.copy()
+    transfer.upload(index_upload, index_buffer, index_bytes.count())
+    transfer.upload(draw_upload, draw_buffer, draw_bytes.count())
+    transfer.upload(indexed_draw_upload, indexed_draw_buffer, indexed_draw_bytes.count())
+    transfer.finish()
+    var pass = commands.render(GPU.ColorTarget(texture:target))
+    var uniform:uint8[] = []
+    var uniform_index = 0
+    while uniform_index < 16 {
+        uniform.append(0 as uint8)
+        uniform_index++
+    }
+    commands.fragment_uniform(0, @uniform[0:uniform.count()])
+    pass.bind(pipeline)
+    pass.vertex_buffer(0, vertex_buffer)
+    pass.index_buffer(index_buffer, GPU.IndexType.sixteen_bits)
+    pass.viewport(0.0, 0.0, 16.0, 16.0)
+    pass.scissor(0, 0, 16, 16)
+    pass.blend_constant(Color.white())
+    pass.stencil_reference(0 as uint8)
+    pass.draw(3, 2)
+    pass.draw_indexed(3)
+    pass.draw_indirect(draw_buffer)
+    pass.draw_indexed_indirect(indexed_draw_buffer)
+    pass.finish()
+    commands.submit()
+    device.wait_until_idle()
+}
+
+test "write a texture from compute" {
+    var device = GPU.Device(GPU.DeviceSettings(debug:true))
+    let source = "#include <metal_stdlib>\nusing namespace metal; kernel void compute_main(texture2d<float, access::write> output [[texture(0)]]) { output.write(float4(1.0, 0.0, 0.0, 1.0), uint2(0, 0)); }"
+    var pipeline = device.compute_pipeline(GPU.ShaderFormat.msl, source, GPU.ComputePipelineSettings(
+        entry:"compute_main",
+        read_write_storage_textures:1
+    ))
+    var texture = device.texture(GPU.TextureSettings(
+        format:GPU.TextureFormat.rgba8_unorm,
+        width:1,
+        height:1,
+        usage:GPU.TextureUsage(compute_write:true)
+    ))
+    var writable:GPU.WritableTexture[] = []
+    writable.append(GPU.WritableTexture(texture:texture))
+    var buffers:GPU.WritableBuffer[] = []
+    var download = device.download_buffer(4)
+    var commands = device.commands()
+    var compute = commands.compute(writable, buffers)
+    compute.bind(pipeline)
+    compute.dispatch(1)
+    compute.finish()
+    var transfer = commands.copy()
+    transfer.download(GPU.TextureRegion(texture:texture), download, 1, 1)
+    transfer.finish()
+    var completed = commands.submit_and_track()
+    completed.wait()
+    let result = download.read()
+    assert(result[0] == 255 as uint8)
+    assert(result[1] == 0 as uint8)
+    assert(result[2] == 0 as uint8)
+    assert(result[3] == 255 as uint8)
+}

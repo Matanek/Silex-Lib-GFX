@@ -1,0 +1,43 @@
+internal class Record {
+    private var current_generation:int
+    private var alive:bool
+    private var archetype_index:int
+    private var archetype_row:int
+
+    internal init() {
+        self.current_generation = 1
+        self.alive = false
+        self.archetype_index = -1
+        self.archetype_row = -1
+    }
+
+    internal init(generation:int) {
+        self.current_generation = generation
+        self.alive = true
+        self.archetype_index = -1
+        self.archetype_row = -1
+    }
+
+    internal func generation() int { return self.current_generation }
+    internal func is_alive() bool { return self.alive }
+
+    internal func location() (archetype:int, row:int) {
+        return (archetype:self.archetype_index, row:self.archetype_row)
+    }
+
+    internal func place(archetype:int, row:int) {
+        self.archetype_index = archetype
+        self.archetype_row = row
+    }
+
+    internal func revive() {
+        self.alive = true
+    }
+
+    internal func destroy() {
+        self.alive = false
+        self.archetype_index = -1
+        self.archetype_row = -1
+        self.current_generation++
+    }
+}

@@ -1,0 +1,72 @@
+use GFX.Scene3D.MeshHandle as MeshHandle
+use GFX.Scene3D.Geometry.Mesh as GeometryMesh
+
+internal class MeshEntry {
+    internal var mesh:GeometryMesh
+    internal var generation:int
+    internal var revision:int
+    internal var active:bool
+
+    internal init(mesh:GeometryMesh) {
+        self.mesh = mesh
+        self.generation = 1
+        self.revision = 1
+        self.active = true
+    }
+}
+
+public class Meshes {
+    private var entries:MeshEntry[]
+
+    public init() { self.entries = [] }
+
+    public func add(mesh:GeometryMesh) MeshHandle {
+        if mesh.is_empty() { panic("GFX.Scene3D cannot add an empty mesh") }
+        var entries = self.entries
+        entries.append(MeshEntry(mesh))
+        self.entries = entries
+        return MeshHandle(entries.count() - 1, 1)
+    }
+
+    public func contains(handle:MeshHandle) bool {
+        if !handle.is_valid() || handle.asset_index >= self.entries.count() { return false }
+        var entry = self.entries[handle.asset_index]
+        return entry.active && entry.generation == handle.asset_generation
+    }
+
+    public func get(handle:MeshHandle) @GeometryMesh {
+        self.require(handle)
+        return self.entries[handle.asset_index].mesh
+    }
+
+    public func snapshot(handle:MeshHandle) GeometryMesh {
+        self.require(handle)
+        return self.entries[handle.asset_index].mesh
+    }
+
+    public func replace(handle:MeshHandle, mesh:GeometryMesh) {
+        if mesh.is_empty() { panic("GFX.Scene3D cannot store an empty mesh") }
+        var entry = self.require(handle)
+        entry.mesh = mesh
+        entry.revision++
+    }
+
+    public func remove(handle:MeshHandle) bool {
+        if !self.contains(handle) { return false }
+        var entry = self.entries[handle.asset_index]
+        entry.active = false
+        entry.generation++
+        entry.revision++
+        return true
+    }
+
+    public func revision(handle:MeshHandle) int {
+        if !self.contains(handle) { return 0 }
+        return self.entries[handle.asset_index].revision
+    }
+
+    private func require(handle:MeshHandle) MeshEntry {
+        if !self.contains(handle) { panic("GFX.Scene3D mesh handle is stale or invalid") }
+        return self.entries[handle.asset_index]
+    }
+}

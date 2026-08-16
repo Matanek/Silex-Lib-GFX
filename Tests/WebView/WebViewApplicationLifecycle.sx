@@ -1,0 +1,67 @@
+use GFX.Application
+use GFX.Application.Schedule
+use GFX.WebView.Plugin as WebViewPlugin
+use GFX.Window.Plugin as WindowPlugin
+use GFX.Window
+use GFX.WebView
+use Interop.C
+use Interop.Boundary
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+func inspect_web_view(view:@WebView.View) {
+    assert(view.is_visible())
+}
+
+func run_lifecycle(application:Application) int {
+    application.run_schedule(Schedule.startup)
+    application.run_schedule(Schedule.update)
+    application.run_schedule(Schedule.shutdown)
+    return 0
+}
+
+test "destroy an application WebView before its window" {
+    if !WebView.availability().is_available() { return }
+
+    let site = WebView.Site.html(
+        "<!doctype html><html><body>WebView lifecycle</body></html>"
+    )
+    var application = Application()
+    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+        ..title = "WebView application lifecycle"
+        ..hidden = true
+    ))
+    application.add_plugin(WebViewPlugin(site))
+    assert(application.has_plugin("GFX.Window.Plugin"))
+    assert(application.has_plugin("GFX.Input.Plugin"))
+    application.add_system(Schedule.update, inspect_web_view)
+    application.with_runner(run_lifecycle)
+    application.run()
+}
+
+func request_close(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+test "close an application WebView through its window controls" {
+    if !WebView.availability().is_available() { return }
+
+    let site = WebView.Site.html(
+        "<!doctype html><html><body>Closable WebView</body></html>"
+    )
+    Application()
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = "Closable WebView"
+            ..hidden = true
+        ))
+        ..add_plugin(WebViewPlugin(site))
+        ..add_system(Schedule.startup, request_close)
+        ..run()
+}

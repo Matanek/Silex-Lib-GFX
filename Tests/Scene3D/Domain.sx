@@ -1,0 +1,35 @@
+use GFX.Color
+use GFX.Scene3D.Camera
+use GFX.Scene3D.Geometry
+use GFX.Scene3D.Grid
+use GFX.Scene3D.Material
+use GFX.Scene3D.Mesh
+use GFX.Scene3D.Meshes
+use GFX.Scene3D.PointLight
+use GFX.Scene3D.Rotator
+use GFX.Scene3D.Shadow
+use GFX.Scene3D.ToneMapping
+use GFX.Scene3D.Transform
+use STD.Math
+
+test "name 3D concepts through their domain instead of their declarations" {
+    var meshes = Meshes()
+    let handle = meshes.add(Geometry.Cube.make(Math.Vec3(2.0)))
+    let mesh = Mesh(asset:handle)
+    let material = Material(albedo:Color.red_500(), metallic:0.8)
+    let transform = Transform(position:Math.Vec3(0.0, 1.0, 2.0))
+    let camera = Camera()
+    let grid = Grid(spacing:2.0, fade_distance:80.0)
+    let rotator = Rotator(x_speed:0.1, y_speed:0.2, z_speed:0.3)
+    let light = PointLight(shadow:Shadow(softness:0.5))
+    let tone_mapping = ToneMapping.aces(exposure:1.0)
+
+    assert(mesh.asset == handle)
+    assert(material.metallic == 0.8)
+    assert(transform.position == Math.Vec3(0.0, 1.0, 2.0))
+    assert(camera.is_active())
+    assert(grid.fade_distance == 80.0)
+    assert(rotator.y_speed == 0.2)
+    assert(light.shadow.softness == 0.5)
+    assert(tone_mapping.exposure == 1.0)
+}
