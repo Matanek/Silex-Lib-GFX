@@ -5,6 +5,9 @@ public use GFX.Application.Time as Time
 public use GFX.Assets.Plugin as Assets
 public use GFX.Audio.Plugin as Audio
 public use GFX.ECS.Plugin as ECS
+public use GFX.FPSCounter.Anchor as FPSCounterAnchor
+public use GFX.FPSCounter.Plugin as FPSCounter
+public use GFX.FPSCounter.Settings as FPSCounterSettings
 public use GFX.GPU.Plugin as GPU
 public use GFX.GPU.Plugin.Settings as GPUSettings
 public use GFX.Input.Plugin as Input

@@ -1,6 +1,7 @@
 use GFX.Audio
 use GFX.Application
-use GFX.Window
+use GFX.Plugins
+use GFX.Resources
 use STD.Math
 
 struct SpatialAudioDemo {
@@ -15,7 +16,7 @@ struct SpatialAudioDemo {
     }
 }
 
-func begin_demo(audio:&Audio, demo:&SpatialAudioDemo) {
+func begin_demo(audio:&Resources.Audio, demo:&SpatialAudioDemo) {
     let tone = audio.load("../../Assets/Audio/SpatialTone.wav")
     demo.sound = tone
     demo.playing = audio.play(tone, Audio.Playback(
@@ -27,9 +28,9 @@ func begin_demo(audio:&Audio, demo:&SpatialAudioDemo) {
 }
 
 func update_demo(
-    time:@Application.FrameTime,
+    time:@Resources.FrameTime,
     demo:&SpatialAudioDemo,
-    audio:&Audio
+    audio:&Resources.Audio
 ) {
     demo.elapsed += time.delta
     let x = Math.sin(demo.elapsed as float32) as float * 3.0
@@ -40,10 +41,10 @@ func main() {
     var application = Application()
     application
         ..add_resource(SpatialAudioDemo())
-        ..add_plugin(Audio.Plugin())
-        ..add_plugin(Application.Time())
-        ..add_plugin(Application.FramePacing(60))
-        ..add_plugin(Window.Plugin(Window.Plugin.Settings()
+        ..add_plugin(Plugins.Audio())
+        ..add_plugin(Plugins.Time())
+        ..add_plugin(Plugins.FramePacing(60))
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
             ..title = "GFX Spatial Audio"
             ..width = 640
             ..height = 360

@@ -13,6 +13,7 @@ use GFX.Scene2D.Packing
 use GFX.Scene2D.Sprite
 use GFX.Scene2D.Transform
 use GFX.Window
+use Interop.C
 use STD.Math
 
 class CachedOverlay {
@@ -124,6 +125,7 @@ internal class Renderer {
     private var drawing_instances:GPU.Buffer? = null
     private var drawing_instance_upload:GPU.TransferBuffer? = null
     private var drawing_instance_capacity:int
+    private var drawing_instance_packed:str
     private var projection:Math.Mat4
     private var scene_view_projection:Math.Mat4
     private var camera_ready:bool
@@ -138,6 +140,7 @@ internal class Renderer {
         self.sprite_draws = []
         self.scene_entries = []
         self.drawing_instance_capacity = 0
+        self.drawing_instance_packed = "\0"
         self.projection = Math.Mat4.identity()
         self.scene_view_projection = Math.Mat4.identity()
         self.camera_ready = false
@@ -247,87 +250,97 @@ internal class Renderer {
         self.sprite_draws.clear()
         self.scene_entries.clear()
         var scene_order = 0
-        for entity in world.entities() {
-            if world.has<Transform>(entity) && world.has<SceneDrawing>(entity) {
-                let transform = world.get<Transform>(entity)
-                let drawing = world.get<SceneDrawing>(entity)
-                if drawing.visible {
-                    var snapshot = drawing.snapshot()
-                    var cache = self.cache_for_scene_drawing(snapshot)
-                    self.refresh_scene_geometry(device, cache, snapshot)
-                    self.scene_draws.append(SceneDraw(
-                        cache:self.scene_drawing_index(cache),
-                        model:drawing.model(transform),
-                        color:drawing.color,
-                        layer:drawing.layer,
-                        depth:drawing.depth,
-                        order:scene_order
-                    ))
-                    scene_order++
-                    if snapshot.has_text() {
-                        let text = snapshot.text_layer(scale)
-                        let scale_key = Math.round(scale * 1000.0) as int
-                        var image_cache = self.cache_for_image(
-                            1,
-                            snapshot.id(),
-                            scale_key
-                        )
-                        self.refresh_image(
-                            device,
-                            image_cache,
-                            drawing.revision(),
-                            text.image,
-                            "GFX.Scene2D drawing text"
-                        )
-                        self.sprite_draws.append(SpriteDraw(
-                            cache:self.image_index(image_cache),
-                            model:transform.matrix(),
-                            size:drawing.text_size(text.size),
-                            pivot:drawing.text_pivot(text.origin, text.size),
+        var archetype = 0
+        while archetype < world.query_archetype_count() {
+            let has_transform = world.query_archetype_has<Transform>(archetype)
+            let has_drawing = world.query_archetype_has<SceneDrawing>(archetype)
+            let has_sprite = world.query_archetype_has<Sprite>(archetype)
+            var row = 0
+            while row < world.query_entity_count(archetype) {
+                let entity = world.query_entity(archetype, row)
+                if has_transform && has_drawing {
+                    let transform = world.query_get<Transform>(entity)
+                    let drawing = world.query_get<SceneDrawing>(entity)
+                    if drawing.visible {
+                        var snapshot = drawing.snapshot()
+                        var cache = self.cache_for_scene_drawing(snapshot)
+                        self.refresh_scene_geometry(device, cache, snapshot)
+                        self.scene_draws.append(SceneDraw(
+                            cache:self.scene_drawing_index(cache),
+                            model:drawing.model(transform),
                             color:drawing.color,
-                            region:Math.Vec4(0.0, 0.0, 1.0, 1.0),
-                            sampling:0,
                             layer:drawing.layer,
                             depth:drawing.depth,
                             order:scene_order
                         ))
                         scene_order++
+                        if snapshot.has_text() {
+                            let text = snapshot.text_layer(scale)
+                            let scale_key = Math.round(scale * 1000.0) as int
+                            var image_cache = self.cache_for_image(
+                                1,
+                                snapshot.id(),
+                                scale_key
+                            )
+                            self.refresh_image(
+                                device,
+                                image_cache,
+                                drawing.revision(),
+                                text.image,
+                                "GFX.Scene2D drawing text"
+                            )
+                            self.sprite_draws.append(SpriteDraw(
+                                cache:self.image_index(image_cache),
+                                model:transform.matrix(),
+                                size:drawing.text_size(text.size),
+                                pivot:drawing.text_pivot(text.origin, text.size),
+                                color:drawing.color,
+                                region:Math.Vec4(0.0, 0.0, 1.0, 1.0),
+                                sampling:0,
+                                layer:drawing.layer,
+                                depth:drawing.depth,
+                                order:scene_order
+                            ))
+                            scene_order++
+                        }
                     }
                 }
-            }
-            if world.has<Transform>(entity) && world.has<Sprite>(entity) {
-                let transform = world.get<Transform>(entity)
-                let sprite = world.get<Sprite>(entity)
-                let handle = sprite.asset()
-                if sprite.is_visible() && images.contains(handle) {
-                    let image = images.snapshot(handle)
-                    var cache = self.cache_for_image(
-                        0,
-                        handle.index(),
-                        handle.generation()
-                    )
-                    self.refresh_image(
-                        device,
-                        cache,
-                        images.revision(handle),
-                        image,
-                        "GFX.Scene2D sprite"
-                    )
-                    self.sprite_draws.append(SpriteDraw(
-                        cache:self.image_index(cache),
-                        model:transform.matrix(),
-                        size:sprite.sprite_size(),
-                        pivot:sprite.sprite_pivot(),
-                        color:sprite.tint(),
-                        region:normalized_region(image, sprite.image_region()),
-                        sampling:sprite.sampling_mode(),
-                        layer:sprite.render_layer(),
-                        depth:sprite.render_depth(),
-                        order:scene_order
-                    ))
-                    scene_order++
+                if has_transform && has_sprite {
+                    let transform = world.query_get<Transform>(entity)
+                    let sprite = world.query_get<Sprite>(entity)
+                    let handle = sprite.asset()
+                    if sprite.is_visible() && images.contains(handle) {
+                        let image = images.snapshot(handle)
+                        var cache = self.cache_for_image(
+                            0,
+                            handle.index(),
+                            handle.generation()
+                        )
+                        self.refresh_image(
+                            device,
+                            cache,
+                            images.revision(handle),
+                            image,
+                            "GFX.Scene2D sprite"
+                        )
+                        self.sprite_draws.append(SpriteDraw(
+                            cache:self.image_index(cache),
+                            model:transform.matrix(),
+                            size:sprite.sprite_size(),
+                            pivot:sprite.sprite_pivot(),
+                            color:sprite.tint(),
+                            region:normalized_region(image, sprite.image_region()),
+                            sampling:sprite.sampling_mode(),
+                            layer:sprite.render_layer(),
+                            depth:sprite.render_depth(),
+                            order:scene_order
+                        ))
+                        scene_order++
+                    }
                 }
+                row++
             }
+            archetype++
         }
         sort_scene_draws(self.scene_draws)
         sort_sprite_draws(self.sprite_draws)
@@ -335,9 +348,16 @@ internal class Renderer {
         self.prepare_scene_instances(device)
         self.draws.clear()
         var order = 0
-        for entity in world.entities() {
-            if world.has<Overlay>(entity) {
-                let overlay = world.get<Overlay>(entity)
+        archetype = 0
+        while archetype < world.query_archetype_count() {
+            if !world.query_archetype_has<Overlay>(archetype) {
+                archetype++
+                continue
+            }
+            var row = 0
+            while row < world.query_entity_count(archetype) {
+                let entity = world.query_entity(archetype, row)
+                let overlay = world.query_get<Overlay>(entity)
                 if overlay.visible {
                     var cache = self.cache_for(entity)
                     self.refresh_geometry(device, cache, overlay)
@@ -367,7 +387,9 @@ internal class Renderer {
                     ))
                     order++
                 }
+                row++
             }
+            archetype++
         }
         sort_draws(self.draws)
     }
@@ -403,18 +425,29 @@ internal class Renderer {
         self.camera_ready = false
         var selected = false
         var selected_order = 0
-        for entity in world.entities() {
-            if world.has<Transform>(entity) && world.has<Camera>(entity) {
-                let camera = world.get<Camera>(entity)
+        var archetype = 0
+        while archetype < world.query_archetype_count() {
+            if !world.query_archetype_has<Transform>(archetype) ||
+                !world.query_archetype_has<Camera>(archetype)
+            {
+                archetype++
+                continue
+            }
+            var row = 0
+            while row < world.query_entity_count(archetype) {
+                let entity = world.query_entity(archetype, row)
+                let camera = world.query_get<Camera>(entity)
                 if camera.is_active() && (!selected || camera.render_order() < selected_order) {
-                    let transform = world.get<Transform>(entity)
+                    let transform = world.query_get<Transform>(entity)
                     self.scene_view_projection = camera.projection(viewport)
                         .multiply(camera.view(transform))
                     self.camera_ready = true
                     selected = true
                     selected_order = camera.render_order()
                 }
+                row++
             }
+            archetype++
         }
     }
 
@@ -606,16 +639,9 @@ internal class Renderer {
 
     private func prepare_scene_instances(device:@GPU.Device) {
         if self.scene_draws.count() == 0 { return }
-        var instances:Packing.DrawingInstance[] = []
-        for draw in self.scene_draws {
-            instances.append(Packing.DrawingInstance(
-                model:draw.model,
-                color:draw.color
-            ))
-        }
-        let byte_count = instances.count() * 80
-        var bytes = Packing.drawing_instances(@instances[0:instances.count()])
+        let byte_count = self.scene_draws.count() * 80
         if self.drawing_instances == null || self.drawing_instance_capacity < byte_count {
+            self.drawing_instance_packed = Packing.storage(byte_count)
             self.drawing_instance_upload = device.upload_buffer(
                 byte_count,
                 "GFX.Scene2D retained drawing instance upload"
@@ -627,6 +653,16 @@ internal class Renderer {
             ))
             self.drawing_instance_capacity = byte_count
         }
+        var bytes = self.drawing_instance_packed
+        let address = C.address_bits(C.mutable_string_pointer(bytes))
+        var index = 0
+        for draw in self.scene_draws {
+            let offset = index * 80
+            Packing.write_mat4(address, offset, draw.model)
+            Packing.write_color(address, offset + 64, draw.color)
+            index++
+        }
+        self.drawing_instance_packed = bytes
         if let upload = self.drawing_instance_upload {
             if let destination = self.drawing_instances {
                 upload.write_packed(bytes, byte_count, cycle:true)

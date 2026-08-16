@@ -1,18 +1,20 @@
 use GFX.Application
-use GFX.Application.FrameTime
-use GFX.Application.Time as TimePlugin
 use GFX.Color
 use GFX.Canvas
+use GFX.Components
 use GFX.ECS
-use GFX.Input.Plugin as InputPlugin
-use GFX.Rendering
-use GFX.Scene2D
-use GFX.Window.Plugin as WindowPlugin
+use GFX.Plugins
+use GFX.Resources
 use STD.Math
 use STD.Time.LocalTime
 
-func canvas_size() int { return 640 }
-func background_color() Color { return Color.bytes(215, 210, 203) }
+struct Constants {
+    static let canvas_size:int = 640
+
+    static func background_color() Color {
+        return Color.bytes(215, 210, 203)
+    }
+}
 
 func clock_point(center:Math.Vec2, radius:float, angle:float) Math.Vec2 {
     return center.add(Math.Vec2(Math.cos(angle), Math.sin(angle)).multiply(radius))
@@ -155,20 +157,28 @@ func synchronized_difference(current:float, target:float) float {
     return difference
 }
 
-func create_clock(world:&ECS.World, face:&ClockFace) {
+func create_clock(world:&Resources.World, face:&ClockFace) {
     face.seconds = seconds_of_day(LocalTime.now())
     face.since_sync = 0.0
     face.last_millisecond = -1
     var clock_face = clock_face_drawing(Canvas.Font.default())
     world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Overlay(clock_face, canvas_size(), canvas_size())
+        ..with(Components.Overlay2D(
+            clock_face,
+            Constants.canvas_size,
+            Constants.canvas_size
+        )
             ..anchor = Math.Vec2(0.5)
             ..pivot = Math.Vec2(0.5)
         )
     )
     var hands = clock_hands_drawing(face.seconds)
     face.display = world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Overlay(hands, canvas_size(), canvas_size())
+        ..with(Components.Overlay2D(
+            hands,
+            Constants.canvas_size,
+            Constants.canvas_size
+        )
             ..anchor = Math.Vec2(0.5)
             ..pivot = Math.Vec2(0.5)
             ..layer = 1
@@ -176,7 +186,11 @@ func create_clock(world:&ECS.World, face:&ClockFace) {
     )
 }
 
-func update_clock(time:@FrameTime, world:&ECS.World, face:&ClockFace) {
+func update_clock(
+    time:@Resources.FrameTime,
+    world:&Resources.World,
+    face:&ClockFace
+) {
     face.seconds += time.delta
     face.since_sync += time.delta
     if face.seconds >= 86_400.0 { face.seconds -= 86_400.0 }
@@ -191,7 +205,7 @@ func update_clock(time:@FrameTime, world:&ECS.World, face:&ClockFace) {
     if millisecond == face.last_millisecond { return }
     var drawing = clock_hands_drawing(face.seconds)
     if let display = face.display {
-        world.update<Scene2D.Overlay>(display, func(overlay:&Scene2D.Overlay) {
+        world.update<Components.Overlay2D>(display, func(overlay:&Components.Overlay2D) {
             overlay.replace(drawing)
         })
     }
@@ -201,17 +215,17 @@ func update_clock(time:@FrameTime, world:&ECS.World, face:&ClockFace) {
 func main() {
     var application = Application()
     application.resources().insert(ClockFace(since_sync:0.0))
-    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
         ..title = "Clock — GFX.Canvas"
-        ..width = canvas_size()
-        ..height = canvas_size()
+        ..width = Constants.canvas_size
+        ..height = Constants.canvas_size
     ))
-    application.add_plugin(InputPlugin())
-    application.add_plugin(TimePlugin())
-    application.add_plugin(Rendering.Plugin(Rendering.Plugin.Settings()
-        ..clear = background_color()
+    application.add_plugin(Plugins.Input())
+    application.add_plugin(Plugins.Time())
+    application.add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
+        ..clear = Constants.background_color()
     ))
-    application.add_plugin(Scene2D.Plugin())
+    application.add_plugin(Plugins.Scene2D())
     application.add_system(Application.Schedule.startup, create_clock)
     application.add_system(Application.Schedule.update, update_clock)
     application.run()

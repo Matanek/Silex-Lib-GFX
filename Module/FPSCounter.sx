@@ -1,0 +1,148 @@
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+use GFX.Canvas
+use GFX.Color
+use GFX.ECS
+use GFX.Scene2D
+use STD.Math
+use STD.Time.Clock
+
+public enum Anchor {
+    top_left
+    top_center
+    top_right
+    center_left
+    center
+    center_right
+    bottom_left
+    bottom_center
+    bottom_right
+}
+
+public struct Settings {
+    var anchor:Anchor
+    var margin:Math.Vec2
+    var refresh_interval:float
+
+    public init() {
+        self.anchor = Anchor.top_left
+        self.margin = Math.Vec2(16.0)
+        self.refresh_interval = 0.25
+    }
+}
+
+class State {
+    internal let settings:Settings
+    internal var elapsed:float
+    internal var frames:int
+    internal var display:ECS.Entity
+    internal var clock:Clock
+
+    internal init(settings:Settings) {
+        self.settings = settings
+        self.elapsed = 0.0
+        self.frames = 0
+        self.display = ECS.Entity()
+        self.clock = Clock()
+    }
+}
+
+public struct Plugin:PluginProtocol {
+    private let settings:Settings
+
+    public init(settings:Settings = Settings()) {
+        if settings.margin.x < 0.0 || settings.margin.y < 0.0 {
+            panic("GFX.FPSCounter margins must not be negative")
+        }
+        if settings.refresh_interval <= 0.0 {
+            panic("GFX.FPSCounter refresh interval must be positive")
+        }
+        self.settings = settings
+    }
+
+    func id() str { return "GFX.FPSCounter.Plugin" }
+
+    func build(application:Application) {
+        application.add_plugin(Scene2D.Plugin())
+        application.resources().insert(State(self.settings))
+        application.add_system(Schedule.startup, create_counter)
+        application.add_system(Schedule.update, update_counter)
+        application.add_system(Schedule.shutdown, stop_counter)
+    }
+}
+
+func anchor_point(anchor:Anchor) Math.Vec2 {
+    if anchor == Anchor.top_left { return Math.Vec2() }
+    if anchor == Anchor.top_center { return Math.Vec2(0.5, 0.0) }
+    if anchor == Anchor.top_right { return Math.Vec2(1.0, 0.0) }
+    if anchor == Anchor.center_left { return Math.Vec2(0.0, 0.5) }
+    if anchor == Anchor.center { return Math.Vec2(0.5) }
+    if anchor == Anchor.center_right { return Math.Vec2(1.0, 0.5) }
+    if anchor == Anchor.bottom_left { return Math.Vec2(0.0, 1.0) }
+    if anchor == Anchor.bottom_center { return Math.Vec2(0.5, 1.0) }
+    return Math.Vec2(1.0)
+}
+
+func anchor_offset(anchor:Anchor, margin:Math.Vec2) Math.Vec2 {
+    let point = anchor_point(anchor)
+    var x = 0.0
+    var y = 0.0
+    if point.x == 0.0 { x = margin.x }
+    else if point.x == 1.0 { x = -margin.x }
+    if point.y == 0.0 { y = margin.y }
+    else if point.y == 1.0 { y = -margin.y }
+    return Math.Vec2(x, y)
+}
+
+func counter_canvas(fps:int) Canvas {
+    var canvas = Canvas()
+    let label = "$(fps) FPS"
+    var style = Canvas.TextStyle(
+        size:18.0,
+        color:Color.white(),
+        alignment:Canvas.TextAlignment.center
+    )
+    let metrics = canvas.measure_text(label, style)
+    let text_position = Math.Vec2(58.0, (34.0 - metrics.height) * 0.5)
+    canvas.paint(func(painter:&Canvas.Painter) {
+        painter.fill(
+            Canvas.Rect(Math.Vec2(), Math.Vec2(116.0, 34.0), 8.0),
+            Canvas.Fill.solid(Color.black().with_alpha(0.72))
+        )
+        painter.text(label, text_position, style)
+    })
+    return canvas
+}
+
+func create_counter(state:&State, world:&ECS.World) {
+    state.display = world.spawn(ECS.EntityRecipe()
+        ..with(Scene2D.Overlay(counter_canvas(0), 116, 34)
+            ..anchor = anchor_point(state.settings.anchor)
+            ..position = anchor_offset(state.settings.anchor, state.settings.margin)
+            ..pivot = anchor_point(state.settings.anchor)
+            ..layer = 100
+        )
+    )
+    state.clock.tick()
+}
+
+func update_counter(state:&State, world:&ECS.World) {
+    state.elapsed += state.clock.tick()
+    state.frames++
+    if state.elapsed < state.settings.refresh_interval { return }
+
+    let fps = Math.round(state.frames as float / state.elapsed) as int
+    world.update<Scene2D.Overlay>(state.display, func(display:&Scene2D.Overlay) {
+        var canvas = counter_canvas(fps)
+        display.replace(canvas)
+    })
+    state.elapsed = 0.0
+    state.frames = 0
+}
+
+func stop_counter(application:Application) {
+    var resources = application.resources()
+    var removed = resources.remove<State>()
+    assert(removed != null)
+}

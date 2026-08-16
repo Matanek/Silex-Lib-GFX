@@ -1,7 +1,9 @@
 use GFX.Application
+use GFX.Plugins
+use GFX.Resources
 use GFX.WebView
 
-func handle_web_messages(view:&WebView.View) {
+func handle_web_messages(view:&Resources.WebView) {
     for message in view.receive() {
         if message.name == "action" {
             view.send("status", "Connected to Silex: " + message.payload)
@@ -37,7 +39,7 @@ func main() {
         "</html>"
     )
     Application()
-        ..add_plugin(WebView.Plugin(site))
+        ..add_plugin(Plugins.WebView(site))
         ..add_system(Application.Schedule.update, handle_web_messages)
         ..run()
 }

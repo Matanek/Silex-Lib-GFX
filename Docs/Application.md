@@ -26,3 +26,21 @@ work.
 
 `Application.Time` provides `FrameTime`. `Application.FramePacing` limits a
 loop that does not already have its own presentation mechanism.
+
+## Frame-rate overlay
+
+`Plugins.FPSCounter` displays the measured rendering rate without requiring the
+application to manage text, timing, or a Scene2D overlay itself. It composes the
+required rendering capabilities and can be positioned at any viewport anchor.
+
+```silex
+use GFX.Application
+use GFX.Plugins
+
+Application()
+    ..add_plugin(Plugins.Window())
+    ..add_plugin(Plugins.FPSCounter(Plugins.FPSCounterSettings()
+        ..anchor = Plugins.FPSCounterAnchor.bottom_right
+    ))
+    ..run()
+```

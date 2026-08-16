@@ -4,11 +4,6 @@ use GFX.Scene2D.Grid
 use Interop.C
 use STD.Math
 
-internal struct DrawingInstance {
-    internal let model:Math.Mat4
-    internal let color:Color
-}
-
 internal func drawing_vertices(mesh:@Geometry.Mesh) str {
     let source = mesh.vertices()
     var bytes = storage(source.count() * 36)
@@ -31,21 +26,6 @@ internal func drawing_instance(model:Math.Mat4, color:Color) str {
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, model)
     write_color(address, 64, color)
-    return bytes
-}
-
-internal func drawing_instances(values:@DrawingInstance[..]) str {
-    var byte_count = values.count() * 80
-    if byte_count < 1 { byte_count = 1 }
-    var bytes = storage(byte_count)
-    let address = C.address_bits(C.mutable_string_pointer(bytes))
-    var index = 0
-    while index < values.count() {
-        let offset = index * 80
-        write_mat4(address, offset, values[index].model)
-        write_color(address, offset + 64, values[index].color)
-        index++
-    }
     return bytes
 }
 
@@ -138,7 +118,7 @@ internal func quad_indices() str {
     return bytes
 }
 
-local func storage(minimum:int) str {
+internal func storage(minimum:int) str {
     var bytes = "\0"
     while C.byte_count(bytes) < minimum as uint { bytes = bytes + bytes }
     return bytes
@@ -166,14 +146,14 @@ local func write_vec4(address:uint, offset:int, value:Math.Vec4) {
     write_float(address, offset + 12, value.w)
 }
 
-local func write_mat4(address:uint, offset:int, value:Math.Mat4) {
+internal func write_mat4(address:uint, offset:int, value:Math.Mat4) {
     write_vec4(address, offset, value.x)
     write_vec4(address, offset + 16, value.y)
     write_vec4(address, offset + 32, value.z)
     write_vec4(address, offset + 48, value.w)
 }
 
-local func write_color(address:uint, offset:int, value:Color) {
+internal func write_color(address:uint, offset:int, value:Color) {
     write_float(address, offset, value.r)
     write_float(address, offset + 4, value.g)
     write_float(address, offset + 8, value.b)

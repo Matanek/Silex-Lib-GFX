@@ -1,0 +1,40 @@
+use GFX.Application
+use GFX.Components
+use GFX.Plugins
+use GFX.Resources
+use STD.Math
+
+struct Probe {
+    var overlays:int
+}
+
+func inspect_counter(
+    probe:&Probe,
+    world:@Resources.World,
+    controller:&Application.Controller
+) {
+    for entity in world.entities() {
+        if world.has<Components.Overlay2D>(entity) { probe.overlays++ }
+    }
+    controller.stop()
+}
+
+test "display a frame-rate counter through the public plugin umbrella" {
+    var application = Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "FPS counter test"
+            ..width = 320
+            ..height = 180
+            ..hidden = true
+        ))
+        ..add_plugin(Plugins.FPSCounter(Plugins.FPSCounterSettings()
+            ..anchor = Plugins.FPSCounterAnchor.bottom_right
+            ..margin = Math.Vec2(12.0, 20.0)
+        ))
+        ..add_after_system(Application.Schedule.render, inspect_counter)
+    var resources = application.resources()
+    resources.insert(Probe(overlays:0))
+
+    assert(application.run() == 0)
+    assert(resources.get<Probe>().overlays == 1)
+}

@@ -1,16 +1,16 @@
-use GFX
 use GFX.Application
 use GFX.Canvas
+use GFX.Color
+use GFX.Components
 use GFX.ECS
-use GFX.Input.Plugin as InputPlugin
-use GFX.Rendering
-use GFX.Scene2D
-use GFX.Window.Plugin as WindowPlugin
+use GFX.Plugins
+use GFX.Resources
 use STD.Math
 
-
-func canvas_width() int { return 1180 }
-func canvas_height() int { return 760 }
+struct Constants {
+    static let canvas_width:int = 1180
+    static let canvas_height:int = 760
+}
 
 func label(
     painter:&Canvas.Painter,
@@ -18,7 +18,7 @@ func label(
     value:str,
     position:Math.Vec2,
     size:float = 14.0,
-    color:GFX.Color = GFX.Color.slate_300()
+    color:Color = Color.slate_300()
 ) {
     painter.text(value, position, Canvas.TextStyle(size:size, color:color, font:font))
 }
@@ -31,11 +31,11 @@ func card(
 ) {
     painter.fill(
         Canvas.Rect(position, size, 14.0),
-        Canvas.Fill.solid(GFX.Color.slate_900().with_alpha(0.94))
+        Canvas.Fill.solid(Color.slate_900().with_alpha(0.94))
     )
     painter.stroke(
         Canvas.Rect(position, size, 14.0),
-        Canvas.Stroke(GFX.Color.slate_700(), 1.5)
+        Canvas.Stroke(Color.slate_700(), 1.5)
     )
     label(
         painter,
@@ -43,7 +43,7 @@ func card(
         title,
         position.add(Math.Vec2(16.0, 12.0)),
         15.0,
-        GFX.Color.slate_100()
+        Color.slate_100()
     )
 }
 
@@ -106,7 +106,7 @@ func arrow(
     painter:&Canvas.Painter,
     start:Math.Vec2,
     end:Math.Vec2,
-    color:GFX.Color,
+    color:Color,
     width:float
 ) {
     let direction = end.subtract(start).normalized()
@@ -129,22 +129,22 @@ func paint_lines(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Lignes, épaisseurs et extrémités", origin, Math.Vec2(275.0, 195.0))
     let x = origin.x + 20.0
     let y = origin.y + 55.0
-    painter.stroke(Canvas.Line(Math.Vec2(x, y), Math.Vec2(x + 92.0, y)), Canvas.Stroke(GFX.Color.sky_400(), 2.0))
-    painter.stroke(Canvas.Line(Math.Vec2(x + 118.0, y - 12.0), Math.Vec2(x + 118.0, y + 45.0)), Canvas.Stroke(GFX.Color.cyan_400(), 4.0))
-    painter.stroke(Canvas.Line(Math.Vec2(x + 150.0, y - 12.0), Math.Vec2(x + 230.0, y + 45.0)), Canvas.Stroke(GFX.Color.indigo_400(), 6.0))
+    painter.stroke(Canvas.Line(Math.Vec2(x, y), Math.Vec2(x + 92.0, y)), Canvas.Stroke(Color.sky_400(), 2.0))
+    painter.stroke(Canvas.Line(Math.Vec2(x + 118.0, y - 12.0), Math.Vec2(x + 118.0, y + 45.0)), Canvas.Stroke(Color.cyan_400(), 4.0))
+    painter.stroke(Canvas.Line(Math.Vec2(x + 150.0, y - 12.0), Math.Vec2(x + 230.0, y + 45.0)), Canvas.Stroke(Color.indigo_400(), 6.0))
 
     let caps_y = y + 78.0
     painter.stroke(
         Canvas.Line(Math.Vec2(x, caps_y), Math.Vec2(x + 62.0, caps_y)),
-        Canvas.Stroke(GFX.Color.amber_400(), 10.0)..cap = Canvas.StrokeCap.butt
+        Canvas.Stroke(Color.amber_400(), 10.0)..cap = Canvas.StrokeCap.butt
     )
     painter.stroke(
         Canvas.Line(Math.Vec2(x + 84.0, caps_y), Math.Vec2(x + 146.0, caps_y)),
-        Canvas.Stroke(GFX.Color.orange_400(), 10.0)..cap = Canvas.StrokeCap.round
+        Canvas.Stroke(Color.orange_400(), 10.0)..cap = Canvas.StrokeCap.round
     )
     painter.stroke(
         Canvas.Line(Math.Vec2(x + 168.0, caps_y), Math.Vec2(x + 230.0, caps_y)),
-        Canvas.Stroke(GFX.Color.rose_400(), 10.0)..cap = Canvas.StrokeCap.square
+        Canvas.Stroke(Color.rose_400(), 10.0)..cap = Canvas.StrokeCap.square
     )
     label(painter, font, "butt", Math.Vec2(x + 13.0, caps_y + 14.0), 11.0)
     label(painter, font, "round", Math.Vec2(x + 96.0, caps_y + 14.0), 11.0)
@@ -155,9 +155,9 @@ func paint_dashes(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Pointillés et tirets", origin, Math.Vec2(275.0, 195.0))
     let start = origin.add(Math.Vec2(22.0, 62.0))
     let end_x = origin.x + 252.0
-    dashed_line(painter, start, Math.Vec2(end_x, start.y), 2.0, 7.0, Canvas.Stroke(GFX.Color.sky_400(), 3.0))
-    dashed_line(painter, start.add(Math.Vec2(0.0, 38.0)), Math.Vec2(end_x, start.y + 38.0), 16.0, 9.0, Canvas.Stroke(GFX.Color.emerald_400(), 4.0))
-    dashed_line(painter, start.add(Math.Vec2(0.0, 78.0)), Math.Vec2(end_x, start.y + 78.0), 22.0, 7.0, Canvas.Stroke(GFX.Color.violet_400(), 5.0)..cap = Canvas.StrokeCap.round)
+    dashed_line(painter, start, Math.Vec2(end_x, start.y), 2.0, 7.0, Canvas.Stroke(Color.sky_400(), 3.0))
+    dashed_line(painter, start.add(Math.Vec2(0.0, 38.0)), Math.Vec2(end_x, start.y + 38.0), 16.0, 9.0, Canvas.Stroke(Color.emerald_400(), 4.0))
+    dashed_line(painter, start.add(Math.Vec2(0.0, 78.0)), Math.Vec2(end_x, start.y + 78.0), 22.0, 7.0, Canvas.Stroke(Color.violet_400(), 5.0)..cap = Canvas.StrokeCap.round)
     label(painter, font, "point · tiret · tiret arrondi", origin.add(Math.Vec2(22.0, 160.0)), 11.0)
 }
 
@@ -172,7 +172,7 @@ func paint_paths(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
         ..line_to(origin.add(Math.Vec2(246.0, 52.0)))
     painter.stroke(
         angular,
-        Canvas.Stroke(GFX.Color.blue_400(), 7.0)
+        Canvas.Stroke(Color.blue_400(), 7.0)
             ..cap = Canvas.StrokeCap.round
             ..join = Canvas.StrokeJoin.round
     )
@@ -183,7 +183,7 @@ func paint_paths(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
         ..line_to(origin.add(Math.Vec2(125.0, 120.0)))
         ..line_to(origin.add(Math.Vec2(125.0, 155.0)))
         ..line_to(origin.add(Math.Vec2(245.0, 155.0)))
-    painter.stroke(steps, Canvas.Stroke(GFX.Color.green_400(), 3.0)..join = Canvas.StrokeJoin.bevel)
+    painter.stroke(steps, Canvas.Stroke(Color.green_400(), 3.0)..join = Canvas.StrokeJoin.bevel)
 }
 
 func paint_curves(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
@@ -191,7 +191,7 @@ func paint_curves(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     var quadratic = Canvas.Path()
         ..move_to(origin.add(Math.Vec2(24.0, 105.0)))
         ..quadratic_to(origin.add(Math.Vec2(78.0, 35.0)), origin.add(Math.Vec2(132.0, 105.0)))
-    painter.stroke(quadratic, Canvas.Stroke(GFX.Color.sky_400(), 5.0)..cap = Canvas.StrokeCap.round)
+    painter.stroke(quadratic, Canvas.Stroke(Color.sky_400(), 5.0)..cap = Canvas.StrokeCap.round)
 
     var cubic = Canvas.Path()
         ..move_to(origin.add(Math.Vec2(145.0, 105.0)))
@@ -200,16 +200,16 @@ func paint_curves(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
             origin.add(Math.Vec2(225.0, 165.0)),
             origin.add(Math.Vec2(252.0, 88.0))
         )
-    painter.stroke(cubic, Canvas.Stroke(GFX.Color.fuchsia_400(), 5.0)..cap = Canvas.StrokeCap.round)
+    painter.stroke(cubic, Canvas.Stroke(Color.fuchsia_400(), 5.0)..cap = Canvas.StrokeCap.round)
     label(painter, font, "quadratique", origin.add(Math.Vec2(42.0, 145.0)), 11.0)
     label(painter, font, "Bézier cubique", origin.add(Math.Vec2(165.0, 145.0)), 11.0)
 }
 
 func paint_round_shapes(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Cercles et ellipses", origin, Math.Vec2(275.0, 195.0))
-    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(55.0, 105.0)), 30.0), Canvas.Stroke(GFX.Color.sky_400(), 4.0))
-    painter.fill(Canvas.Ellipse(origin.add(Math.Vec2(138.0, 105.0)), Math.Vec2(42.0, 27.0)), Canvas.Fill.solid(GFX.Color.emerald_400()))
-    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(225.0, 105.0)), 30.0), Canvas.Stroke(GFX.Color.violet_400(), 13.0))
+    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(55.0, 105.0)), 30.0), Canvas.Stroke(Color.sky_400(), 4.0))
+    painter.fill(Canvas.Ellipse(origin.add(Math.Vec2(138.0, 105.0)), Math.Vec2(42.0, 27.0)), Canvas.Fill.solid(Color.emerald_400()))
+    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(225.0, 105.0)), 30.0), Canvas.Stroke(Color.violet_400(), 13.0))
     label(painter, font, "contour fin", origin.add(Math.Vec2(24.0, 150.0)), 11.0)
     label(painter, font, "plein", origin.add(Math.Vec2(124.0, 150.0)), 11.0)
     label(painter, font, "contour épais", origin.add(Math.Vec2(188.0, 150.0)), 11.0)
@@ -219,15 +219,15 @@ func paint_arcs(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Arcs, secteurs et segments", origin, Math.Vec2(275.0, 195.0))
     painter.stroke(
         Canvas.Arc(origin.add(Math.Vec2(52.0, 113.0)), 35.0, Math.pi(), Math.pi()),
-        Canvas.Stroke(GFX.Color.sky_400(), 5.0)..cap = Canvas.StrokeCap.round
+        Canvas.Stroke(Color.sky_400(), 5.0)..cap = Canvas.StrokeCap.round
     )
     painter.fill(
         Canvas.Sector(origin.add(Math.Vec2(137.0, 110.0)), 38.0, -Math.pi() * 0.5, Math.pi() * 1.55),
-        Canvas.Fill.solid(GFX.Color.amber_400())
+        Canvas.Fill.solid(Color.amber_400())
     )
     painter.stroke(
         Canvas.Arc(origin.add(Math.Vec2(224.0, 110.0)), 31.0, Math.pi() * 0.15, Math.pi() * 1.55),
-        Canvas.Stroke(GFX.Color.purple_400(), 14.0)..cap = Canvas.StrokeCap.butt
+        Canvas.Stroke(Color.purple_400(), 14.0)..cap = Canvas.StrokeCap.butt
     )
     label(painter, font, "arc", origin.add(Math.Vec2(42.0, 158.0)), 11.0)
     label(painter, font, "secteur", origin.add(Math.Vec2(116.0, 158.0)), 11.0)
@@ -236,15 +236,15 @@ func paint_arcs(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
 
 func paint_rectangles(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Rectangles, carrés et arrondis", origin, Math.Vec2(275.0, 195.0))
-    painter.stroke(Canvas.Rect(origin.add(Math.Vec2(24.0, 72.0)), Math.Vec2(70.0, 55.0)), Canvas.Stroke(GFX.Color.blue_400(), 4.0))
-    painter.fill(Canvas.Rect(origin.add(Math.Vec2(112.0, 68.0)), Math.Vec2(58.0)), Canvas.Fill.solid(GFX.Color.green_400()))
+    painter.stroke(Canvas.Rect(origin.add(Math.Vec2(24.0, 72.0)), Math.Vec2(70.0, 55.0)), Canvas.Stroke(Color.blue_400(), 4.0))
+    painter.fill(Canvas.Rect(origin.add(Math.Vec2(112.0, 68.0)), Math.Vec2(58.0)), Canvas.Fill.solid(Color.green_400()))
     painter.fill(
         Canvas.Rect(origin.add(Math.Vec2(188.0, 68.0)), Math.Vec2(64.0, 62.0), 18.0),
         Canvas.Fill.with_brush(Canvas.Brush.linear(
             start:origin.add(Math.Vec2(188.0, 68.0)),
             end:origin.add(Math.Vec2(252.0, 130.0)),
-            start_color:GFX.Color.violet_400(),
-            end_color:GFX.Color.pink_400()
+            start_color:Color.violet_400(),
+            end_color:Color.pink_400()
         ))
     )
     label(painter, font, "contour", origin.add(Math.Vec2(35.0, 148.0)), 11.0)
@@ -254,9 +254,9 @@ func paint_rectangles(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec
 
 func paint_polygons(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Polygones réguliers", origin, Math.Vec2(275.0, 195.0))
-    painter.stroke(polygon(origin.add(Math.Vec2(54.0, 108.0)), 36.0, 3, -Math.pi() * 0.5), Canvas.Stroke(GFX.Color.amber_400(), 4.0))
-    painter.stroke(polygon(origin.add(Math.Vec2(137.0, 108.0)), 36.0, 5, -Math.pi() * 0.5), Canvas.Stroke(GFX.Color.teal_400(), 4.0))
-    painter.stroke(polygon(origin.add(Math.Vec2(222.0, 108.0)), 36.0, 8, Math.pi() * 0.125), Canvas.Stroke(GFX.Color.violet_400(), 4.0))
+    painter.stroke(polygon(origin.add(Math.Vec2(54.0, 108.0)), 36.0, 3, -Math.pi() * 0.5), Canvas.Stroke(Color.amber_400(), 4.0))
+    painter.stroke(polygon(origin.add(Math.Vec2(137.0, 108.0)), 36.0, 5, -Math.pi() * 0.5), Canvas.Stroke(Color.teal_400(), 4.0))
+    painter.stroke(polygon(origin.add(Math.Vec2(222.0, 108.0)), 36.0, 8, Math.pi() * 0.125), Canvas.Stroke(Color.violet_400(), 4.0))
     label(painter, font, "triangle", origin.add(Math.Vec2(32.0, 158.0)), 11.0)
     label(painter, font, "pentagone", origin.add(Math.Vec2(108.0, 158.0)), 11.0)
     label(painter, font, "octogone", origin.add(Math.Vec2(198.0, 158.0)), 11.0)
@@ -266,9 +266,9 @@ func paint_special_polygons(painter:&Canvas.Painter, font:Canvas.Font, origin:Ma
     card(painter, font, "Étoile, losange et forme concave", origin, Math.Vec2(275.0, 195.0))
     painter.stroke(
         star(origin.add(Math.Vec2(54.0, 108.0)), 39.0, 17.0, 5),
-        Canvas.Stroke(GFX.Color.yellow_400(), 4.0)..join = Canvas.StrokeJoin.miter
+        Canvas.Stroke(Color.yellow_400(), 4.0)..join = Canvas.StrokeJoin.miter
     )
-    painter.stroke(polygon(origin.add(Math.Vec2(137.0, 108.0)), 38.0, 4, 0.0), Canvas.Stroke(GFX.Color.cyan_400(), 4.0))
+    painter.stroke(polygon(origin.add(Math.Vec2(137.0, 108.0)), 38.0, 4, 0.0), Canvas.Stroke(Color.cyan_400(), 4.0))
     var concave = Canvas.Path()
         ..move_to(origin.add(Math.Vec2(190.0, 72.0)))
         ..line_to(origin.add(Math.Vec2(248.0, 75.0)))
@@ -278,7 +278,7 @@ func paint_special_polygons(painter:&Canvas.Painter, font:Canvas.Font, origin:Ma
         ..line_to(origin.add(Math.Vec2(185.0, 151.0)))
         ..line_to(origin.add(Math.Vec2(194.0, 113.0)))
         ..close()
-    painter.fill(concave, Canvas.Fill.solid(GFX.Color.rose_400().with_alpha(0.8)))
+    painter.fill(concave, Canvas.Fill.solid(Color.rose_400().with_alpha(0.8)))
 }
 
 func paint_freeform(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
@@ -294,42 +294,49 @@ func paint_freeform(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2)
     let brush = Canvas.Brush.linear(
         start:origin.add(Math.Vec2(30.0, 60.0)),
         end:origin.add(Math.Vec2(245.0, 155.0)),
-        start_color:GFX.Color.pink_400().with_alpha(0.35),
-        end_color:GFX.Color.violet_500().with_alpha(0.8)
+        start_color:Color.pink_400().with_alpha(0.35),
+        end_color:Color.violet_500().with_alpha(0.8)
     )
     painter.fill(blob, Canvas.Fill.with_brush(brush))
-    painter.stroke(blob, Canvas.Stroke(GFX.Color.pink_300(), 3.0)..join = Canvas.StrokeJoin.round)
+    painter.stroke(blob, Canvas.Stroke(Color.pink_300(), 3.0)..join = Canvas.StrokeJoin.round)
 }
 
 func paint_arrows(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Flèches composées", origin, Math.Vec2(275.0, 195.0))
-    arrow(painter, origin.add(Math.Vec2(24.0, 78.0)), origin.add(Math.Vec2(245.0, 78.0)), GFX.Color.sky_400(), 4.0)
-    arrow(painter, origin.add(Math.Vec2(24.0, 128.0)), origin.add(Math.Vec2(245.0, 128.0)), GFX.Color.rose_500(), 12.0)
+    arrow(painter, origin.add(Math.Vec2(24.0, 78.0)), origin.add(Math.Vec2(245.0, 78.0)), Color.sky_400(), 4.0)
+    arrow(painter, origin.add(Math.Vec2(24.0, 128.0)), origin.add(Math.Vec2(245.0, 128.0)), Color.rose_500(), 12.0)
     label(painter, font, "même intention, deux poids", origin.add(Math.Vec2(55.0, 155.0)), 11.0)
 }
 
 func paint_layering(painter:&Canvas.Painter, font:Canvas.Font, origin:Math.Vec2) {
     card(painter, font, "Transparence et superposition", origin, Math.Vec2(275.0, 195.0))
-    painter.fill(Canvas.Circle(origin.add(Math.Vec2(102.0, 108.0)), 49.0), Canvas.Fill.solid(GFX.Color.green_400().with_alpha(0.48)))
-    painter.fill(Canvas.Rect(origin.add(Math.Vec2(106.0, 72.0)), Math.Vec2(92.0, 72.0)), Canvas.Fill.solid(GFX.Color.rose_400().with_alpha(0.5)))
-    painter.fill(polygon(origin.add(Math.Vec2(176.0, 119.0)), 53.0, 3, -Math.pi() * 0.5), Canvas.Fill.solid(GFX.Color.blue_400().with_alpha(0.5)))
-    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(102.0, 108.0)), 49.0), Canvas.Stroke(GFX.Color.green_300(), 2.0))
-    painter.stroke(Canvas.Rect(origin.add(Math.Vec2(106.0, 72.0)), Math.Vec2(92.0, 72.0)), Canvas.Stroke(GFX.Color.rose_300(), 2.0))
+    painter.fill(Canvas.Circle(origin.add(Math.Vec2(102.0, 108.0)), 49.0), Canvas.Fill.solid(Color.green_400().with_alpha(0.48)))
+    painter.fill(Canvas.Rect(origin.add(Math.Vec2(106.0, 72.0)), Math.Vec2(92.0, 72.0)), Canvas.Fill.solid(Color.rose_400().with_alpha(0.5)))
+    painter.fill(polygon(origin.add(Math.Vec2(176.0, 119.0)), 53.0, 3, -Math.pi() * 0.5), Canvas.Fill.solid(Color.blue_400().with_alpha(0.5)))
+    painter.stroke(Canvas.Circle(origin.add(Math.Vec2(102.0, 108.0)), 49.0), Canvas.Stroke(Color.green_300(), 2.0))
+    painter.stroke(Canvas.Rect(origin.add(Math.Vec2(106.0, 72.0)), Math.Vec2(92.0, 72.0)), Canvas.Stroke(Color.rose_300(), 2.0))
 }
 
 func paint_gallery(painter:&Canvas.Painter, font:Canvas.Font) {
     painter.fill(
-        Canvas.Rect(Math.Vec2(), Math.Vec2(canvas_width() as float, canvas_height() as float), 18.0),
-        Canvas.Fill.solid(GFX.Color.slate_950())
+        Canvas.Rect(
+            Math.Vec2(),
+            Math.Vec2(
+                Constants.canvas_width as float,
+                Constants.canvas_height as float
+            ),
+            18.0
+        ),
+        Canvas.Fill.solid(Color.slate_950())
     )
-    label(painter, font, "GFX.Canvas — galerie de formes 2D", Math.Vec2(28.0, 20.0), 26.0, GFX.Color.white())
+    label(painter, font, "GFX.Canvas — galerie de formes 2D", Math.Vec2(28.0, 20.0), 26.0, Color.white())
     label(
         painter,
         font,
         "Primitives simples, chemins libres, styles, dégradés et composition",
         Math.Vec2(30.0, 51.0),
         13.0,
-        GFX.Color.slate_400()
+        Color.slate_400()
     )
 
     let left = 20.0
@@ -350,12 +357,16 @@ func paint_gallery(painter:&Canvas.Painter, font:Canvas.Font) {
     paint_layering(painter, font, Math.Vec2(left + column * 3.0, top + row * 2.0))
 }
 
-func create_gallery(world:&ECS.World) {
+func create_gallery(world:&Resources.World) {
     var font = Canvas.Font.default()
     var gallery = Canvas()
     gallery.paint(func(painter:&Canvas.Painter) { paint_gallery(painter, font) })
     world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Overlay(gallery, canvas_width(), canvas_height())
+        ..with(Components.Overlay2D(
+            gallery,
+            Constants.canvas_width,
+            Constants.canvas_height
+        )
             ..anchor = Math.Vec2(0.5)
             ..pivot = Math.Vec2(0.5)
         )
@@ -364,16 +375,16 @@ func create_gallery(world:&ECS.World) {
 
 func main() {
     var application = Application()
-    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
         ..title = "GFX.Canvas — Shape gallery"
-        ..width = canvas_width() + 40
-        ..height = canvas_height() + 40
+        ..width = Constants.canvas_width + 40
+        ..height = Constants.canvas_height + 40
     ))
-    application.add_plugin(InputPlugin())
-    application.add_plugin(Rendering.Plugin(Rendering.Plugin.Settings()
-        ..clear = GFX.Color.black()
+    application.add_plugin(Plugins.Input())
+    application.add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
+        ..clear = Color.black()
     ))
-    application.add_plugin(Scene2D.Plugin())
+    application.add_plugin(Plugins.Scene2D())
     application.add_system(Application.Schedule.startup, create_gallery)
     application.run()
 }

@@ -70,6 +70,9 @@ test "expose components resources and plugins through intentional umbrellas" {
     let pacing = Plugins.FramePacing(60)
     let scene_2d = Plugins.Scene2D()
     let scene_3d = Plugins.Scene3D()
+    let fps_counter = Plugins.FPSCounter(Plugins.FPSCounterSettings()
+        ..anchor = Plugins.FPSCounterAnchor.bottom_right
+    )
     let grid_2d = Plugins.Grid2D()
     let grid_3d = Plugins.Grid3D()
     let window = Plugins.Window(Plugins.WindowSettings()..hidden = true)

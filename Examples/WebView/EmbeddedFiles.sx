@@ -1,7 +1,9 @@
 use GFX.Application
+use GFX.Plugins
+use GFX.Resources
 use GFX.WebView
 
-func handle_web_messages(view:&WebView.View) {
+func handle_web_messages(view:&Resources.WebView) {
     for message in view.receive() {
         if message.name == "greet" {
             view.send("greeting", "Hello, " + message.payload + "!")
@@ -15,7 +17,7 @@ func main() {
         ..add(WebView.Asset.javascript(embed_text("EmbeddedFiles/app.js"), path:"/app.js"))
 
     Application()
-        ..add_plugin(WebView.Plugin(site))
+        ..add_plugin(Plugins.WebView(site))
         ..add_system(Application.Schedule.update, handle_web_messages)
         ..run()
 }
