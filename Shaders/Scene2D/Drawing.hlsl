@@ -3,10 +3,10 @@ struct VertexInput {
     float3 shape : TEXCOORD1;
     float2 local : TEXCOORD2;
     float4 color : TEXCOORD3;
-    float4 modelX : TEXCOORD4;
-    float4 modelY : TEXCOORD5;
-    float4 modelZ : TEXCOORD6;
-    float4 modelW : TEXCOORD7;
+    float2 modelX : TEXCOORD4;
+    float2 modelY : TEXCOORD5;
+    float2 modelTranslation : TEXCOORD6;
+    float modelDepth : TEXCOORD7;
     float4 materialColor : TEXCOORD8;
 };
 
@@ -23,9 +23,9 @@ struct VertexOutput {
 };
 
 VertexOutput vertex_main(VertexInput input) {
-    const float4 local = float4(input.position.xy, 0.0, 1.0);
-    const float4 world = input.modelX * local.x + input.modelY * local.y +
-        input.modelZ * local.z + input.modelW * local.w;
+    const float2 worldPosition = input.modelX * input.position.x +
+        input.modelY * input.position.y + input.modelTranslation;
+    const float4 world = float4(worldPosition, input.modelDepth, 1.0);
     VertexOutput output;
     output.position = mul(viewProjection, world);
     output.color = input.color * input.materialColor;

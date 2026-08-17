@@ -79,7 +79,9 @@ struct Draw {
 
 struct SceneDraw {
     internal let cache:int
-    internal let model:Math.Mat4
+    internal let model_x:Math.Vec2
+    internal let model_y:Math.Vec2
+    internal let model_translation:Math.Vec2
     internal let color:Color
     internal let layer:int
     internal let depth:float
@@ -153,7 +155,7 @@ internal class Renderer {
         drawing_buffers.append(GPU.VertexBufferLayout(slot:0, pitch:36))
         drawing_buffers.append(GPU.VertexBufferLayout(
             slot:1,
-            pitch:80,
+            pitch:48,
             rate:GPU.VertexRate.instance
         ))
         var drawing_attributes:GPU.VertexAttribute[] = []
@@ -161,11 +163,11 @@ internal class Renderer {
         drawing_attributes.append(GPU.VertexAttribute(location:1, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:12))
         drawing_attributes.append(GPU.VertexAttribute(location:2, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:24))
         drawing_attributes.append(GPU.VertexAttribute(location:3, buffer_slot:0, format:GPU.VertexFormat.unsigned_8x4_normalized, offset:32))
-        drawing_attributes.append(GPU.VertexAttribute(location:4, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:0))
-        drawing_attributes.append(GPU.VertexAttribute(location:5, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:16))
-        drawing_attributes.append(GPU.VertexAttribute(location:6, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:32))
-        drawing_attributes.append(GPU.VertexAttribute(location:7, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:48))
-        drawing_attributes.append(GPU.VertexAttribute(location:8, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:64))
+        drawing_attributes.append(GPU.VertexAttribute(location:4, buffer_slot:1, format:GPU.VertexFormat.float_32x2, offset:0))
+        drawing_attributes.append(GPU.VertexAttribute(location:5, buffer_slot:1, format:GPU.VertexFormat.float_32x2, offset:8))
+        drawing_attributes.append(GPU.VertexAttribute(location:6, buffer_slot:1, format:GPU.VertexFormat.float_32x2, offset:16))
+        drawing_attributes.append(GPU.VertexAttribute(location:7, buffer_slot:1, format:GPU.VertexFormat.float_32, offset:24))
+        drawing_attributes.append(GPU.VertexAttribute(location:8, buffer_slot:1, format:GPU.VertexFormat.float_32x4, offset:32))
         self.drawing_pipeline = device.graphics_pipeline(
             GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene2D/Drawing.hlsl"),
             GPU.GraphicsPipelineSettings(
@@ -268,9 +270,12 @@ internal class Renderer {
                             var snapshot = drawing.snapshot()
                             self.refresh_scene_geometry(device, cache, snapshot)
                         }
+                        let model = drawing.affine_model(transform)
                         self.scene_draws.append(SceneDraw(
                             cache:cache_index,
-                            model:drawing.model(transform),
+                            model_x:model.x,
+                            model_y:model.y,
+                            model_translation:model.translation,
                             color:drawing.color,
                             layer:drawing.layer,
                             depth:drawing.depth,
@@ -632,7 +637,7 @@ internal class Renderer {
 
     private func prepare_scene_instances(device:@GPU.Device) {
         if self.scene_draws.count() == 0 { return }
-        let byte_count = self.scene_draws.count() * 80
+        let byte_count = self.scene_draws.count() * 48
         if self.drawing_instances == null || self.drawing_instance_capacity < byte_count {
             self.drawing_instance_packed = Packing.storage(byte_count)
             self.drawing_instance_upload = device.upload_buffer(
@@ -650,9 +655,16 @@ internal class Renderer {
         let address = C.address_bits(C.mutable_string_pointer(bytes))
         var index = 0
         for draw in self.scene_draws {
-            let offset = index * 80
-            Packing.write_mat4(address, offset, draw.model)
-            Packing.write_color(address, offset + 64, draw.color)
+            let offset = index * 48
+            Packing.write_affine_instance(
+                address,
+                offset,
+                draw.model_x,
+                draw.model_y,
+                draw.model_translation,
+                draw.depth,
+                draw.color
+            )
             index++
         }
         self.drawing_instance_packed = bytes
@@ -787,17 +799,17 @@ internal class Renderer {
     ) {
         var bytes = Packing.drawing_instance(model, color)
         if cache.instance == null {
-            cache.instance_upload = device.upload_buffer(80, "GFX.Scene2D instance upload")
+            cache.instance_upload = device.upload_buffer(48, "GFX.Scene2D instance upload")
             cache.instance = device.buffer(GPU.BufferSettings(
-                size:80,
+                size:48,
                 usage:GPU.BufferUsage.vertex(),
                 name:"GFX.Scene2D drawing instance"
             ))
         }
         if let upload = cache.instance_upload {
             if let destination = cache.instance {
-                upload.write_packed(bytes, 80, cycle:true)
-                copy_buffer(device, upload, destination, 80)
+                upload.write_packed(bytes, 48, cycle:true)
+                copy_buffer(device, upload, destination, 48)
             }
         }
     }

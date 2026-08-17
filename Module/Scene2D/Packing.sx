@@ -22,10 +22,17 @@ internal func drawing_vertices(mesh:@Geometry.Mesh) str {
 }
 
 internal func drawing_instance(model:Math.Mat4, color:Color) str {
-    var bytes = storage(80)
+    var bytes = storage(48)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
-    write_mat4(address, 0, model)
-    write_color(address, 64, color)
+    write_affine_instance(
+        address,
+        0,
+        Math.Vec2(model.x.x, model.x.y),
+        Math.Vec2(model.y.x, model.y.y),
+        Math.Vec2(model.w.x, model.w.y),
+        model.w.z,
+        color
+    )
     return bytes
 }
 
@@ -151,6 +158,23 @@ internal func write_mat4(address:uint, offset:int, value:Math.Mat4) {
     write_vec4(address, offset + 16, value.y)
     write_vec4(address, offset + 32, value.z)
     write_vec4(address, offset + 48, value.w)
+}
+
+internal func write_affine_instance(
+    address:uint,
+    offset:int,
+    x:Math.Vec2,
+    y:Math.Vec2,
+    translation:Math.Vec2,
+    depth:float,
+    color:Color
+) {
+    write_vec2(address, offset, x)
+    write_vec2(address, offset + 8, y)
+    write_vec2(address, offset + 16, translation)
+    write_float(address, offset + 24, depth)
+    write_float(address, offset + 28, 0.0)
+    write_color(address, offset + 32, color)
 }
 
 internal func write_color(address:uint, offset:int, value:Color) {

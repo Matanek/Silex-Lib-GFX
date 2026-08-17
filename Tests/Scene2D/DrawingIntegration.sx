@@ -39,9 +39,19 @@ func create_scene(world:&ECS.World, images:&Assets.Images) {
         ..with(Scene2D.Transform(position:Math.Vec2(-12.0, 0.0)))
         ..with(Scene2D.Drawing(drawing, 32, 32))
     )
+    var transformed = Scene2D.Drawing(drawing, 32, 32)
+    transformed.size = Math.Vec2(24.0, 18.0)
+    transformed.pivot = Math.Vec2(0.25, 0.75)
+    transformed.color = Color.violet_400()
+    transformed.layer = 2
+    transformed.depth = 0.5
     world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Transform(position:Math.Vec2(12.0, 0.0)))
-        ..with(Scene2D.Drawing(drawing, 32, 32))
+        ..with(Scene2D.Transform(
+            position:Math.Vec2(12.0, 0.0),
+            rotation:Math.pi() * 0.25,
+            scale:Math.Vec2(1.5, 0.75)
+        ))
+        ..with(transformed)
     )
     let image = images.add(Assets.Image.solid(Color.cyan_400()))
     world.spawn(ECS.EntityRecipe()
