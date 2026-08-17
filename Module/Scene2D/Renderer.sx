@@ -262,11 +262,14 @@ internal class Renderer {
                     let transform = world.query_get<Transform>(entity)
                     let drawing = world.query_get<SceneDrawing>(entity)
                     if drawing.visible {
-                        var snapshot = drawing.snapshot()
-                        var cache = self.cache_for_scene_drawing(snapshot)
-                        self.refresh_scene_geometry(device, cache, snapshot)
+                        let cache_index = self.scene_drawing_cache_index(drawing.snapshot_id())
+                        var cache = self.scene_drawing_cache[cache_index]
+                        if cache.vertices == null {
+                            var snapshot = drawing.snapshot()
+                            self.refresh_scene_geometry(device, cache, snapshot)
+                        }
                         self.scene_draws.append(SceneDraw(
-                            cache:self.scene_drawing_index(cache),
+                            cache:cache_index,
                             model:drawing.model(transform),
                             color:drawing.color,
                             layer:drawing.layer,
@@ -274,7 +277,8 @@ internal class Renderer {
                             order:scene_order
                         ))
                         scene_order++
-                        if snapshot.has_text() {
+                        if drawing.has_text() {
+                            var snapshot = drawing.snapshot()
                             let text = snapshot.text_layer(scale)
                             let scale_key = Math.round(scale * 1000.0) as int
                             var image_cache = self.cache_for_image(
@@ -544,27 +548,16 @@ internal class Renderer {
         }
     }
 
-    private func cache_for_scene_drawing(snapshot:@Snapshot) CachedSceneDrawing {
+    private func scene_drawing_cache_index(snapshot_id:int) int {
         var index = 0
         while index < self.scene_drawing_cache.count() {
             var cache = self.scene_drawing_cache[index]
-            if cache.snapshot_id == snapshot.id() { return cache }
+            if cache.snapshot_id == snapshot_id { return index }
             index++
         }
-        var created = CachedSceneDrawing(snapshot.id())
+        var created = CachedSceneDrawing(snapshot_id)
         self.scene_drawing_cache.append(created)
-        return created
-    }
-
-    private func scene_drawing_index(cache:@CachedSceneDrawing) int {
-        var index = 0
-        while index < self.scene_drawing_cache.count() {
-            if self.scene_drawing_cache[index].snapshot_id == cache.snapshot_id {
-                return index
-            }
-            index++
-        }
-        panic("GFX.Scene2D retained drawing cache is missing")
+        return self.scene_drawing_cache.count() - 1
     }
 
     private func refresh_scene_geometry(

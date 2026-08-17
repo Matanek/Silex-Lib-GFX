@@ -43,6 +43,8 @@ public struct Drawing {
     public func revision() int { return self.current_revision }
     public func width() int { return self.drawing_width }
     public func height() int { return self.drawing_height }
+    internal func snapshot_id() int { return self.retained.id() }
+    internal func has_text() bool { return self.retained.has_text() }
 
     internal func display_size() Math.Vec2 {
         if self.size.x > 0.0 && self.size.y > 0.0 { return self.size }
@@ -51,20 +53,27 @@ public struct Drawing {
 
     internal func model(transform:@Transform) Math.Mat4 {
         let displayed = self.display_size()
-        let placement = Math.Mat4.transform(
-            Math.Vec3(
-                -self.pivot.x * displayed.x,
-                -self.pivot.y * displayed.y,
-                self.depth
-            ),
-            Math.Quat.identity().to_mat3(),
-            Math.Vec3(
-                displayed.x / self.drawing_width as float,
-                displayed.y / self.drawing_height as float,
+        let cosine = Math.cos(transform.rotation)
+        let sine = Math.sin(transform.rotation)
+        let transform_x = transform.scale.x
+        let transform_y = transform.scale.y
+        let scale_x = transform_x * displayed.x / self.drawing_width as float
+        let scale_y = transform_y * displayed.y / self.drawing_height as float
+        let pivot_x = -self.pivot.x * displayed.x
+        let pivot_y = -self.pivot.y * displayed.y
+        return Math.Mat4(
+            Math.Vec4(cosine * scale_x, sine * scale_x, 0.0, 0.0),
+            Math.Vec4(-sine * scale_y, cosine * scale_y, 0.0, 0.0),
+            Math.Vec4(0.0, 0.0, 1.0, 0.0),
+            Math.Vec4(
+                transform.position.x + cosine * transform_x * pivot_x -
+                    sine * transform_y * pivot_y,
+                transform.position.y + sine * transform_x * pivot_x +
+                    cosine * transform_y * pivot_y,
+                self.depth,
                 1.0
             )
         )
-        return transform.matrix().multiply(placement)
     }
 
     internal func text_size(content:Math.Vec2) Math.Vec2 {
