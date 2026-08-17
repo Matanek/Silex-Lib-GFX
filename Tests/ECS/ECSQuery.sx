@@ -148,6 +148,55 @@ test "query injection preserves the world owned by resources" {
     }
 }
 
+class ReadQueryProbe {
+    public var count:int
+    public var checksum:int
+
+    public init() {
+        self.count = 0
+        self.checksum = 0
+    }
+}
+
+func capture_read_query(
+    query:ECS.Query<(@Position, @Velocity)>,
+    probe:&ReadQueryProbe
+) {
+    for (position, velocity) in query {
+        probe.count += 1
+        probe.checksum += position.x * 10 + velocity.x
+    }
+}
+
+test "readonly queries retrieve dense components after pool compaction" {
+    var probe = ReadQueryProbe()
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Schedule.update, capture_read_query)
+        ..with_runner(run_query_once)
+
+    if true {
+        var resources = application.resources()
+        resources.insert(probe)
+        var world:&ECS.World = resources.get_mut<ECS.World>()
+
+        let removed = world.spawn(ECS.EntityRecipe()..with(Position(x:99)))
+        world.spawn(ECS.EntityRecipe()
+            ..with(Position(x:2))
+            ..with(Velocity(x:3)))
+        world.spawn(ECS.EntityRecipe()
+            ..with(Position(x:4))
+            ..with(Velocity(x:5))
+            ..with(Label(value:"extra archetype")))
+        world.spawn(ECS.EntityRecipe()..with(Position(x:77)))
+        world.destroy(removed)
+    }
+
+    application.run()
+    assert(probe.count == 2)
+    assert(probe.checksum == 68)
+}
+
 class QueryLifetimeProbe {
     public var entity_count:int
 

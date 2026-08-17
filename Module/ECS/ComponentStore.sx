@@ -55,6 +55,11 @@ internal struct ComponentStore {
         return pool.get(entity)
     }
 
+    internal func get_known<T>(entity:Entity) @self:T {
+        let pool:@ComponentPool<T> = self.resources.get<ComponentPool<T>>()
+        return pool.get_known(entity)
+    }
+
     // Lowered by the compiler so a reference can retain ComponentStore
     // provenance across the typed Resources slot and dense pool.
     internal func get_mut<T>(entity:Entity) &self:T {

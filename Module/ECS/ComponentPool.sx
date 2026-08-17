@@ -46,6 +46,10 @@ internal struct ComponentPool<T> {
         return @self.values[index]
     }
 
+    internal func get_known(entity:Entity) @self:T {
+        return @self.values[self.sparse[entity.index] - 1]
+    }
+
     internal func get_mut(entity:Entity) &self:T {
         let index = self.dense_index(entity)
         if index < 0 { panic("GFX.ECS entity does not contain the requested component") }

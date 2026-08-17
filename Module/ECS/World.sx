@@ -161,8 +161,12 @@ public class World {
         var value = self.archetypes[archetype]
         return value.entity(row)
     }
-    internal func query_get<T>(entity:Entity) @self:T { return self.components.get<T>(entity) }
-    internal func query_get_mut<T>(entity:Entity) &self:T { return self.components.get_mut<T>(entity) }
+    internal func query_get<T>(entity:Entity) @self:T {
+        return self.components.get_known<T>(entity)
+    }
+    internal func query_get_mut<T>(entity:Entity) &self:T {
+        return self.components.get_mut<T>(entity)
+    }
 
     private func reserve_entity() Entity {
         if !self.free_indices.is_empty() {
