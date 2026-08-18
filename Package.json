@@ -1,9 +1,12 @@
 {
   "name": "GFX",
-  "version": "0.32.4",
+  "version": "0.32.5",
   "extensions": [],
   "requires": { "silex": ">=0.38.22" },
-  "dependencies": { "STD": "^0.16.0" },
+  "dependencies": {
+    "JSON": "^0.1.0",
+    "STD": "^0.16.0"
+  },
   "boundary": {
     "macos-arm64": {
       "providers": {

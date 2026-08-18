@@ -1,6 +1,6 @@
 use GFX.Window
 use GFX.Color
-use STD.JSON
+use JSON
 use STD.Text.UTF8.bytes as utf8_bytes
 use Interop.C
 
@@ -221,7 +221,7 @@ class Bridge {
     }
 
     func record(encoded_batch:str) {
-        match JSON.parse(encoded_batch) {
+        match JSON.try_parse(encoded_batch) {
             failure(error) => {}
             success(var batch) => {
                 if var entries = batch.as_array() {

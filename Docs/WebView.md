@@ -143,7 +143,7 @@ evaluation. In the opposite direction, JavaScript groups all `silex.send`
 calls made during one microtask and crosses into Silex once for the complete
 batch. Message order is preserved in both directions.
 
-Names and payloads are strings. An application may use `STD.JSON` inside the
+Names and payloads are strings. An application may use `JSON` inside the
 payload when it needs structured data. Dispatch stays asynchronous: neither
 side waits synchronously for the other, and the bridge does not participate in
 rendering frames.
