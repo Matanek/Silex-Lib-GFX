@@ -176,6 +176,8 @@ public func texture_format(format:Types.PixelFormat) Types.TextureFormat {
     return decoded_texture_format(sdl_get_gpu_texture_format_from_pixel_format(encoded_pixel_format(format)))
 }
 
+// Public opaque sampler. Applications obtain it from Device and pass it to GPU
+// commands; GPU owns its construction and native handles.
 public class Sampler {
     private let device_handle:uint
     private let handle:uint
