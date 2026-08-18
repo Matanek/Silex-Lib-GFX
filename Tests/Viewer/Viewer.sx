@@ -1,11 +1,15 @@
 use GFX.Application
 use GFX.Assets
+use GFX.Canvas
 use GFX.Color
+use GFX.ECS
+use GFX.Scene2D
 use GFX.Viewer
 use GFX.Window
 use GFX.Window.Plugin as WindowPlugin
 use Interop.Boundary
 use Interop.C
+use STD.Math
 
 let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
     library:Boundary.SDL3,
@@ -22,6 +26,32 @@ func replace_and_close(view:&Viewer.View, window:@Window) {
     assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
 }
 
+func close_viewer(window:@Window) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x210)
+    let stored_window = C.store<uint32>(address, 16 as uint, window.id().value)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+}
+
+func resize_vector_viewer(window:&Window) {
+    window.resize(Math.Vec2(96.0, 80.0))
+}
+
+func verify_vector_viewer_resize(world:@ECS.World, window:@Window) {
+    let expected = window.size()
+    for entity in world.entities() {
+        if world.has<Scene2D.Overlay>(entity) {
+            let overlay = world.get<Scene2D.Overlay>(entity)
+            if overlay.size == expected {
+                close_viewer(window)
+                return
+            }
+        }
+    }
+    panic("GFX.Viewer vector content did not follow its resized window")
+}
+
 test "display and replace an image through the public viewer" {
     var application = Application()
     application.add_plugin(WindowPlugin(WindowPlugin.Settings()
@@ -36,4 +66,27 @@ test "display and replace an image through the public viewer" {
     application.run()
     assert(application.has_plugin("GFX.Input.Plugin"))
     assert(application.has_plugin("GFX.GPU.Plugin"))
+}
+
+test "display a canvas through the retained vector viewer" {
+    var drawing = Canvas()
+    drawing.paint(func(painter:&Canvas.Painter) {
+        painter.fill(
+            Canvas.Circle(Math.Vec2(32.0), 18.0),
+            Canvas.Fill.solid(Color.sky_400())
+        )
+    })
+    var application = Application()
+    application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+        ..title = "GFX.Viewer vector test"
+        ..width = 64
+        ..height = 64
+        ..hidden = true
+    ))
+    application.add_plugin(Viewer.Plugin(drawing, 64, 64))
+    application.add_system(Application.Schedule.startup, resize_vector_viewer)
+    application.add_system(Application.Schedule.update, verify_vector_viewer_resize)
+    application.run()
+    assert(application.has_plugin("GFX.Scene2D.Plugin"))
+    assert(application.has_plugin("GFX.Rendering.Plugin"))
 }

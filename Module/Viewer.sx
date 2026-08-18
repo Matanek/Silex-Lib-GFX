@@ -2,10 +2,17 @@ use GFX.Application.Plugin as PluginProtocol
 use GFX.Application
 use GFX.Application.Schedule
 use GFX.Assets.Image
+use GFX.Canvas.Canvas as AuthoredCanvas
 use GFX.Color
+use GFX.ECS
 use GFX.GPU
 use GFX.GPU.Plugin as GPUPlugin
 use GFX.Input.Plugin as InputPlugin
+use GFX.Rendering.Plugin as RenderingPlugin
+use GFX.Rendering.Plugin.Settings as RenderingSettings
+use GFX.Scene2D
+use GFX.Scene2D.Plugin as Scene2DPlugin
+use GFX.Window as WindowApi
 use GFX.Window.Plugin as WindowPlugin
 use STD.Math
 
@@ -17,7 +24,7 @@ public struct Settings {
     var smooth:bool
 
     init(
-        title:str = "GFX image viewer",
+        title:str = "GFX viewer",
         width:int = 0,
         height:int = 0,
         background:Color = Color.slate_950(),
@@ -46,6 +53,21 @@ public class View {
     func replace(image:Image) {
         self.current_image = image
         self.current_revision++
+    }
+}
+
+class DrawingPresentation {
+    let authored_width:int
+    let authored_height:int
+    var display:ECS.Entity? = null
+    var display_width:int
+    var display_height:int
+
+    init(width:int, height:int) {
+        self.authored_width = width
+        self.authored_height = height
+        self.display_width = 0
+        self.display_height = 0
     }
 }
 
@@ -149,27 +171,61 @@ class RenderState {
 }
 
 public struct Plugin:PluginProtocol {
-    private let initial_image:Image
+    private let initial_image:Image?
+    private var initial_drawing:AuthoredCanvas?
+    private let drawing_width:int
+    private let drawing_height:int
     private let settings:Settings
 
     init(image:Image, settings:Settings = Settings()) {
         self.initial_image = image
+        self.initial_drawing = null
+        self.drawing_width = 0
+        self.drawing_height = 0
+        self.settings = settings
+    }
+
+    init(
+        drawing:AuthoredCanvas,
+        width:int,
+        height:int,
+        settings:Settings = Settings()
+    ) {
+        if width <= 0 || height <= 0 {
+            panic("GFX.Viewer drawing dimensions must be positive")
+        }
+        self.initial_image = null
+        self.initial_drawing = drawing
+        self.drawing_width = width
+        self.drawing_height = height
         self.settings = settings
     }
 
     func id() str { return "GFX.Viewer.Plugin" }
 
     func build(application:&Application) {
+        if let drawing = self.initial_drawing {
+            self.build_drawing(application, drawing)
+            return
+        }
+        if let image = self.initial_image {
+            self.build_image(application, image)
+            return
+        }
+        panic("GFX.Viewer requires image or drawing content")
+    }
+
+    private func build_image(application:&Application, image:Image) {
         let width = viewer_extent(
             self.settings.width,
-            self.initial_image.width(),
+            image.width(),
             48,
             320,
             1280
         )
         let height = viewer_extent(
             self.settings.height,
-            self.initial_image.height(),
+            image.height(),
             48,
             240,
             800
@@ -183,11 +239,46 @@ public struct Plugin:PluginProtocol {
         application.add_plugin(GPUPlugin(GPUPlugin.Settings()
             ..present_on_start = false
         ))
-        application.add_resource(View(self.initial_image))
+        application.add_resource(View(image))
         application.add_resource(self.settings)
         application.add_system(Schedule.startup, start_viewer)
         application.add_system(Schedule.render, render_viewer)
         application.add_system(Schedule.shutdown, stop_viewer)
+    }
+
+    private func build_drawing(application:&Application, drawing:AuthoredCanvas) {
+        let width = viewer_extent(
+            self.settings.width,
+            self.drawing_width,
+            48,
+            320,
+            1280
+        )
+        let height = viewer_extent(
+            self.settings.height,
+            self.drawing_height,
+            48,
+            240,
+            800
+        )
+        application.add_plugin(WindowPlugin(WindowPlugin.Settings()
+            ..title = self.settings.title
+            ..width = width
+            ..height = height
+        ))
+        application.add_plugin(InputPlugin())
+        application.add_plugin(RenderingPlugin(RenderingSettings()
+            ..clear = self.settings.background
+        ))
+        application.add_plugin(Scene2DPlugin())
+        application.add_resource(drawing)
+        application.add_resource(DrawingPresentation(
+            self.drawing_width,
+            self.drawing_height
+        ))
+        application.add_system(Schedule.startup, start_drawing_viewer)
+        application.add_system(Schedule.update, resize_drawing_viewer)
+        application.add_system(Schedule.shutdown, stop_drawing_viewer)
     }
 }
 
@@ -198,6 +289,78 @@ public func show(
     var application = Application()
     application.add_plugin(Plugin(image, Settings(title:title)))
     return application.run()
+}
+
+public func show(
+    drawing:AuthoredCanvas,
+    width:int,
+    height:int,
+    title:str = "GFX canvas viewer"
+) int {
+    var application = Application()
+    application.add_plugin(Plugin(
+        drawing,
+        width,
+        height,
+        Settings(title:title, width:width, height:height)
+    ))
+    return application.run()
+}
+
+func start_drawing_viewer(application:Application) {
+    var resources = application.resources()
+    var stored_drawing = resources.remove<AuthoredCanvas>()
+    if var drawing = stored_drawing {
+        let size = resources.get<WindowApi>().size()
+        var authored_width = 0
+        var authored_height = 0
+        {
+            let presentation = resources.get<DrawingPresentation>()
+            authored_width = presentation.authored_width
+            authored_height = presentation.authored_height
+        }
+        var display:ECS.Entity? = null
+        {
+            var world = resources.get_mut<ECS.World>()
+            display = world.spawn(ECS.EntityRecipe()
+                ..with(Scene2D.Overlay(drawing, authored_width, authored_height)
+                    ..size = size
+                )
+            )
+        }
+        if let entity = display {
+            var presentation = resources.get_mut<DrawingPresentation>()
+            presentation.display = entity
+            presentation.display_width = size.x as int
+            presentation.display_height = size.y as int
+            return
+        }
+    }
+    panic("GFX.Viewer has no drawing")
+}
+
+func resize_drawing_viewer(
+    window:@WindowApi,
+    world:&ECS.World,
+    presentation:&DrawingPresentation
+) {
+    let size = window.size()
+    let width = size.x as int
+    let height = size.y as int
+    if width <= 0 || height <= 0 { return }
+    if width == presentation.display_width && height == presentation.display_height { return }
+    if let display = presentation.display {
+        world.update<Scene2D.Overlay>(display, func(overlay:&Scene2D.Overlay) {
+            overlay.size = size
+        })
+    }
+    presentation.display_width = width
+    presentation.display_height = height
+}
+
+func stop_drawing_viewer(application:Application) {
+    var presentation = application.resources().remove<DrawingPresentation>()
+    assert(presentation != null)
 }
 
 func start_viewer(application:Application) {

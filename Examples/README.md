@@ -12,13 +12,16 @@ an executable consumer of the public GFX API.
 
 - `Canvas/CreateImage.sx` paints and displays a generated chart.
 - `Canvas/PaintLinearGradient.sx` displays gradient fills and strokes.
+- `Canvas/PresentDrawing.sx` presents a retained vector Canvas that follows
+  its window without an intermediate image.
 - `Canvas/RasterizeSurface.sx` composes canvas content and image pixels on a surface.
 - `Canvas/RenderVectorText.sx` rasterizes and displays shaped text.
 - `Canvas/ShapeGallery2D.sx` renders the complete historical shape gallery
   through retained `Scene2D` vector geometry and its text layer.
 
-These examples use `GFX.Viewer` only after producing an `Assets.Image`;
-`GFX.Canvas` itself remains independent from windows and the GPU.
+Canvas examples may present either an `Assets.Image` or a retained drawing
+through `GFX.Viewer`; `GFX.Canvas` itself remains independent from windows and
+the GPU.
 
 ## Rendering
 

@@ -3,8 +3,8 @@
 GFX is Silex's modular graphics and application library. A single package
 provides the application runtime, windows, input, GPU access, the frame graph,
 rendering, 2D and 3D scenes, drawing, assets, ECS, audio, and WebView support.
-`GFX.Viewer` provides a small image presentation utility for generated assets
-and examples.
+`GFX.Viewer` presents generated images or retained Canvas drawings in a native
+window for inspection and examples.
 
 ```text
 silex install GFX

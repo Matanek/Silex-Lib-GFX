@@ -60,6 +60,14 @@ commands, can compose images, and returns an `Assets.Image`. The
 `GFX.Viewer.show(image)`. Canvas remains independent from presentation: the
 examples opt into the viewer after rasterization.
 
+When the desired result remains vectorial, pass the Canvas itself with its
+authored dimensions. Viewer then retains it through Scene2D and follows window
+resizing without creating an intermediate image:
+
+```sx
+Viewer.show(canvas, 960, 640, "Generated drawing")
+```
+
 `ShapeGallery2D.sx` exercises the retained vector path instead. It places one
 `Canvas` in a `GFX.Scene2D.Overlay`, so it exposes differences between CPU
 rasterization and the built-in GPU renderer across lines, caps, joins, paths,

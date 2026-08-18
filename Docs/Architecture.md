@@ -26,7 +26,7 @@ GFX
 ├── Rendering       generic rendering host and orchestration
 ├── Scene2D         camera, transform, sprite, grid, and 2D shaders
 ├── Scene3D         camera, mesh, material, light, selection, and 3D gizmos
-├── Viewer          focused presentation of generated images
+├── Viewer          focused presentation of images and Canvas drawings
 ├── WebView         embedded Web content and message bridge
 └── Window          windows, displays, and system presentation
 ```
