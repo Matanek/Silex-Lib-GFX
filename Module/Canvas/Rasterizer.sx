@@ -483,11 +483,20 @@ func inside_rect(point:Math.Vec2, position:Math.Vec2, size:Math.Vec2, radius:flo
 }
 
 func segment_distance_squared(point:Math.Vec2, start:Math.Vec2, end:Math.Vec2) float {
-    let segment = end.subtract(start)
-    let length = segment.length_squared()
-    if length <= 0.0 { return point.subtract(start).length_squared() }
-    let amount = Math.clamp(point.subtract(start).dot(segment) / length, 0.0, 1.0)
-    return point.subtract(start.add(segment.multiply(amount))).length_squared()
+    let segment_x = end.x - start.x
+    let segment_y = end.y - start.y
+    let length = segment_x * segment_x + segment_y * segment_y
+    let offset_x = point.x - start.x
+    let offset_y = point.y - start.y
+    if length <= 0.0 { return offset_x * offset_x + offset_y * offset_y }
+    let amount = Math.clamp(
+        (offset_x * segment_x + offset_y * segment_y) / length,
+        0.0,
+        1.0
+    )
+    let distance_x = point.x - (start.x + segment_x * amount)
+    let distance_y = point.y - (start.y + segment_y * amount)
+    return distance_x * distance_x + distance_y * distance_y
 }
 
 func curve_midpoint(a:Math.Vec2, b:Math.Vec2) Math.Vec2 {
