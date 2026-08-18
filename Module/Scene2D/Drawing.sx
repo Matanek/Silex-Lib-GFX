@@ -104,13 +104,13 @@ public struct Drawing {
 
     module func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
         let displayed = self.display_size()
-        let resolved = self.text_size(content)
-        if resolved.x <= 0.0 || resolved.y <= 0.0 { return Math.Vec2() }
-        return Math.Vec2(
-            (self.pivot.x * displayed.x - origin.x * displayed.x /
-                self.drawing_width as float) / resolved.x,
-            (self.pivot.y * displayed.y - origin.y * displayed.y /
-                self.drawing_height as float) / resolved.y
-        )
+        let resolved_x = content.x * displayed.x / self.drawing_width as float
+        let resolved_y = content.y * displayed.y / self.drawing_height as float
+        if resolved_x <= 0.0 || resolved_y <= 0.0 { return Math.Vec2() }
+        let pivot_x = (self.pivot.x * displayed.x - origin.x * displayed.x /
+            self.drawing_width as float) / resolved_x
+        let pivot_y = (self.pivot.y * displayed.y - origin.y * displayed.y /
+            self.drawing_height as float) / resolved_y
+        return Math.Vec2(pivot_x, pivot_y)
     }
 }

@@ -7,9 +7,9 @@ use GFX.Plugins
 use GFX.Resources
 use STD.Math
 
-struct Constants {
-    static let canvas_width:int = 1180
-    static let canvas_height:int = 760
+static struct Constants {
+    let canvas_width:int = 1180
+    let canvas_height:int = 760
 }
 
 func label(
@@ -374,17 +374,17 @@ func create_gallery(world:&Resources.World) {
 }
 
 func main() {
-    var application = Application()
-    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
-        ..title = "GFX.Canvas — Shape gallery"
-        ..width = Constants.canvas_width + 40
-        ..height = Constants.canvas_height + 40
-    ))
-    application.add_plugin(Plugins.Input())
-    application.add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
-        ..clear = Color.black()
-    ))
-    application.add_plugin(Plugins.Scene2D())
-    application.add_system(Application.Schedule.startup, create_gallery)
-    application.run()
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "GFX.Canvas — Shape gallery"
+            ..width = Constants.canvas_width + 40
+            ..height = Constants.canvas_height + 40
+        ))
+        ..add_plugin(Plugins.Input())
+        ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
+            ..clear = Color.black()
+        ))
+        ..add_plugin(Plugins.Scene2D())
+        ..add_system(Application.Schedule.startup, create_gallery)
+        ..run()
 }

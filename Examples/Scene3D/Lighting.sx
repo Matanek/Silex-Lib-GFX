@@ -209,35 +209,35 @@ func rotate(
 }
 
 func main() {
-    var application = Application()
-    application.resources().insert(State(
-        sun:ECS.Entity(),
-        spot:ECS.Entity(),
-        cube:ECS.Entity(),
-        tube:ECS.Entity(),
-        point:ECS.Entity(),
-        active:Preset.sun
-    ))
-    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
-        ..title = "Scene3D — Lighting — 1 SunLight"
-        ..width = 1280
-        ..height = 720
-    ))
-    application.add_plugin(Plugins.Time())
-    application.add_plugin(Plugins.ViewportCamera3D(Plugins.ViewportCamera3DSettings()
-        ..target = Math.Vec3(0.0, 0.55, 0.0)
-        ..distance = 5.0
-        ..min_distance = 2.0
-        ..max_distance = 12.0
-        ..pitch = Math.radians(-18.0)
-        ..vertical_fov = Math.radians(42.0)
-        ..near_plane = 0.05
-        ..far_plane = 80.0
-    ))
-    application.add_system(Application.Schedule.startup, create_geometry)
-    application.add_system(Application.Schedule.startup, create_lights)
-    application.add_after_system(Application.Schedule.startup, activate_default)
-    application.add_system(Application.Schedule.pre_update, select_light)
-    application.add_system(Application.Schedule.update, rotate)
-    application.run()
+    Application()
+        ..add_resource(State(
+            sun:ECS.Entity(),
+            spot:ECS.Entity(),
+            cube:ECS.Entity(),
+            tube:ECS.Entity(),
+            point:ECS.Entity(),
+            active:Preset.sun
+        ))
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Scene3D — Lighting — 1 SunLight"
+            ..width = 1280
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Time())
+        ..add_plugin(Plugins.ViewportCamera3D(Plugins.ViewportCamera3DSettings()
+            ..target = Math.Vec3(0.0, 0.55, 0.0)
+            ..distance = 5.0
+            ..min_distance = 2.0
+            ..max_distance = 12.0
+            ..pitch = Math.radians(-18.0)
+            ..vertical_fov = Math.radians(42.0)
+            ..near_plane = 0.05
+            ..far_plane = 80.0
+        ))
+        ..add_system(Application.Schedule.startup, create_geometry)
+        ..add_system(Application.Schedule.startup, create_lights)
+        ..add_after_system(Application.Schedule.startup, activate_default)
+        ..add_system(Application.Schedule.pre_update, select_light)
+        ..add_system(Application.Schedule.update, rotate)
+        ..run()
 }

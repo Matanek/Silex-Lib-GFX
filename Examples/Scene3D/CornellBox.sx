@@ -132,15 +132,15 @@ func create_box(world:&Resources.World, meshes:&Resources.Meshes3D) {
 }
 
 func main() {
-    var application = Application()
-    application.resources().insert(Resources.ToneMapping3D.aces(exposure:0.35))
-    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
-        ..title = "Scene3D — Cornell Box"
-        ..width = 1280
-        ..height = 720
-    ))
-    application.add_plugin(Plugins.Input())
-    application.add_plugin(Plugins.Scene3D())
-    application.add_system(Application.Schedule.startup, create_box)
-    application.run()
+    Application()
+        ..add_resource(Resources.ToneMapping3D.aces(exposure:0.35))
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Scene3D — Cornell Box"
+            ..width = 1280
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Input())
+        ..add_plugin(Plugins.Scene3D())
+        ..add_system(Application.Schedule.startup, create_box)
+        ..run()
 }

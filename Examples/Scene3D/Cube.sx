@@ -63,16 +63,16 @@ func rotate(
 }
 
 func main() {
-    var application = Application()
-    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
-        ..title = "Scene3D — Cube"
-        ..width = 960
-        ..height = 640
-    ))
-    application.add_plugin(Plugins.Input())
-    application.add_plugin(Plugins.Time())
-    application.add_plugin(Plugins.Scene3D())
-    application.add_system(Application.Schedule.startup, create_scene)
-    application.add_system(Application.Schedule.update, rotate)
-    application.run()
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Scene3D — Cube"
+            ..width = 960
+            ..height = 640
+        ))
+        ..add_plugin(Plugins.Input())
+        ..add_plugin(Plugins.Time())
+        ..add_plugin(Plugins.Scene3D())
+        ..add_system(Application.Schedule.startup, create_scene)
+        ..add_system(Application.Schedule.update, rotate)
+        ..run()
 }

@@ -10,18 +10,18 @@ use STD.Process
 use STD.Randomizer
 use STD.Time.Clock
 
-struct Constants {
-    static let canvas_width:int = 960
-    static let canvas_height:int = 640
-    static let boid_count:int = 2000
-    static let neighborhood_radius:float = 48.0
-    static let separation_radius:float = 22.0
-    static let minimum_speed:float = 50.0
-    static let maximum_speed:float = 115.0
-    static let maximum_steering:float = 150.0
-    static let visible_half_width:float = Constants.canvas_width as float * 0.5 - 8.0
-    static let visible_half_height:float = Constants.canvas_height as float * 0.5 - 8.0
-    static let boundary_margin:float = 84.0
+static struct Constants {
+    let canvas_width:int = 960
+    let canvas_height:int = 640
+    let boid_count:int = 2000
+    let neighborhood_radius:float = 48.0
+    let separation_radius:float = 22.0
+    let minimum_speed:float = 50.0
+    let maximum_speed:float = 115.0
+    let maximum_steering:float = 150.0
+    let visible_half_width:float = Constants.canvas_width as float * 0.5 - 8.0
+    let visible_half_height:float = Constants.canvas_height as float * 0.5 - 8.0
+    let boundary_margin:float = 84.0
 }
 
 struct Boid {
@@ -290,11 +290,13 @@ func move_flock(
 
 func main() {
     var application = Application()
+
     // Keep the historical switch to compare the parallel query path with its
     // single-worker baseline when investigating scheduler performance.
     if option_requested("--one-worker") {
         application = Application(1)
     }
+
     application
         ..add_resource(FlockSnapshot())
         ..add_plugin(Plugins.Window(Plugins.WindowSettings()
@@ -314,9 +316,11 @@ func main() {
         ..add_system(Application.Schedule.startup, create_flock)
         ..add_system(Application.Schedule.update, capture_flock)
         ..add_system(Application.Schedule.update, move_flock)
+
     if option_requested("--benchmark") {
         application.add_resource(Benchmark())
         application.add_after_system(Application.Schedule.render, benchmark)
     }
+
     application.run()
 }

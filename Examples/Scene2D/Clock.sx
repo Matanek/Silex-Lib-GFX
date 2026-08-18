@@ -8,10 +8,10 @@ use GFX.Resources
 use STD.Math
 use STD.Time.LocalTime
 
-struct Constants {
-    static let canvas_size:int = 640
+static struct Constants {
+    let canvas_size:int = 640
 
-    static func background_color() Color {
+    func background_color() Color {
         return Color.bytes(215, 210, 203)
     }
 }

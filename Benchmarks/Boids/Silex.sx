@@ -9,14 +9,16 @@ use STD.Math
 use STD.Process
 use STD.Time.Clock
 
-struct Constants {
-    static let neighborhood_radius:float = 72.0
-    static let separation_radius:float = 28.0
-    static let minimum_speed:float = 55.0
-    static let maximum_speed:float = 105.0
-    static let maximum_steering:float = 140.0
-    static let half_width:float = 490.0
-    static let half_height:float = 330.0
+static struct Constants {
+    let neighborhood_radius:float = 72.0
+    let separation_radius:float = 28.0
+    let minimum_speed:float = 55.0
+    let maximum_speed:float = 105.0
+    let maximum_steering:float = 140.0
+    let half_width:float = 490.0
+    let half_height:float = 330.0
+    let neighborhood_squared:float = Constants.neighborhood_radius * Constants.neighborhood_radius
+    let separation_squared:float = Constants.separation_radius * Constants.separation_radius
 }
 
 struct Settings {
@@ -241,21 +243,18 @@ func steering(position:Math.Vec2, velocity:Math.Vec2, snapshot:@Sample[..]) Stee
     var heading_x = 0.0
     var heading_y = 0.0
     var neighbors = 0
-    let neighborhood_squared = Constants.neighborhood_radius *
-        Constants.neighborhood_radius
-    let separation_squared = Constants.separation_radius *
-        Constants.separation_radius
+
     for other in snapshot {
         let offset_x = position.x - other.position_x
         let offset_y = position.y - other.position_y
         let distance_squared = offset_x * offset_x + offset_y * offset_y
-        if distance_squared > 0.0 && distance_squared < neighborhood_squared {
+        if distance_squared > 0.0 && distance_squared < Constants.neighborhood_squared {
             center_x += other.position_x
             center_y += other.position_y
             heading_x += other.velocity_x
             heading_y += other.velocity_y
             neighbors++
-            if distance_squared < separation_squared {
+            if distance_squared < Constants.separation_squared {
                 var divisor = distance_squared
                 if divisor < 1.0 { divisor = 1.0 }
                 separation_x += offset_x / divisor
@@ -321,8 +320,7 @@ func measure(
 }
 
 func main() {
-    var application = Application(1)
-    application
+    Application(1)
         ..add_resource(Settings(count:requested_count()))
         ..add_resource(FlockSnapshot())
         ..add_resource(Benchmark())

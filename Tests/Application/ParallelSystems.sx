@@ -22,10 +22,10 @@ class Gate {
 struct WorkerProbe { var gate:Gate }
 struct MainProbe { var gate:Gate }
 
-class MainThreadEffect {
-    static var observed:int = 0
-    static func observe() { MainThreadEffect.observed++ }
-    static func count() int { return MainThreadEffect.observed }
+static class MainThreadEffect {
+    var observed:int = 0
+    func observe() { MainThreadEffect.observed++ }
+    func count() int { return MainThreadEffect.observed }
 }
 
 func worker_signal(probe:&WorkerProbe) {

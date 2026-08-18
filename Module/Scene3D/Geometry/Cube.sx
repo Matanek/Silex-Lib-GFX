@@ -2,8 +2,8 @@ use GFX.Scene3D.Geometry.Mesh as Mesh
 use GFX.Scene3D.Geometry.Vertex as Vertex
 use STD.Math
 
-public struct Cube {
-    static func make(size:Math.Vec3 = Math.Vec3(1.0)) Mesh {
+public static struct Cube {
+    func make(size:Math.Vec3 = Math.Vec3(1.0)) Mesh {
         let half = size.multiply(0.5)
         var vertices:Vertex[] = []
         append_face(vertices, Math.Vec3(-half.x, -half.y, half.z), Math.Vec3(half.x, -half.y, half.z), Math.Vec3(half.x, half.y, half.z), Math.Vec3(-half.x, half.y, half.z), Math.Vec3.back())

@@ -23,6 +23,10 @@ constexpr float k_maximumSpeed = 105.0F;
 constexpr float k_maximumSteering = 140.0F;
 constexpr float k_halfWidth = 490.0F;
 constexpr float k_halfHeight = 330.0F;
+constexpr float k_neighborhoodRadiusSquared =
+    k_neighborhoodRadius * k_neighborhoodRadius;
+constexpr float k_separationRadiusSquared =
+    k_separationRadius * k_separationRadius;
 
 struct Vector2 {
     float x { 0.0F };
@@ -99,11 +103,11 @@ Vector2 steering(const Boid& boid, std::span<const Boid> snapshot) {
         const Vector2 offset = boid.position - other.position;
         const float distanceSquared = lengthSquared(offset);
         if (distanceSquared > 0.0F
-            && distanceSquared < k_neighborhoodRadius * k_neighborhoodRadius) {
+            && distanceSquared < k_neighborhoodRadiusSquared) {
             center = center + other.position;
             heading = heading + other.velocity;
             ++neighbors;
-            if (distanceSquared < k_separationRadius * k_separationRadius) {
+            if (distanceSquared < k_separationRadiusSquared) {
                 separation = separation + offset / std::max(distanceSquared, 1.0F);
             }
         }
