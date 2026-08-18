@@ -266,8 +266,7 @@ public class Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
-        var systems = self.registered_systems
-        systems.append(RegisteredSystem(
+        self.registered_systems.append(RegisteredSystem(
             schedule:schedule,
             after:false,
             callback:callback,
@@ -276,7 +275,6 @@ public class Application {
             writes:[],
             flags:11 as uint
         ))
-        self.registered_systems = systems
         return self
     }
 
@@ -288,8 +286,7 @@ public class Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
-        var systems = self.registered_systems
-        systems.append(RegisteredSystem(
+        self.registered_systems.append(RegisteredSystem(
             schedule:schedule,
             after:true,
             callback:callback,
@@ -298,7 +295,6 @@ public class Application {
             writes:[],
             flags:11 as uint
         ))
-        self.registered_systems = systems
         return self
     }
 
@@ -317,8 +313,7 @@ public class Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
-        var systems = self.registered_systems
-        systems.append(RegisteredSystem(
+        self.registered_systems.append(RegisteredSystem(
             schedule:schedule,
             after:after,
             callback:ignore_application_system,
@@ -327,7 +322,6 @@ public class Application {
             writes:writes,
             flags:flags + 16
         ))
-        self.registered_systems = systems
         return self
     }
 
