@@ -1,6 +1,6 @@
 {
   "name": "GFX",
-  "version": "0.32.3",
+  "version": "0.32.4",
   "extensions": [],
   "requires": { "silex": ">=0.38.22" },
   "dependencies": { "STD": "^0.16.0" },
