@@ -9,7 +9,7 @@ public struct Brush {
     private var start_color:Color
     private var end_color:Color
 
-    internal init() {
+    module init() {
         self.gradient = false
         self.start = Math.Vec2()
         self.end = Math.Vec2()
@@ -17,14 +17,14 @@ public struct Brush {
         self.end_color = Color.white()
     }
 
-    public static func solid(color:Color) Brush {
+    static func solid(color:Color) Brush {
         var brush = Brush()
         brush.start_color = color
         brush.end_color = color
         return brush
     }
 
-    public static func linear(
+    static func linear(
         start:Math.Vec2,
         end:Math.Vec2,
         start_color:Color,
@@ -42,7 +42,7 @@ public struct Brush {
         return brush
     }
 
-    public func color_at(position:Math.Vec2) Color {
+    func color_at(position:Math.Vec2) Color {
         if !self.gradient { return self.start_color }
         let direction = self.end.subtract(self.start)
         let amount = Math.clamp(
@@ -57,16 +57,16 @@ public struct Brush {
 public struct Fill {
     private var current_brush:Brush
 
-    public init(color:Color) { self.current_brush = Brush.solid(color) }
+    init(color:Color) { self.current_brush = Brush.solid(color) }
 
-    public static func solid(color:Color) Fill { return Fill(color) }
-    public static func with_brush(brush:Brush) Fill {
+    static func solid(color:Color) Fill { return Fill(color) }
+    static func with_brush(brush:Brush) Fill {
         var fill = Fill(Color.white())
         fill.current_brush = brush
         return fill
     }
 
-    public func brush() Brush { return self.current_brush }
+    func brush() Brush { return self.current_brush }
 }
 
 public enum StrokeCap { butt; round; square }
@@ -78,7 +78,7 @@ public struct Stroke {
     var cap:StrokeCap
     var join:StrokeJoin
 
-    public init(color:Color, width:float = 1.0) {
+    init(color:Color, width:float = 1.0) {
         if width <= 0.0 { panic("GFX.Canvas stroke width must be positive") }
         self.current_brush = Brush.solid(color)
         self.width = width
@@ -86,14 +86,14 @@ public struct Stroke {
         self.join = StrokeJoin.miter
     }
 
-    public static func with_brush(brush:Brush, width:float = 1.0) Stroke {
+    static func with_brush(brush:Brush, width:float = 1.0) Stroke {
         if width <= 0.0 { panic("GFX.Canvas stroke width must be positive") }
         var stroke = Stroke(Color.white(), width)
         stroke.current_brush = brush
         return stroke
     }
 
-    public func brush() Brush { return self.current_brush }
+    func brush() Brush { return self.current_brush }
 }
 
 public enum TextAlignment { start; center; end }
@@ -111,7 +111,7 @@ public struct TextStyle {
     var weight:TextWeight
     var font:Font?
 
-    public init(
+    init(
         size:float = 16.0,
         color:Color = Color(),
         alignment:TextAlignment = TextAlignment.start,
@@ -126,7 +126,7 @@ public struct TextStyle {
         self.font = resolved_font(font)
     }
 
-    internal func typeface() Font { return resolved_font(self.font) }
+    module func typeface() Font { return resolved_font(self.font) }
 }
 
 public struct TextMetrics {

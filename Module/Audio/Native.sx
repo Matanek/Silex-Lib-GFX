@@ -2,7 +2,7 @@ use Interop.Boundary
 use Interop.C
 use STD.Math
 
-internal func initialize() {
+func initialize() {
     if sdl_init_subsystem(audio_flags()) == 0 {
         panic("GFX.Audio could not initialize the SDL audio subsystem: " + error())
     }
@@ -12,25 +12,25 @@ internal func initialize() {
     }
 }
 
-internal func shutdown() {
+func shutdown() {
     mix_quit()
     sdl_quit_subsystem(audio_flags())
 }
 
 func audio_flags() uint32 { return 0x0000_0010 as uint32 }
 
-internal func create_mixer() uint {
+func create_mixer() uint {
     let default_playback:uint32 = 0xffff_ffff as uint32
     let mixer = C.address_bits(mix_create_mixer_device(default_playback, C.pointer_bits(0 as uint)))
     if mixer == 0 as uint { panic("GFX.Audio could not open the default playback device: " + error()) }
     return mixer
 }
 
-internal func destroy_mixer(mixer:uint) {
+func destroy_mixer(mixer:uint) {
     mix_destroy_mixer(C.pointer_bits(mixer))
 }
 
-internal func load(mixer:uint, path:str) uint {
+func load(mixer:uint, path:str) uint {
     let audio = C.address_bits(mix_load_audio(
         C.pointer_bits(mixer), C.terminated_pointer(path), 1
     ))
@@ -38,22 +38,22 @@ internal func load(mixer:uint, path:str) uint {
     return audio
 }
 
-internal func destroy_audio(audio:uint) {
+func destroy_audio(audio:uint) {
     mix_destroy_audio(C.pointer_bits(audio))
 }
 
-internal func create_track(mixer:uint, audio:uint) uint {
+func create_track(mixer:uint, audio:uint) uint {
     let track = C.address_bits(mix_create_track(C.pointer_bits(mixer)))
     if track == 0 as uint { panic("GFX.Audio could not create a playback: " + error()) }
     require(mix_set_track_audio(C.pointer_bits(track), C.pointer_bits(audio)) != 0, "assign a sound")
     return track
 }
 
-internal func destroy_track(track:uint) {
+func destroy_track(track:uint) {
     mix_destroy_track(C.pointer_bits(track))
 }
 
-internal func play(track:uint, loops:int, fade_in_seconds:float) {
+func play(track:uint, loops:int, fade_in_seconds:float) {
     let properties = sdl_create_properties()
     if properties == 0 { panic("GFX.Audio could not configure playback: " + error()) }
     if sdl_set_number_property(
@@ -77,7 +77,7 @@ internal func play(track:uint, loops:int, fade_in_seconds:float) {
     require(started, "start playback")
 }
 
-internal func stop(track:uint, fade_out_seconds:float) {
+func stop(track:uint, fade_out_seconds:float) {
     var frames:int = 0
     if fade_out_seconds > 0.0 {
         frames = mix_track_ms_to_frames(
@@ -88,39 +88,39 @@ internal func stop(track:uint, fade_out_seconds:float) {
     require(mix_stop_track(C.pointer_bits(track), frames) != 0, "stop playback")
 }
 
-internal func pause(track:uint) {
+func pause(track:uint) {
     require(mix_pause_track(C.pointer_bits(track)) != 0, "pause playback")
 }
 
-internal func resume(track:uint) {
+func resume(track:uint) {
     require(mix_resume_track(C.pointer_bits(track)) != 0, "resume playback")
 }
 
-internal func wait() {
+func wait() {
     sdl_delay(1)
 }
 
-internal func is_playing(track:uint) bool {
+func is_playing(track:uint) bool {
     return mix_track_playing(C.pointer_bits(track)) != 0
 }
 
-internal func is_paused(track:uint) bool {
+func is_paused(track:uint) bool {
     return mix_track_paused(C.pointer_bits(track)) != 0
 }
 
-internal func set_master_volume(mixer:uint, volume:float) {
+func set_master_volume(mixer:uint, volume:float) {
     require(mix_set_mixer_gain(C.pointer_bits(mixer), volume as float32) != 0, "change master volume")
 }
 
-internal func set_volume(track:uint, volume:float) {
+func set_volume(track:uint, volume:float) {
     require(mix_set_track_gain(C.pointer_bits(track), volume as float32) != 0, "change playback volume")
 }
 
-internal func set_speed(track:uint, speed:float) {
+func set_speed(track:uint, speed:float) {
     require(mix_set_track_frequency_ratio(C.pointer_bits(track), speed as float32) != 0, "change playback speed")
 }
 
-internal func set_position(track:uint, position:Math.Vec3) {
+func set_position(track:uint, position:Math.Vec3) {
     var point:float32[3]
     point[0] = position.x as float32
     point[1] = position.y as float32
@@ -131,13 +131,13 @@ internal func set_position(track:uint, position:Math.Vec3) {
     ) != 0, "change playback position")
 }
 
-internal func clear_position(track:uint) {
+func clear_position(track:uint) {
     require(mix_set_track_3d_position(
         C.pointer_bits(track), C.pointer_bits(0 as uint)
     ) != 0, "disable spatial playback")
 }
 
-internal func set_reverse_stereo(track:uint, reversed:bool) {
+func set_reverse_stereo(track:uint, reversed:bool) {
     let count = track_channels(track)
     if !reversed {
         require(mix_set_track_output_channel_map(

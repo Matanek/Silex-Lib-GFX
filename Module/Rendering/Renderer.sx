@@ -5,7 +5,7 @@ use GFX.GPU
 use GFX.Rendering.Stats
 use GFX.Window
 
-internal struct RegisteredPass {
+struct RegisteredPass {
     let name:str
     let execute:func(@GPU.RenderPass, @Application)
 }
@@ -22,7 +22,7 @@ public class Renderer {
     private var depth_width:int
     private var depth_height:int
 
-    public init(clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)) {
+    init(clear:Color = Color(r:0.055, g:0.075, b:0.105, a:1.0)) {
         var graph = FrameGraph()
         self.output = graph.import_texture(
             "GFX.Output",
@@ -40,12 +40,12 @@ public class Renderer {
         self.depth_height = 0
     }
 
-    public func graph() FrameGraph { return self.frame_graph }
-    public func output_texture() FrameGraph.Texture { return self.output }
-    public func depth_texture() FrameGraph.Texture? { return self.depth }
-    public func stats() Stats { return self.current_stats }
+    func graph() FrameGraph { return self.frame_graph }
+    func output_texture() FrameGraph.Texture { return self.output }
+    func depth_texture() FrameGraph.Texture? { return self.depth }
+    func stats() Stats { return self.current_stats }
 
-    public func add_pass(
+    func add_pass(
         name:str,
         execute:func(@GPU.RenderPass, @Application),
         depth:bool = false
@@ -69,7 +69,7 @@ public class Renderer {
         return pass
     }
 
-    internal func render(
+    module func render(
         device:@GPU.Device,
         surface:@GPU.Surface,
         application:Application

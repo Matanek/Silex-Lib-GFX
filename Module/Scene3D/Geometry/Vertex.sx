@@ -7,7 +7,7 @@ public struct Vertex {
     var uv:Math.Vec2
     var color:Color
 
-    public init(
+    init(
         position:Math.Vec3 = Math.Vec3(),
         normal:Math.Vec3 = Math.Vec3.back(),
         uv:Math.Vec2 = Math.Vec2(),

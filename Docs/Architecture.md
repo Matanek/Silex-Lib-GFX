@@ -137,7 +137,7 @@ One package does not mean one renderer. A user can:
 - replace an orchestration plugin without replacing domain values.
 
 These paths rely on public APIs. A third-party extension must never depend on
-an `internal` declaration, a shader-packing payload, or an SDL handle. The
+a non-public declaration, a shader-packing payload, or an SDL handle. The
 monolith lets official domains share implementation details when useful, but
 those details are not extension points.
 

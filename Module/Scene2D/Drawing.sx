@@ -4,10 +4,10 @@ use GFX.Canvas.Snapshot
 use GFX.Scene2D.Transform
 use STD.Math
 
-internal struct AffineModel {
-    internal let x:Math.Vec2
-    internal let y:Math.Vec2
-    internal let translation:Math.Vec2
+struct AffineModel {
+    let x:Math.Vec2
+    let y:Math.Vec2
+    let translation:Math.Vec2
 }
 
 // Retained vector content placed in the 2D world. The authored Canvas stays
@@ -24,7 +24,7 @@ public struct Drawing {
     var depth:float
     var visible:bool
 
-    public init(canvas:AuthoredCanvas, width:int, height:int) {
+    init(canvas:AuthoredCanvas, width:int, height:int) {
         if width <= 0 || height <= 0 {
             panic("GFX.Scene2D.Drawing dimensions must be positive")
         }
@@ -40,24 +40,24 @@ public struct Drawing {
         self.visible = true
     }
 
-    public func replace(canvas:AuthoredCanvas) {
+    func replace(canvas:AuthoredCanvas) {
         self.retained = canvas.snapshot(self.drawing_width, self.drawing_height)
         self.current_revision++
     }
 
-    public func snapshot() Snapshot { return self.retained }
-    public func revision() int { return self.current_revision }
-    public func width() int { return self.drawing_width }
-    public func height() int { return self.drawing_height }
-    internal func snapshot_id() int { return self.retained.id() }
-    internal func has_text() bool { return self.retained.has_text() }
+    func snapshot() Snapshot { return self.retained }
+    func revision() int { return self.current_revision }
+    func width() int { return self.drawing_width }
+    func height() int { return self.drawing_height }
+    module func snapshot_id() int { return self.retained.id() }
+    module func has_text() bool { return self.retained.has_text() }
 
-    internal func display_size() Math.Vec2 {
+    module func display_size() Math.Vec2 {
         if self.size.x > 0.0 && self.size.y > 0.0 { return self.size }
         return Math.Vec2(self.drawing_width as float, self.drawing_height as float)
     }
 
-    internal func affine_model(transform:@Transform) AffineModel {
+    module func affine_model(transform:@Transform) AffineModel {
         let displayed = self.display_size()
         let cosine = Math.cos(transform.rotation)
         let sine = Math.sin(transform.rotation)
@@ -79,7 +79,7 @@ public struct Drawing {
         )
     }
 
-    internal func model(transform:@Transform) Math.Mat4 {
+    package func model(transform:@Transform) Math.Mat4 {
         let affine = self.affine_model(transform)
         return Math.Mat4(
             Math.Vec4(affine.x.x, affine.x.y, 0.0, 0.0),
@@ -94,7 +94,7 @@ public struct Drawing {
         )
     }
 
-    internal func text_size(content:Math.Vec2) Math.Vec2 {
+    module func text_size(content:Math.Vec2) Math.Vec2 {
         let displayed = self.display_size()
         return Math.Vec2(
             content.x * displayed.x / self.drawing_width as float,
@@ -102,7 +102,7 @@ public struct Drawing {
         )
     }
 
-    internal func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
+    module func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
         let displayed = self.display_size()
         let resolved = self.text_size(content)
         if resolved.x <= 0.0 || resolved.y <= 0.0 { return Math.Vec2() }

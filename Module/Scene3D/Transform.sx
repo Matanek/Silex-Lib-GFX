@@ -5,7 +5,7 @@ public struct Transform {
     var rotation:Math.Quat
     var scale:Math.Vec3
 
-    public init(
+    init(
         position:Math.Vec3 = Math.Vec3(),
         rotation:Math.Quat = Math.Quat(),
         scale:Math.Vec3 = Math.Vec3(1.0)
@@ -15,7 +15,7 @@ public struct Transform {
         self.scale = scale
     }
 
-    public func matrix() Math.Mat4 {
+    func matrix() Math.Mat4 {
         return Math.Mat4.transform(
             self.position,
             self.rotation.to_mat3(),
@@ -23,7 +23,7 @@ public struct Transform {
         )
     }
 
-    public func view_matrix() Math.Mat4 {
+    func view_matrix() Math.Mat4 {
         return Math.Mat4.look_at(
             self.position,
             self.position.add(self.forward()),
@@ -31,11 +31,11 @@ public struct Transform {
         )
     }
 
-    public func forward() Math.Vec3 {
+    func forward() Math.Vec3 {
         return self.rotation.rotate(Math.Vec3.front()).normalized()
     }
 
-    public func up() Math.Vec3 {
+    func up() Math.Vec3 {
         return self.rotation.rotate(Math.Vec3.up()).normalized()
     }
 }

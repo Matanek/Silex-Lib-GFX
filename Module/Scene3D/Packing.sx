@@ -10,7 +10,7 @@ use GFX.Scene3D.ToneMapping
 use Interop.C
 use STD.Math
 
-internal func vertices(mesh:@Geometry.Mesh) str {
+func vertices(mesh:@Geometry.Mesh) str {
     let source = mesh.vertices()
     var bytes = storage(source.count() * 48)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
@@ -27,7 +27,7 @@ internal func vertices(mesh:@Geometry.Mesh) str {
     return bytes
 }
 
-internal func indices(mesh:@Geometry.Mesh) str {
+func indices(mesh:@Geometry.Mesh) str {
     let source = mesh.indices()
     var bytes = storage(source.count() * 4)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
@@ -39,7 +39,7 @@ internal func indices(mesh:@Geometry.Mesh) str {
     return bytes
 }
 
-internal func draw(
+func draw(
     model:Math.Mat4,
     view_projection:Math.Mat4,
     albedo:Color
@@ -52,14 +52,14 @@ internal func draw(
     return bytes
 }
 
-internal func matrix(value:Math.Mat4) str {
+func matrix(value:Math.Mat4) str {
     var bytes = storage(64)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, value)
     return bytes
 }
 
-internal func material(value:Material, camera_position:Math.Vec3) str {
+func material(value:Material, camera_position:Math.Vec3) str {
     var bytes = storage(48)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_vec4(address, 0, Math.Vec4(
@@ -73,7 +73,7 @@ internal func material(value:Material, camera_position:Math.Vec3) str {
     return bytes
 }
 
-internal func lighting(frame:@LightingFrame) str {
+func lighting(frame:@LightingFrame) str {
     var bytes = storage(1312)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_color(address, 0, frame.ambient())
@@ -106,7 +106,7 @@ internal func lighting(frame:@LightingFrame) str {
     return bytes
 }
 
-internal func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
+func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
     var bytes = storage(3328)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     var light_index = 0
@@ -137,7 +137,7 @@ internal func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
     return bytes
 }
 
-internal func shadow_draw(model:Math.Mat4, view_projection:Math.Mat4) str {
+func shadow_draw(model:Math.Mat4, view_projection:Math.Mat4) str {
     var bytes = storage(128)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, model)
@@ -145,7 +145,7 @@ internal func shadow_draw(model:Math.Mat4, view_projection:Math.Mat4) str {
     return bytes
 }
 
-internal func point_shadow_draw(
+func point_shadow_draw(
     model:Math.Mat4,
     view_projection:Math.Mat4,
     light_position_range:Math.Vec4
@@ -158,7 +158,7 @@ internal func point_shadow_draw(
     return bytes
 }
 
-internal func gizmo_vertices(frame:@GizmoFrame) str {
+func gizmo_vertices(frame:@GizmoFrame) str {
     var byte_count = frame.count() * 28
     if byte_count < 1 { byte_count = 1 }
     var bytes = storage(byte_count)
@@ -173,7 +173,7 @@ internal func gizmo_vertices(frame:@GizmoFrame) str {
     return bytes
 }
 
-internal func grid(
+func grid(
     inverse_view_projection:Math.Mat4,
     view_projection:Math.Mat4,
     value:Grid
@@ -196,7 +196,7 @@ internal func grid(
     return bytes
 }
 
-internal func tone_mapping(value:ToneMapping) str {
+func tone_mapping(value:ToneMapping) str {
     var bytes = storage(32)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_vec4(address, 0, Math.Vec4(

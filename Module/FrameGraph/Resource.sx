@@ -7,43 +7,43 @@ public enum Access:int {
 }
 
 public struct Texture {
-    internal let index:int
+    module let index:int
 
-    public init() { self.index = -1 }
-    internal init(index:int) { self.index = index }
-    public func is_valid() bool { return self.index >= 0 }
+    init() { self.index = -1 }
+    module init(index:int) { self.index = index }
+    func is_valid() bool { return self.index >= 0 }
 }
 
 public struct TextureDescriptor {
     let format:GPU.TextureFormat
     let usage:GPU.TextureUsage
 
-    public init() {
+    init() {
         self.format = GPU.TextureFormat.invalid
         self.usage = GPU.TextureUsage()
     }
 
-    public init(format:GPU.TextureFormat, usage:GPU.TextureUsage) {
+    init(format:GPU.TextureFormat, usage:GPU.TextureUsage) {
         self.format = format
         self.usage = usage
     }
 }
 
-internal enum Origin:int {
+enum Origin:int {
     created = 0
     imported = 1
 }
 
-internal struct Record {
-    internal let name:str
-    internal let origin:Origin
-    internal let transient:bool
-    internal let texture:TextureDescriptor
-    internal var first_pass:int
-    internal var last_pass:int
-    internal var alias_group:int
+struct Record {
+    let name:str
+    let origin:Origin
+    let transient:bool
+    let texture:TextureDescriptor
+    var first_pass:int
+    var last_pass:int
+    var alias_group:int
 
-    internal init(name:str, origin:Origin, transient:bool, texture:TextureDescriptor) {
+    init(name:str, origin:Origin, transient:bool, texture:TextureDescriptor) {
         self.name = name
         self.origin = origin
         self.transient = transient
@@ -54,11 +54,11 @@ internal struct Record {
     }
 }
 
-internal struct Usage {
-    internal let resource:Texture
-    internal let access:Access
+struct Usage {
+    let resource:Texture
+    let access:Access
 
-    internal init(resource:Texture, access:Access) {
+    init(resource:Texture, access:Access) {
         self.resource = resource
         self.access = access
     }

@@ -10,14 +10,14 @@ public class World {
     private var archetypes:Archetype[]
     private var components:ComponentStore
 
-    public init() {
+    init() {
         self.records = []
         self.free_indices = []
         self.archetypes = []
         self.components = ComponentStore()
     }
 
-    public func spawn(recipe:EntityRecipe) Entity {
+    func spawn(recipe:EntityRecipe) Entity {
         let entity = self.reserve_entity()
         var signature:int[] = []
         var values = recipe.take_components()
@@ -29,7 +29,7 @@ public class World {
         return entity
     }
 
-    public func destroy(entity:Entity) {
+    func destroy(entity:Entity) {
         var record = self.require(entity)
         let location = record.location()
         self.detach(entity, location.archetype, location.row)
@@ -38,13 +38,13 @@ public class World {
         self.free_indices.append(entity.index)
     }
 
-    public func is_alive(entity:Entity) bool {
+    func is_alive(entity:Entity) bool {
         if !entity.is_valid() || entity.index >= self.records.count() { return false }
         var record = self.records[entity.index]
         return record.is_alive() && record.generation() == entity.generation
     }
 
-    public func entities() Entity[] {
+    func entities() Entity[] {
         var result:Entity[] = []
         var archetypes = self.archetypes
         for var archetype in archetypes {
@@ -53,7 +53,7 @@ public class World {
         return result
     }
 
-    public func insert<T>(entity:Entity, component:T) {
+    func insert<T>(entity:Entity, component:T) {
         var record = self.require(entity)
         let already_present = self.components.has<T>(entity)
         let component_id = self.components.insert(entity, component)
@@ -65,22 +65,22 @@ public class World {
         self.move_to(entity, location.archetype, location.row, signature)
     }
 
-    public func has<T>(entity:Entity) bool {
+    func has<T>(entity:Entity) bool {
         if !self.is_alive(entity) { return false }
         return self.components.has<T>(entity)
     }
 
-    public func get<T>(entity:Entity) @T {
+    func get<T>(entity:Entity) @T {
         self.require(entity)
         return self.components.get<T>(entity)
     }
 
-    public func update<T>(entity:Entity, callback:func(&T)) {
+    func update<T>(entity:Entity, callback:func(&T)) {
         self.require(entity)
         self.components.update<T>(entity, callback)
     }
 
-    public func remove<T>(entity:Entity) T? {
+    func remove<T>(entity:Entity) T? {
         var record = self.require(entity)
         if !self.components.has<T>(entity) { return null }
         let component_id = self.components.type_id<T>()
@@ -92,7 +92,7 @@ public class World {
         return removed
     }
 
-    public func clear() {
+    func clear() {
         var index = 0
         while index < self.records.count() {
             var record = self.records[index]
@@ -104,11 +104,11 @@ public class World {
 
     drop { self.clear() }
 
-    // Compiler-facing query contract. These methods are internal so storage
+    // Compiler-facing query contract. These methods stay non-public so storage
     // layout can evolve without changing ECS.Query or application code.
-    internal func query_component_id<T>() int { return self.components.type_id<T>() }
-    internal func query_archetype_count() int { return self.archetypes.count() }
-    internal func query_count(required:@int[]) int {
+    module func query_component_id<T>() int { return self.components.type_id<T>() }
+    package func query_archetype_count() int { return self.archetypes.count() }
+    module func query_count(required:@int[]) int {
         var count = 0
         var archetypes = self.archetypes
         for var archetype in archetypes {
@@ -116,7 +116,7 @@ public class World {
         }
         return count
     }
-    internal func query_row_start(archetype:int, required:@int[], range_start:int) int {
+    module func query_row_start(archetype:int, required:@int[], range_start:int) int {
         var base = 0
         var index = 0
         while index < archetype {
@@ -129,7 +129,7 @@ public class World {
         if offset > count { return count }
         return offset
     }
-    internal func query_row_end(archetype:int, required:@int[], range_end:int) int {
+    module func query_row_end(archetype:int, required:@int[], range_end:int) int {
         let count = self.archetypes[archetype].count()
         if range_end < 0 { return count }
         var base = 0
@@ -143,28 +143,28 @@ public class World {
         if offset > count { return count }
         return offset
     }
-    internal func query_matches(archetype:int, required:@int[]) bool {
+    module func query_matches(archetype:int, required:@int[]) bool {
         var value = self.archetypes[archetype]
         return value.matches(required)
     }
-    internal func query_archetype_has<T>(archetype:int) bool {
+    package func query_archetype_has<T>(archetype:int) bool {
         let component = self.components.type_id<T>()
         if component < 0 { return false }
         var value = self.archetypes[archetype]
         return value.has(component)
     }
-    internal func query_entity_count(archetype:int) int {
+    package func query_entity_count(archetype:int) int {
         var value = self.archetypes[archetype]
         return value.count()
     }
-    internal func query_entity(archetype:int, row:int) Entity {
+    package func query_entity(archetype:int, row:int) Entity {
         var value = self.archetypes[archetype]
         return value.entity(row)
     }
-    internal func query_get<T>(entity:Entity) @self:T {
+    package func query_get<T>(entity:Entity) @self:T {
         return self.components.get_known<T>(entity)
     }
-    internal func query_get_mut<T>(entity:Entity) &self:T {
+    module func query_get_mut<T>(entity:Entity) &self:T {
         return self.components.get_mut<T>(entity)
     }
 

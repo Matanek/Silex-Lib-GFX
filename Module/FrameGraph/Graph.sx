@@ -3,7 +3,7 @@ use GFX.FrameGraph.Pass
 use GFX.FrameGraph.Physical.AliasGroup as AliasGroup
 use GFX.FrameGraph.Resource
 
-internal struct Edge {
+struct Edge {
     let from:int
     let to:int
 }
@@ -16,7 +16,7 @@ public class FrameGraph {
     private var dirty:bool
     private var compile_error:str?
 
-    public init() {
+    init() {
         self.resources = []
         self.passes = []
         self.plan = []
@@ -25,11 +25,11 @@ public class FrameGraph {
         self.compile_error = null
     }
 
-    public func import_texture(name:str, descriptor:Resource.TextureDescriptor) Resource.Texture {
+    func import_texture(name:str, descriptor:Resource.TextureDescriptor) Resource.Texture {
         return self.add_resource(name, Resource.Origin.imported, false, descriptor)
     }
 
-    public func create_texture(
+    func create_texture(
         name:str,
         descriptor:Resource.TextureDescriptor,
         transient:bool = true
@@ -37,7 +37,7 @@ public class FrameGraph {
         return self.add_resource(name, Resource.Origin.created, transient, descriptor)
     }
 
-    public func add_pass(name:str) Pass.Pass {
+    func add_pass(name:str) Pass.Pass {
         if name.count() == 0 { panic("GFX.FrameGraph pass name cannot be empty") }
         for current in self.passes {
             if current.name == name { panic("GFX.FrameGraph pass is already installed: " + name) }
@@ -47,19 +47,19 @@ public class FrameGraph {
         return Pass.Pass(self.passes.count() - 1)
     }
 
-    public func read(pass:Pass.Pass, resource:Resource.Texture) {
+    func read(pass:Pass.Pass, resource:Resource.Texture) {
         self.add_usage(pass, resource, Resource.Access.read)
     }
 
-    public func write(pass:Pass.Pass, resource:Resource.Texture) {
+    func write(pass:Pass.Pass, resource:Resource.Texture) {
         self.add_usage(pass, resource, Resource.Access.write)
     }
 
-    public func read_write(pass:Pass.Pass, resource:Resource.Texture) {
+    func read_write(pass:Pass.Pass, resource:Resource.Texture) {
         self.add_usage(pass, resource, Resource.Access.read_write)
     }
 
-    public func depends(pass:Pass.Pass, dependency:Pass.Pass) {
+    func depends(pass:Pass.Pass, dependency:Pass.Pass) {
         self.require_pass(pass)
         self.require_pass(dependency)
         if pass.index == dependency.index { panic("GFX.FrameGraph pass cannot depend on itself") }
@@ -72,7 +72,7 @@ public class FrameGraph {
         self.dirty = true
     }
 
-    public func compile() bool {
+    func compile() bool {
         if !self.dirty { return self.compile_error == null }
         self.compile_error = null
         self.plan = []
@@ -99,39 +99,39 @@ public class FrameGraph {
         return true
     }
 
-    public func require_compiled() {
+    func require_compiled() {
         if self.compile() { return }
         if let message = self.compile_error { panic("GFX.FrameGraph " + message) }
         panic("GFX.FrameGraph could not compile")
     }
 
-    public func pass_count() int { return self.passes.count() }
-    public func texture_count() int { return self.resources.count() }
-    public func transient_slot_count() int { return self.aliases.count() }
-    public func plan_count() int { return self.plan.count() }
+    func pass_count() int { return self.passes.count() }
+    func texture_count() int { return self.resources.count() }
+    func transient_slot_count() int { return self.aliases.count() }
+    func plan_count() int { return self.plan.count() }
 
-    public func plan_pass(index:int) Pass.Pass {
+    func plan_pass(index:int) Pass.Pass {
         if index < 0 || index >= self.plan.count() { panic("GFX.FrameGraph plan index is invalid") }
         return Pass.Pass(self.plan[index])
     }
 
-    public func pass_name(pass:Pass.Pass) str {
+    func pass_name(pass:Pass.Pass) str {
         self.require_pass(pass)
         return self.passes[pass.index].name
     }
 
-    public func texture_name(texture:Resource.Texture) str {
+    func texture_name(texture:Resource.Texture) str {
         self.require_resource(texture)
         return self.resources[texture.index].name
     }
 
-    public func transient_slot(texture:Resource.Texture) int {
+    func transient_slot(texture:Resource.Texture) int {
         self.require_compiled()
         self.require_resource(texture)
         return self.resources[texture.index].alias_group
     }
 
-    public func transient_descriptor(slot:int) Resource.TextureDescriptor {
+    func transient_descriptor(slot:int) Resource.TextureDescriptor {
         self.require_compiled()
         if slot < 0 || slot >= self.aliases.count() {
             panic("GFX.FrameGraph transient slot is invalid")
@@ -140,7 +140,7 @@ public class FrameGraph {
         return Resource.TextureDescriptor(alias.format, alias.usage)
     }
 
-    public func error_message() str {
+    func error_message() str {
         if let message = self.compile_error { return message }
         return ""
     }
@@ -364,7 +364,7 @@ public class FrameGraph {
     }
 }
 
-internal func add_edge(edges:&Edge[], from:int, to:int) {
+func add_edge(edges:&Edge[], from:int, to:int) {
     if from == to { return }
     for edge in edges {
         if edge.from == from && edge.to == to { return }
@@ -372,7 +372,7 @@ internal func add_edge(edges:&Edge[], from:int, to:int) {
     edges.append(Edge(from:from, to:to))
 }
 
-internal func usage_signature(usage:GPU.TextureUsage) uint32 {
+func usage_signature(usage:GPU.TextureUsage) uint32 {
     var result:uint32 = 0
     if usage.sampled { result += (1 as uint32) << 0 }
     if usage.color_target { result += (1 as uint32) << 1 }

@@ -2,39 +2,39 @@ use GFX.Audio.Native
 use STD.Math
 
 public struct Sound {
-    internal let sound_index:int
-    internal let sound_generation:int
+    module let sound_index:int
+    module let sound_generation:int
 
-    public init() {
+    init() {
         self.sound_index = -1
         self.sound_generation = 0
     }
 
-    internal init(index:int, generation:int) {
+    module init(index:int, generation:int) {
         self.sound_index = index
         self.sound_generation = generation
     }
 
-    public func is_valid() bool {
+    func is_valid() bool {
         return self.sound_index >= 0 && self.sound_generation > 0
     }
 }
 
 public struct PlayingSound {
-    internal let playback_index:int
-    internal let playback_generation:int
+    module let playback_index:int
+    module let playback_generation:int
 
-    public init() {
+    init() {
         self.playback_index = -1
         self.playback_generation = 0
     }
 
-    internal init(index:int, generation:int) {
+    module init(index:int, generation:int) {
         self.playback_index = index
         self.playback_generation = generation
     }
 
-    public func is_valid() bool {
+    func is_valid() bool {
         return self.playback_index >= 0 && self.playback_generation > 0
     }
 }
@@ -42,18 +42,18 @@ public struct PlayingSound {
 public struct Repeat {
     private let extra_plays:int
 
-    public init() { self.extra_plays = 0 }
-    internal init(extra_plays:int) { self.extra_plays = extra_plays }
+    init() { self.extra_plays = 0 }
+    module init(extra_plays:int) { self.extra_plays = extra_plays }
 
-    public static func once() Repeat { return Repeat() }
-    public static func forever() Repeat { return Repeat(extra_plays:-1) }
+    static func once() Repeat { return Repeat() }
+    static func forever() Repeat { return Repeat(extra_plays:-1) }
 
-    public static func times(count:int) Repeat {
+    static func times(count:int) Repeat {
         if count < 1 { panic("GFX.Audio repeat count must be at least one") }
         return Repeat(extra_plays:count - 1)
     }
 
-    internal func native_loops() int { return self.extra_plays }
+    module func native_loops() int { return self.extra_plays }
 }
 
 public struct Playback {
@@ -64,7 +64,7 @@ public struct Playback {
     var reverse_stereo:bool
     var fade_in_seconds:float
 
-    public init(
+    init(
         volume:float = 1.0,
         repeat:Repeat = Repeat(),
         position:Math.Vec3? = null,
@@ -82,11 +82,11 @@ public struct Playback {
 }
 
 class SoundEntry {
-    internal var handle:uint
-    internal var generation:int
-    internal var active:bool
+    var handle:uint
+    var generation:int
+    var active:bool
 
-    internal init(handle:uint) {
+    init(handle:uint) {
         self.handle = handle
         self.generation = 1
         self.active = true
@@ -94,11 +94,11 @@ class SoundEntry {
 }
 
 class PlaybackEntry {
-    internal var handle:uint
-    internal var generation:int
-    internal var active:bool
+    var handle:uint
+    var generation:int
+    var active:bool
 
-    internal init(handle:uint) {
+    init(handle:uint) {
         self.handle = handle
         self.generation = 1
         self.active = true
@@ -110,7 +110,7 @@ public class Audio {
     private var sounds:SoundEntry[]
     private var playbacks:PlaybackEntry[]
 
-    public init() {
+    init() {
         Native.initialize()
         self.mixer = Native.create_mixer()
         self.sounds = []
@@ -134,20 +134,20 @@ public class Audio {
         Native.shutdown()
     }
 
-    public func load(path:str) Sound {
+    func load(path:str) Sound {
         var sounds = self.sounds
         sounds.append(SoundEntry(Native.load(self.mixer, path)))
         self.sounds = sounds
         return Sound(sounds.count() - 1, 1)
     }
 
-    public func contains(sound:Sound) bool {
+    func contains(sound:Sound) bool {
         if !sound.is_valid() || sound.sound_index >= self.sounds.count() { return false }
         var entry = self.sounds[sound.sound_index]
         return entry.active && entry.generation == sound.sound_generation
     }
 
-    public func unload(sound:Sound) bool {
+    func unload(sound:Sound) bool {
         if !self.contains(sound) { return false }
         var entry = self.sounds[sound.sound_index]
         Native.destroy_audio(entry.handle)
@@ -157,7 +157,7 @@ public class Audio {
         return true
     }
 
-    public func play(sound:Sound, settings:Playback = Playback()) PlayingSound {
+    func play(sound:Sound, settings:Playback = Playback()) PlayingSound {
         let audio = self.require_sound(sound).handle
         validate_volume(settings.volume)
         validate_speed(settings.speed)
@@ -188,25 +188,25 @@ public class Audio {
         return PlayingSound(playbacks.count() - 1, 1)
     }
 
-    public func is_playing(sound:PlayingSound) bool {
+    func is_playing(sound:PlayingSound) bool {
         if !self.contains_playback(sound) { return false }
         return Native.is_playing(self.playbacks[sound.playback_index].handle)
     }
 
-    public func is_paused(sound:PlayingSound) bool {
+    func is_paused(sound:PlayingSound) bool {
         if !self.contains_playback(sound) { return false }
         return Native.is_paused(self.playbacks[sound.playback_index].handle)
     }
 
-    public func pause(sound:PlayingSound) {
+    func pause(sound:PlayingSound) {
         Native.pause(self.require_playback(sound).handle)
     }
 
-    public func resume(sound:PlayingSound) {
+    func resume(sound:PlayingSound) {
         Native.resume(self.require_playback(sound).handle)
     }
 
-    public func wait(sound:PlayingSound) {
+    func wait(sound:PlayingSound) {
         let playback = self.require_playback(sound).handle
         while Native.is_playing(playback) || Native.is_paused(playback) {
             Native.wait()
@@ -214,12 +214,12 @@ public class Audio {
         self.collect_finished()
     }
 
-    public func stop(sound:PlayingSound, fade_out_seconds:float = 0.0) {
+    func stop(sound:PlayingSound, fade_out_seconds:float = 0.0) {
         validate_fade(fade_out_seconds)
         Native.stop(self.require_playback(sound).handle, fade_out_seconds)
     }
 
-    public func release(sound:PlayingSound) bool {
+    func release(sound:PlayingSound) bool {
         if !self.contains_playback(sound) { return false }
         var entry = self.playbacks[sound.playback_index]
         Native.destroy_track(entry.handle)
@@ -229,34 +229,34 @@ public class Audio {
         return true
     }
 
-    public func set_master_volume(volume:float) {
+    func set_master_volume(volume:float) {
         validate_volume(volume)
         Native.set_master_volume(self.mixer, volume)
     }
 
-    public func set_volume(sound:PlayingSound, volume:float) {
+    func set_volume(sound:PlayingSound, volume:float) {
         validate_volume(volume)
         Native.set_volume(self.require_playback(sound).handle, volume)
     }
 
-    public func set_speed(sound:PlayingSound, speed:float) {
+    func set_speed(sound:PlayingSound, speed:float) {
         validate_speed(speed)
         Native.set_speed(self.require_playback(sound).handle, speed)
     }
 
-    public func set_position(sound:PlayingSound, position:Math.Vec3) {
+    func set_position(sound:PlayingSound, position:Math.Vec3) {
         Native.set_position(self.require_playback(sound).handle, position)
     }
 
-    public func clear_position(sound:PlayingSound) {
+    func clear_position(sound:PlayingSound) {
         Native.clear_position(self.require_playback(sound).handle)
     }
 
-    public func set_reverse_stereo(sound:PlayingSound, reversed:bool) {
+    func set_reverse_stereo(sound:PlayingSound, reversed:bool) {
         Native.set_reverse_stereo(self.require_playback(sound).handle, reversed)
     }
 
-    internal func collect_finished() {
+    module func collect_finished() {
         var index = 0
         while index < self.playbacks.count() {
             var entry = self.playbacks[index]

@@ -8,7 +8,7 @@ public struct Material {
     var emission:Color
     var emission_intensity:float
 
-    public init(
+    init(
         albedo:Color = Color.white(),
         metallic:float = 0.0,
         roughness:float = 0.5,
@@ -24,7 +24,7 @@ public struct Material {
         self.emission_intensity = emission_intensity
     }
 
-    public static func unlit(color:Color = Color.white()) Material {
+    static func unlit(color:Color = Color.white()) Material {
         return Material(albedo:color, roughness:1.0)
     }
 }

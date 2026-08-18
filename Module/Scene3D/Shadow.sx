@@ -5,7 +5,7 @@ public struct Shadow {
     var normal_offset:float
     var softness:float
 
-    public init(
+    init(
         enabled:bool = true,
         near_plane:float = 0.05,
         bias:float = 0.0006,
@@ -19,11 +19,11 @@ public struct Shadow {
         self.softness = softness
     }
 
-    public static func sun() Shadow {
+    static func sun() Shadow {
         return Shadow(near_plane:0.1, bias:0.00085, normal_offset:0.003)
     }
 
-    public static func projector() Shadow {
+    static func projector() Shadow {
         return Shadow(near_plane:0.05, bias:0.00085, normal_offset:0.003)
     }
 }

@@ -3,52 +3,52 @@ use GFX.Scene3D.Lighting.Kind as LightKind
 use GFX.Scene3D.Lighting.Light
 use STD.Math
 
-internal struct CameraView {
-    internal let position:Math.Vec3
-    internal let rotation:Math.Quat
-    internal let vertical_fov:float
-    internal let near_plane:float
-    internal let far_plane:float
-    internal let aspect_ratio:float
+struct CameraView {
+    let position:Math.Vec3
+    let rotation:Math.Quat
+    let vertical_fov:float
+    let near_plane:float
+    let far_plane:float
+    let aspect_ratio:float
 }
 
-internal struct Face {
-    internal let light_index:int
-    internal let face_index:int
-    internal let view_projection:Math.Mat4
-    internal let atlas_rect:Math.Vec4
-    internal let point:bool
-    internal let light_position_range:Math.Vec4
+struct Face {
+    let light_index:int
+    let face_index:int
+    let view_projection:Math.Mat4
+    let atlas_rect:Math.Vec4
+    let point:bool
+    let light_position_range:Math.Vec4
 }
 
-internal class Frame {
+class Frame {
     private var faces:Face[]
     private var first_faces:int[]
     private var face_counts:int[]
     private var atlas_grid:int
 
-    internal init() {
+    init() {
         self.faces = []
         self.first_faces = []
         self.face_counts = []
         self.atlas_grid = 1
     }
 
-    internal func all_faces() @Face[..] { return @self.faces[0:self.faces.count()] }
-    internal func face_count() int { return self.faces.count() }
-    internal func grid() int { return self.atlas_grid }
+    func all_faces() @Face[..] { return @self.faces[0:self.faces.count()] }
+    func face_count() int { return self.faces.count() }
+    func grid() int { return self.atlas_grid }
 
-    internal func first_face(light_index:int) int {
+    func first_face(light_index:int) int {
         if light_index < 0 || light_index >= self.first_faces.count() { return -1 }
         return self.first_faces[light_index]
     }
 
-    internal func faces_for(light_index:int) int {
+    func faces_for(light_index:int) int {
         if light_index < 0 || light_index >= self.face_counts.count() { return 0 }
         return self.face_counts[light_index]
     }
 
-    internal func rebuild(lighting:@LightingFrame, camera:CameraView?) {
+    func rebuild(lighting:@LightingFrame, camera:CameraView?) {
         self.faces.clear()
         self.first_faces.clear()
         self.face_counts.clear()
@@ -213,7 +213,7 @@ internal class Frame {
     }
 }
 
-internal func camera_fitted_sun_projection(
+func camera_fitted_sun_projection(
     light:Light,
     camera:CameraView,
     shadow_resolution:int
@@ -281,7 +281,7 @@ internal func camera_fitted_sun_projection(
     ).multiply(view)
 }
 
-internal func camera_frustum_corners(camera:CameraView, far_plane:float) Math.Vec3[] {
+func camera_frustum_corners(camera:CameraView, far_plane:float) Math.Vec3[] {
     let near_plane = Math.max(camera.near_plane, 0.001)
     let clamped_far = Math.max(far_plane, near_plane + 0.001)
     let tangent = Math.tan(camera.vertical_fov * 0.5)
@@ -307,16 +307,16 @@ internal func camera_frustum_corners(camera:CameraView, far_plane:float) Math.Ve
     ]
 }
 
-internal func shadow_near_plane(value:float, far_plane:float) float {
+func shadow_near_plane(value:float, far_plane:float) float {
     return Math.clamp(value, 0.001, Math.max(far_plane - 0.001, 0.001))
 }
 
-internal func snap_shadow_center(value:float, texel:float) float {
+func snap_shadow_center(value:float, texel:float) float {
     if texel <= 0.000001 { return value }
     return Math.floor(value / texel + 0.5) * texel
 }
 
-internal func perspective_depth_zero_to_one(
+func perspective_depth_zero_to_one(
     vertical_fov_radians:float,
     aspect_ratio:float,
     near_plane:float,
@@ -332,7 +332,7 @@ internal func perspective_depth_zero_to_one(
     )
 }
 
-internal func orthographic_depth_zero_to_one(
+func orthographic_depth_zero_to_one(
     left:float,
     right:float,
     bottom:float,

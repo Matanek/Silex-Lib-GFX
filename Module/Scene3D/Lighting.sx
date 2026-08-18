@@ -10,7 +10,7 @@ use GFX.Scene3D.Transform
 use GFX.Scene3D.TubeProjectorLight
 use STD.Math
 
-internal enum Kind:int {
+enum Kind:int {
     sun = 0
     point = 1
     spot_projector = 2
@@ -18,47 +18,47 @@ internal enum Kind:int {
     tube_projector = 5
 }
 
-internal struct Light {
-    internal let kind:Kind
-    internal let direction:Math.Vec3
-    internal let position:Math.Vec3
-    internal let color:Color
-    internal let intensity:float
-    internal let reach:float
-    internal let angle:float
-    internal let projection_angle:float
-    internal let projection_size:Math.Vec3
-    internal let projection_radius:float
-    internal let influence_softness:float
-    internal let falloff:float
-    internal let shadow_caster_distance:float
-    internal let shadow_center:Math.Vec3
-    internal let shadow_size:Math.Vec2
-    internal let shadow_depth:float
-    internal let shadow_distance:float
-    internal let shadow_follows_camera:bool
-    internal let shadow:Shadow
+struct Light {
+    let kind:Kind
+    let direction:Math.Vec3
+    let position:Math.Vec3
+    let color:Color
+    let intensity:float
+    let reach:float
+    let angle:float
+    let projection_angle:float
+    let projection_size:Math.Vec3
+    let projection_radius:float
+    let influence_softness:float
+    let falloff:float
+    let shadow_caster_distance:float
+    let shadow_center:Math.Vec3
+    let shadow_size:Math.Vec2
+    let shadow_depth:float
+    let shadow_distance:float
+    let shadow_follows_camera:bool
+    let shadow:Shadow
 }
 
-internal class Frame {
+class Frame {
     private var current_ambient:Color
     private var lights:Light[]
     private var shadow_count:int
     private var found_light_component:bool
 
-    internal init() {
+    init() {
         self.current_ambient = Color(r:1.0, g:1.0, b:1.0, a:0.07)
         self.lights = []
         self.shadow_count = 0
         self.found_light_component = false
     }
 
-    internal func all() @Light[..] { return @self.lights[0:self.lights.count()] }
-    internal func count() int { return self.lights.count() }
-    internal func shadowed_count() int { return self.shadow_count }
-    internal func ambient() Color { return self.current_ambient }
+    func all() @Light[..] { return @self.lights[0:self.lights.count()] }
+    func count() int { return self.lights.count() }
+    func shadowed_count() int { return self.shadow_count }
+    func ambient() Color { return self.current_ambient }
 
-    internal func rebuild(world:@ECS.World) {
+    func rebuild(world:@ECS.World) {
         self.current_ambient = Color(r:1.0, g:1.0, b:1.0, a:0.07)
         self.lights.clear()
         self.shadow_count = 0

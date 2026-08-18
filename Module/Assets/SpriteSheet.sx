@@ -6,16 +6,16 @@ public struct SpriteClip {
     private let clip_frames:ImageRegion[]
     private let frames_per_second:float
 
-    internal init(name:str, frames:ImageRegion[], fps:float) {
+    module init(name:str, frames:ImageRegion[], fps:float) {
         self.clip_name = name
         self.clip_frames = frames
         self.frames_per_second = fps
     }
 
-    public func name() str { return self.clip_name }
-    public func frame_count() int { return self.clip_frames.count() }
-    public func fps() float { return self.frames_per_second }
-    public func frame(index:int) ImageRegion { return self.clip_frames[index] }
+    func name() str { return self.clip_name }
+    func frame_count() int { return self.clip_frames.count() }
+    func fps() float { return self.frames_per_second }
+    func frame(index:int) ImageRegion { return self.clip_frames[index] }
 }
 
 public struct SpriteSheet {
@@ -24,14 +24,14 @@ public struct SpriteSheet {
     private let frame_height_pixels:int
     private var clips:SpriteClip[]
 
-    internal init() {
+    module init() {
         self.sheet_image = ImageHandle()
         self.frame_width_pixels = 1
         self.frame_height_pixels = 1
         self.clips = []
     }
 
-    public init(image:ImageHandle, frame_width:int, frame_height:int) {
+    init(image:ImageHandle, frame_width:int, frame_height:int) {
         if !image.is_valid() { panic("GFX sprite sheet requires a valid image") }
         if frame_width <= 0 || frame_height <= 0 {
             panic("GFX sprite sheet frame dimensions must be positive")
@@ -42,7 +42,7 @@ public struct SpriteSheet {
         self.clips = []
     }
 
-    public func clip(
+    func clip(
         name:str,
         row:int,
         frames:int,
@@ -71,16 +71,16 @@ public struct SpriteSheet {
         self.clips.append(SpriteClip(name, regions, fps))
     }
 
-    public func image() ImageHandle { return self.sheet_image }
-    public func has_clip(name:str) bool {
+    func image() ImageHandle { return self.sheet_image }
+    func has_clip(name:str) bool {
         for clip in self.clips { if clip.name() == name { return true } }
         return false
     }
 
-    public func clip(name:str) SpriteClip {
+    func clip(name:str) SpriteClip {
         for clip in self.clips { if clip.name() == name { return clip } }
         panic("GFX sprite sheet does not contain animation '" + name + "'")
     }
 
-    internal func is_empty() bool { return self.clips.count() == 0 }
+    module func is_empty() bool { return self.clips.count() == 0 }
 }

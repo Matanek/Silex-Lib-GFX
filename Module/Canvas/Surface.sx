@@ -12,7 +12,7 @@ public class Surface {
     private let canvas_height:int
     private var current_pixels:str
 
-    public init(width:int, height:int, background:Color = Color.transparent()) {
+    init(width:int, height:int, background:Color = Color.transparent()) {
         if width <= 0 || height <= 0 {
             panic("GFX.Canvas.Surface dimensions must be positive")
         }
@@ -22,10 +22,10 @@ public class Surface {
         self.clear(background)
     }
 
-    public func width() int { return self.canvas_width }
-    public func height() int { return self.canvas_height }
+    func width() int { return self.canvas_width }
+    func height() int { return self.canvas_height }
 
-    public func clear(color:Color = Color.transparent()) {
+    func clear(color:Color = Color.transparent()) {
         let red = channel(color.r)
         let green = channel(color.g)
         let blue = channel(color.b)
@@ -44,19 +44,19 @@ public class Surface {
         self.current_pixels = pixels
     }
 
-    public func paint(callback:func(&Painter)) Surface {
+    func paint(callback:func(&Painter)) Surface {
         var canvas = Canvas()
         canvas.paint(callback)
         self.draw(canvas.rasterize(self.canvas_width, self.canvas_height), Math.Vec2())
         return self
     }
 
-    public func draw(content:Canvas) Surface {
+    func draw(content:Canvas) Surface {
         self.draw(content.rasterize(self.canvas_width, self.canvas_height), Math.Vec2())
         return self
     }
 
-    public func draw(content:Image, position:Math.Vec2 = Math.Vec2(), opacity:float = 1.0) Surface {
+    func draw(content:Image, position:Math.Vec2 = Math.Vec2(), opacity:float = 1.0) Surface {
         if opacity < 0.0 || opacity > 1.0 {
             panic("GFX.Canvas.Surface image opacity must be between zero and one")
         }
@@ -87,9 +87,9 @@ public class Surface {
         return self
     }
 
-    public func pixels() uint8[] { return self.image().pixels() }
+    func pixels() uint8[] { return self.image().pixels() }
 
-    public func image() Image {
+    func image() Image {
         let byte_count = self.canvas_width * self.canvas_height * 4
         var pixels = packed_storage(byte_count)
         let copied = C.address_bits(sdl_memcpy(

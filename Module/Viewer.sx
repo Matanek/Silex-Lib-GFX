@@ -16,7 +16,7 @@ public struct Settings {
     var background:Color
     var smooth:bool
 
-    public init(
+    init(
         title:str = "GFX image viewer",
         width:int = 0,
         height:int = 0,
@@ -35,15 +35,15 @@ public class View {
     private var current_image:Image
     private var current_revision:int
 
-    public init(image:Image) {
+    init(image:Image) {
         self.current_image = image
         self.current_revision = 1
     }
 
-    public func image() @Image { return self.current_image }
-    public func revision() int { return self.current_revision }
+    func image() @Image { return self.current_image }
+    func revision() int { return self.current_revision }
 
-    public func replace(image:Image) {
+    func replace(image:Image) {
         self.current_image = image
         self.current_revision++
     }
@@ -56,7 +56,7 @@ class RenderState {
     private let background:Color
     private var uploaded_revision:int
 
-    internal init(
+    init(
         device:@GPU.Device,
         surface:@GPU.Surface,
         view:@View,
@@ -91,7 +91,7 @@ class RenderState {
         self.uploaded_revision = view.revision()
     }
 
-    internal func refresh(device:@GPU.Device, view:@View) {
+    func refresh(device:@GPU.Device, view:@View) {
         if self.uploaded_revision == view.revision() { return }
         let image = view.image()
         var replace_texture = true
@@ -110,7 +110,7 @@ class RenderState {
         panic("GFX.Viewer has no image texture")
     }
 
-    internal func draw(pass:&GPU.RenderPass, image:@Image) {
+    func draw(pass:&GPU.RenderPass, image:@Image) {
         let drawable = pass.size()
         let available_width = drawable.width as float
         let available_height = drawable.height as float
@@ -145,14 +145,14 @@ class RenderState {
         panic("GFX.Viewer has no GPU presentation state")
     }
 
-    internal func clear_color() Color { return self.background }
+    func clear_color() Color { return self.background }
 }
 
 public struct Plugin:PluginProtocol {
     private let initial_image:Image
     private let settings:Settings
 
-    public init(image:Image, settings:Settings = Settings()) {
+    init(image:Image, settings:Settings = Settings()) {
         self.initial_image = image
         self.settings = settings
     }

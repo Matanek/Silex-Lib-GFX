@@ -13,9 +13,9 @@ public enum CloseBehavior {
 // Shared with input integrations so close behavior remains independent from
 // the concrete event backend.
 public struct ClosePolicy {
-    public let behavior:CloseBehavior
+    let behavior:CloseBehavior
 
-    public init(behavior:CloseBehavior) {
+    init(behavior:CloseBehavior) {
         self.behavior = behavior
     }
 }
@@ -37,7 +37,7 @@ public struct Settings {
     var utility:bool
     var close_behavior:CloseBehavior
 
-    public init() {
+    init() {
         self.title = "Window"
         self.width = 1280
         self.height = 720
@@ -65,12 +65,12 @@ public class Presentation {
     private let requested:bool
     private var completed:bool
 
-    internal init(requested:bool) {
+    module init(requested:bool) {
         self.requested = requested
         self.completed = false
     }
 
-    public func present(window:&WindowApi) {
+    func present(window:&WindowApi) {
         if self.completed || !self.requested { return }
         window.show()
         window.raise()
@@ -81,7 +81,7 @@ public class Presentation {
 public struct Plugin:PluginProtocol {
     private let settings:Settings
 
-    public init(settings:Settings = Settings()) {
+    init(settings:Settings = Settings()) {
         self.settings = settings
     }
 

@@ -13,7 +13,7 @@ public struct SpotProjectorLight {
     var shadow:Shadow
     var enabled:bool
 
-    public init(
+    init(
         direction:Math.Vec3 = Math.Vec3.down(),
         color:Color = Color.white(),
         intensity:float = 1.0,

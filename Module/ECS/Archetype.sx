@@ -1,15 +1,15 @@
 use GFX.ECS.Entity.Entity
 
-internal class Archetype {
+class Archetype {
     private let signature:int[]
     private var members:Entity[]
 
-    internal init(signature:int[]) {
+    init(signature:int[]) {
         self.signature = signature
         self.members = []
     }
 
-    internal func is_exact(signature:@int[]) bool {
+    func is_exact(signature:@int[]) bool {
         if self.signature.count() != signature.count() { return false }
         var index = 0
         while index < signature.count() {
@@ -19,7 +19,7 @@ internal class Archetype {
         return true
     }
 
-    internal func matches(required:@int[]) bool {
+    func matches(required:@int[]) bool {
         for expected in required {
             var present = false
             for available in self.signature {
@@ -30,23 +30,23 @@ internal class Archetype {
         return true
     }
 
-    internal func has(component:int) bool {
+    func has(component:int) bool {
         for available in self.signature {
             if available == component { return true }
         }
         return false
     }
 
-    internal func components() int[] { return self.signature }
-    internal func count() int { return self.members.count() }
-    internal func entity(index:int) Entity { return self.members[index] }
+    func components() int[] { return self.signature }
+    func count() int { return self.members.count() }
+    func entity(index:int) Entity { return self.members[index] }
 
-    internal func append(entity:Entity) int {
+    func append(entity:Entity) int {
         self.members.append(entity)
         return self.members.count() - 1
     }
 
-    internal func remove(index:int) Entity? {
+    func remove(index:int) Entity? {
         let last = self.members.count() - 1
         if index == last {
             self.members.take_last()

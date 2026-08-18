@@ -25,7 +25,7 @@ public class Watcher {
     private var spin:int32
     private var pending:Events.Event[]
 
-    public init() {
+    init() {
         self.spin = 0
         self.pending = []
         let callback:func(uint, uint) int32 = watch_lifecycle
@@ -39,7 +39,7 @@ public class Watcher {
         sdl_remove_event_watch(C.pointer_bits(C.function_address(callback)), C.pointer_bits(C.object_address(self)))
     }
 
-    public func take() Events.Event[] {
+    func take() Events.Event[] {
         sdl_lock_spin(C.mutable_pointer(self.spin))
         if self.pending.is_empty() {
             let empty = self.pending
@@ -52,7 +52,7 @@ public class Watcher {
         return result
     }
 
-    internal func record(event:Events.Event) {
+    module func record(event:Events.Event) {
         sdl_lock_spin(C.mutable_pointer(self.spin))
         self.pending.append(event)
         sdl_unlock_spin(C.mutable_pointer(self.spin))
@@ -131,15 +131,15 @@ public func poll_event() Events.Event? {
     return poll_event_at(C.address_bits(C.mutable_pointer(storage)))
 }
 
-internal func allocate_event_storage() uint {
+func allocate_event_storage() uint {
     return C.address_bits(sdl_malloc(128 as C.Size))
 }
 
-internal func free_event_storage(address:uint) {
+func free_event_storage(address:uint) {
     if address != 0 as uint { sdl_free(C.pointer_bits(address)) }
 }
 
-internal func poll_event_at(address:uint) Events.Event? {
+func poll_event_at(address:uint) Events.Event? {
     while true {
         if sdl_poll_event_at(C.pointer_bits(address)) == 0 { return null }
         let kind = C.load<uint32>(address, 0 as uint)

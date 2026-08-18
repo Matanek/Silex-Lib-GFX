@@ -2,15 +2,15 @@ public struct Stats {
     private var rendered_frames:int
     private var executed_passes:int
 
-    public init() {
+    init() {
         self.rendered_frames = 0
         self.executed_passes = 0
     }
 
-    public func frames() int { return self.rendered_frames }
-    public func passes() int { return self.executed_passes }
+    func frames() int { return self.rendered_frames }
+    func passes() int { return self.executed_passes }
 
-    internal func record_frame(pass_count:int) {
+    module func record_frame(pass_count:int) {
         self.rendered_frames++
         self.executed_passes = pass_count
     }

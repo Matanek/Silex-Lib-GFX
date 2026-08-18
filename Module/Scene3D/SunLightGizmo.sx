@@ -6,7 +6,7 @@ public struct SunLightGizmo {
     var ray_length:float
     var visible:bool
 
-    public init(color:Color = Color.gizmos(), visible:bool = true) {
+    init(color:Color = Color.gizmos(), visible:bool = true) {
         self.color = color
         self.radius = 0.18
         self.ray_length = 0.9

@@ -5,22 +5,22 @@ public struct Mesh {
     private var current_vertices:Vertex[]
     private var current_indices:uint32[]
 
-    public init(vertices:Vertex[] = [], indices:uint32[] = []) {
+    init(vertices:Vertex[] = [], indices:uint32[] = []) {
         self.current_vertices = vertices
         self.current_indices = indices
         self.validate()
     }
 
-    public func vertices() Vertex[] { return self.current_vertices }
-    public func indices() uint32[] { return self.current_indices }
-    public func vertex_count() int { return self.current_vertices.count() }
-    public func index_count() int { return self.current_indices.count() }
-    public func triangle_count() int { return self.current_indices.count() / 3 }
-    public func is_empty() bool {
+    func vertices() Vertex[] { return self.current_vertices }
+    func indices() uint32[] { return self.current_indices }
+    func vertex_count() int { return self.current_vertices.count() }
+    func index_count() int { return self.current_indices.count() }
+    func triangle_count() int { return self.current_indices.count() / 3 }
+    func is_empty() bool {
         return self.current_vertices.count() == 0 || self.current_indices.count() == 0
     }
 
-    public func translated(offset:Math.Vec3) Mesh {
+    func translated(offset:Math.Vec3) Mesh {
         var vertices = self.current_vertices
         var index = 0
         while index < vertices.count() {

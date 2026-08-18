@@ -4,7 +4,7 @@ public struct Mesh {
     var asset:MeshHandle
     var visible:bool
 
-    public init(asset:MeshHandle = MeshHandle(), visible:bool = true) {
+    init(asset:MeshHandle = MeshHandle(), visible:bool = true) {
         self.asset = asset
         self.visible = visible
     }

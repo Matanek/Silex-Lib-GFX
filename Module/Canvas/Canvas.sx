@@ -26,40 +26,40 @@ public class Canvas {
     private var cached_snapshot_width:int = 0
     private var cached_snapshot_height:int = 0
 
-    public init() {
+    init() {
         self.current_commands = []
         self.current_revision = 1
     }
 
-    public func paint(callback:func(&Painter)) Canvas {
+    func paint(callback:func(&Painter)) Canvas {
         var painter = Painter(self)
         callback(painter)
         return self
     }
 
-    public func clear() {
+    func clear() {
         self.current_commands.clear()
         self.current_revision++
     }
 
-    public func rasterize(width:int, height:int, background:Color = Color.transparent()) Image {
+    func rasterize(width:int, height:int, background:Color = Color.transparent()) Image {
         return Rasterizer.rasterize(self.current_commands, width, height, background)
     }
 
-    public func measure_text(value:str, style:TextStyle = TextStyle()) TextMetrics {
+    func measure_text(value:str, style:TextStyle = TextStyle()) TextMetrics {
         return Rasterizer.measure_text(value, style)
     }
 
-    public func commands() Command[] { return self.current_commands }
-    public func revision() int { return self.current_revision }
-    public func is_empty() bool { return self.current_commands.count() == 0 }
-    public func command_count() int { return self.current_commands.count() }
+    func commands() Command[] { return self.current_commands }
+    func revision() int { return self.current_revision }
+    func is_empty() bool { return self.current_commands.count() == 0 }
+    func command_count() int { return self.current_commands.count() }
 
-    public func vector_geometry() Geometry.Mesh {
+    func vector_geometry() Geometry.Mesh {
         return Vectorizer.geometry(self.current_commands)
     }
 
-    public func snapshot(width:int, height:int) Snapshot {
+    func snapshot(width:int, height:int) Snapshot {
         if self.cached_snapshot_revision == self.current_revision &&
             self.cached_snapshot_width == width && self.cached_snapshot_height == height
         {
@@ -78,18 +78,18 @@ public class Canvas {
         return snapshot
     }
 
-    internal func text_image(width:int, height:int) Image {
+    module func text_image(width:int, height:int) Image {
         return Rasterizer.rasterize_text(self.current_commands, width, height)
     }
 
-    internal func has_text() bool {
+    module func has_text() bool {
         for command in self.current_commands {
             match command { text(value) => { return true }; else => {} }
         }
         return false
     }
 
-    internal func append(command:Command) {
+    module func append(command:Command) {
         self.current_commands.append(command)
         self.current_revision++
     }
@@ -98,44 +98,44 @@ public class Canvas {
 public struct Painter {
     private var canvas:Canvas
 
-    internal init(canvas:Canvas) { self.canvas = canvas }
+    module init(canvas:Canvas) { self.canvas = canvas }
 
-    public func fill(shape:Rect, style:Fill) {
+    func fill(shape:Rect, style:Fill) {
         validate_rect(shape)
         self.canvas.append(Command.fill_rect(Command.FillRect(shape:shape, style:style)))
     }
 
-    public func stroke(shape:Rect, style:Stroke) {
+    func stroke(shape:Rect, style:Stroke) {
         validate_rect(shape)
         self.canvas.append(Command.stroke_rect(Command.StrokeRect(shape:shape, style:style)))
     }
 
-    public func fill(shape:Circle, style:Fill) {
+    func fill(shape:Circle, style:Fill) {
         validate_circle(shape)
         self.canvas.append(Command.fill_circle(Command.FillCircle(shape:shape, style:style)))
     }
 
-    public func stroke(shape:Circle, style:Stroke) {
+    func stroke(shape:Circle, style:Stroke) {
         validate_circle(shape)
         self.canvas.append(Command.stroke_circle(Command.StrokeCircle(shape:shape, style:style)))
     }
 
-    public func fill(shape:Ellipse, style:Fill) {
+    func fill(shape:Ellipse, style:Fill) {
         validate_ellipse(shape)
         self.fill(ellipse_path(shape), style)
     }
 
-    public func stroke(shape:Ellipse, style:Stroke) {
+    func stroke(shape:Ellipse, style:Stroke) {
         validate_ellipse(shape)
         self.stroke(ellipse_path(shape), style)
     }
 
-    public func stroke(shape:Arc, style:Stroke) {
+    func stroke(shape:Arc, style:Stroke) {
         validate_arc(shape.radius, shape.sweep)
         self.stroke(arc_path(shape.center, shape.radius, shape.start, shape.sweep), style)
     }
 
-    public func fill(shape:Sector, style:Fill) {
+    func fill(shape:Sector, style:Fill) {
         validate_arc(shape.radius, shape.sweep)
         var path = Path()
             ..move_to(shape.center)
@@ -145,7 +145,7 @@ public struct Painter {
         self.fill(path, style)
     }
 
-    public func stroke(shape:Sector, style:Stroke) {
+    func stroke(shape:Sector, style:Stroke) {
         validate_arc(shape.radius, shape.sweep)
         var path = Path()
             ..move_to(shape.center)
@@ -155,21 +155,21 @@ public struct Painter {
         self.stroke(path, style)
     }
 
-    public func stroke(shape:Line, style:Stroke) {
+    func stroke(shape:Line, style:Stroke) {
         self.canvas.append(Command.stroke_line(Command.StrokeLine(shape:shape, style:style)))
     }
 
-    public func fill(shape:Path, style:Fill) {
+    func fill(shape:Path, style:Fill) {
         if shape.is_empty() { panic("GFX.Canvas cannot fill an empty path") }
         self.canvas.append(Command.fill_path(Command.FillPath(shape:shape, style:style)))
     }
 
-    public func stroke(shape:Path, style:Stroke) {
+    func stroke(shape:Path, style:Stroke) {
         if shape.is_empty() { panic("GFX.Canvas cannot stroke an empty path") }
         self.canvas.append(Command.stroke_path(Command.StrokePath(shape:shape, style:style)))
     }
 
-    public func text(value:str, position:Math.Vec2, style:TextStyle = TextStyle()) {
+    func text(value:str, position:Math.Vec2, style:TextStyle = TextStyle()) {
         self.canvas.append(Command.text(Command.Text(value:value, position:position, style:style)))
     }
 }

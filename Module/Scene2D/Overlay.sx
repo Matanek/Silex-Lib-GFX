@@ -20,7 +20,7 @@ public struct Overlay {
     var layer:int
     var visible:bool
 
-    public init(drawing:Canvas, width:int, height:int) {
+    init(drawing:Canvas, width:int, height:int) {
         if width <= 0 || height <= 0 {
             panic("GFX.Scene2D.Overlay dimensions must be positive")
         }
@@ -38,23 +38,23 @@ public struct Overlay {
         self.visible = true
     }
 
-    public func replace(drawing:Canvas) {
+    func replace(drawing:Canvas) {
         self.retained = drawing.snapshot(self.drawing_width, self.drawing_height)
         self.current_revision++
     }
 
-    public func width() int { return self.drawing_width }
-    public func height() int { return self.drawing_height }
+    func width() int { return self.drawing_width }
+    func height() int { return self.drawing_height }
 
     // Replacement renderers can consume the same retained content and use the
     // revision as their cache key without depending on the built-in renderer.
-    public func snapshot() Snapshot { return self.retained }
-    public func revision() int { return self.current_revision }
-    internal func display_size() Math.Vec2 {
+    func snapshot() Snapshot { return self.retained }
+    func revision() int { return self.current_revision }
+    module func display_size() Math.Vec2 {
         if self.size.x > 0.0 && self.size.y > 0.0 { return self.size }
         return Math.Vec2(self.drawing_width as float, self.drawing_height as float)
     }
-    internal func model(viewport:Math.Vec2) Math.Mat4 {
+    module func model(viewport:Math.Vec2) Math.Mat4 {
         let displayed = self.display_size()
         let anchored = self.anchored_position(viewport)
         let placed = Math.Mat4.transform(
@@ -77,7 +77,7 @@ public struct Overlay {
         )
         return placed.multiply(pivoted)
     }
-    internal func text_model(viewport:Math.Vec2) Math.Mat4 {
+    module func text_model(viewport:Math.Vec2) Math.Mat4 {
         let anchored = self.anchored_position(viewport)
         return Math.Mat4.transform(
             Math.Vec3(anchored.x, anchored.y, 0.0),
@@ -85,14 +85,14 @@ public struct Overlay {
             Math.Vec3(1.0)
         )
     }
-    internal func text_size(content:Math.Vec2) Math.Vec2 {
+    module func text_size(content:Math.Vec2) Math.Vec2 {
         let displayed = self.display_size()
         return Math.Vec2(
             content.x * displayed.x / self.drawing_width as float,
             content.y * displayed.y / self.drawing_height as float
         )
     }
-    internal func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
+    module func text_pivot(origin:Math.Vec2, content:Math.Vec2) Math.Vec2 {
         let displayed = self.display_size()
         let resolved = self.text_size(content)
         if resolved.x <= 0.0 || resolved.y <= 0.0 { return Math.Vec2() }

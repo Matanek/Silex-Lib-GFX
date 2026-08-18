@@ -14,7 +14,7 @@ public struct Grid:PluginProtocol {
     var x_axis_color:Color
     var y_axis_color:Color
 
-    public init(
+    init(
         spacing:float = 1.0,
         major_every:int = 10,
         line_width:float = 1.0,

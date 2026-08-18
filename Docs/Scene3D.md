@@ -41,5 +41,5 @@ let tables = Tables.bundled()
 ```
 
 `Tables` is public so an alternative renderer can reuse the same validated
-transforms instead of depending on an internal shader payload. The generation
+transforms instead of depending on a private shader payload. The generation
 script lives at `Tools/Scene3D/GenerateToneMappingLUTs.py`.

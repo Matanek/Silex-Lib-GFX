@@ -13,25 +13,25 @@ use GFX.Scene3D.TubeProjectorLight
 use GFX.Scene3D.TubeProjectorLightGizmo
 use STD.Math
 
-internal struct Vertex {
-    internal let position:Math.Vec3
-    internal let color:Color
+struct Vertex {
+    let position:Math.Vec3
+    let color:Color
 }
 
-internal struct Basis {
-    internal let forward:Math.Vec3
-    internal let right:Math.Vec3
-    internal let up:Math.Vec3
+struct Basis {
+    let forward:Math.Vec3
+    let right:Math.Vec3
+    let up:Math.Vec3
 }
 
-internal class Frame {
+class Frame {
     private var vertices:Vertex[]
 
-    internal init() { self.vertices = [] }
-    internal func all() @Vertex[..] { return @self.vertices[0:self.vertices.count()] }
-    internal func count() int { return self.vertices.count() }
+    init() { self.vertices = [] }
+    func all() @Vertex[..] { return @self.vertices[0:self.vertices.count()] }
+    func count() int { return self.vertices.count() }
 
-    internal func rebuild(world:@ECS.World) {
+    func rebuild(world:@ECS.World) {
         self.vertices.clear()
         for entity in world.entities() {
             if world.has<SunLight>(entity) && world.has<SunLightGizmo>(entity) {

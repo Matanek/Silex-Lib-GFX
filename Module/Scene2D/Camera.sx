@@ -7,7 +7,7 @@ public struct Camera {
     var viewport_size:Math.Vec2
     var order:int
 
-    public init(
+    init(
         active:bool = true,
         zoom:float = 1.0,
         viewport_size:Math.Vec2 = Math.Vec2(),
@@ -19,15 +19,15 @@ public struct Camera {
         self.order = order
     }
 
-    public func view(transform:@Transform) Math.Mat4 {
+    func view(transform:@Transform) Math.Mat4 {
         return transform.view_matrix()
     }
 
-    public func is_active() bool { return self.active }
+    func is_active() bool { return self.active }
 
-    public func render_order() int { return self.order }
+    func render_order() int { return self.order }
 
-    public func projection(fallback:Math.Vec2) Math.Mat4 {
+    func projection(fallback:Math.Vec2) Math.Mat4 {
         let viewport = self.viewport(fallback)
         var zoom = self.zoom
         if zoom <= 0.0 { zoom = 1.0 }
@@ -43,7 +43,7 @@ public struct Camera {
         )
     }
 
-    public func viewport(fallback:Math.Vec2) Math.Vec2 {
+    func viewport(fallback:Math.Vec2) Math.Vec2 {
         var width = self.viewport_size.x
         var height = self.viewport_size.y
         if width <= 0.0 { width = fallback.x }
@@ -53,7 +53,7 @@ public struct Camera {
         return Math.Vec2(width, height)
     }
 
-    public func project(point:Math.Vec2, transform:@Transform, fallback:Math.Vec2) Math.Vec2? {
+    func project(point:Math.Vec2, transform:@Transform, fallback:Math.Vec2) Math.Vec2? {
         let viewport = self.viewport(fallback)
         let clip = self.projection(viewport)
             .multiply(self.view(transform))

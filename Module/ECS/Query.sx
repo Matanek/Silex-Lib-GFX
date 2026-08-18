@@ -3,17 +3,17 @@ use GFX.ECS.World.World
 // Query is a compiler-derived system capability. Pattern is a tuple whose
 // fields carry read (`@`) or mutable (`&`) component access intent.
 public class Query<Pattern> {
-    internal var world:World
-    internal let range_start:int
-    internal let range_end:int
+    module var world:World
+    module let range_start:int
+    module let range_end:int
 
-    internal init(world:World) {
+    module init(world:World) {
         self.world = world
         self.range_start = 0
         self.range_end = -1
     }
 
-    internal init(world:World, range_start:int, range_end:int) {
+    module init(world:World, range_start:int, range_end:int) {
         self.world = world
         self.range_start = range_start
         self.range_end = range_end

@@ -7,17 +7,17 @@ use GFX.Canvas.Styles.Stroke
 use GFX.Canvas.Styles.TextStyle
 use STD.Math
 
-public struct FillRect { public let shape:Rect; public let style:Fill }
-public struct StrokeRect { public let shape:Rect; public let style:Stroke }
-public struct FillCircle { public let shape:Circle; public let style:Fill }
-public struct StrokeCircle { public let shape:Circle; public let style:Stroke }
-public struct StrokeLine { public let shape:Line; public let style:Stroke }
-public struct FillPath { public var shape:Path; public let style:Fill }
-public struct StrokePath { public var shape:Path; public let style:Stroke }
+public struct FillRect { let shape:Rect; let style:Fill }
+public struct StrokeRect { let shape:Rect; let style:Stroke }
+public struct FillCircle { let shape:Circle; let style:Fill }
+public struct StrokeCircle { let shape:Circle; let style:Stroke }
+public struct StrokeLine { let shape:Line; let style:Stroke }
+public struct FillPath { var shape:Path; let style:Fill }
+public struct StrokePath { var shape:Path; let style:Stroke }
 public struct Text {
-    public let value:str
-    public let position:Math.Vec2
-    public var style:TextStyle
+    let value:str
+    let position:Math.Vec2
+    var style:TextStyle
 }
 
 public enum Command {

@@ -4,7 +4,7 @@ use GFX.Scene2D.Grid
 use Interop.C
 use STD.Math
 
-internal func drawing_vertices(mesh:@Geometry.Mesh) str {
+func drawing_vertices(mesh:@Geometry.Mesh) str {
     let source = mesh.vertices()
     var bytes = storage(source.count() * 36)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
@@ -21,7 +21,7 @@ internal func drawing_vertices(mesh:@Geometry.Mesh) str {
     return bytes
 }
 
-internal func drawing_instance(model:Math.Mat4, color:Color) str {
+func drawing_instance(model:Math.Mat4, color:Color) str {
     var bytes = storage(48)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_affine_instance(
@@ -36,13 +36,13 @@ internal func drawing_instance(model:Math.Mat4, color:Color) str {
     return bytes
 }
 
-internal func view_projection(value:Math.Mat4) str {
+func view_projection(value:Math.Mat4) str {
     var bytes = storage(64)
     write_mat4(C.address_bits(C.mutable_string_pointer(bytes)), 0, value)
     return bytes
 }
 
-internal func grid(inverse_view_projection:Math.Mat4, value:Grid) str {
+func grid(inverse_view_projection:Math.Mat4, value:Grid) str {
     var bytes = storage(144)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, inverse_view_projection)
@@ -59,7 +59,7 @@ internal func grid(inverse_view_projection:Math.Mat4, value:Grid) str {
     return bytes
 }
 
-internal func sprite_uniform(
+func sprite_uniform(
     model:Math.Mat4,
     projection:Math.Mat4,
     size:Math.Vec2,
@@ -80,7 +80,7 @@ internal func sprite_uniform(
     return bytes
 }
 
-internal func scene_sprite_uniform(
+func scene_sprite_uniform(
     model:Math.Mat4,
     view_projection:Math.Mat4,
     size:Math.Vec2,
@@ -103,7 +103,7 @@ internal func scene_sprite_uniform(
     return bytes
 }
 
-internal func quad_vertices() str {
+func quad_vertices() str {
     var bytes = storage(64)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_vec2(address, 0, Math.Vec2(0.0, 0.0)); write_vec2(address, 8, Math.Vec2(0.0, 0.0))
@@ -113,7 +113,7 @@ internal func quad_vertices() str {
     return bytes
 }
 
-internal func quad_indices() str {
+func quad_indices() str {
     var bytes = storage(24)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     let values:uint32[] = [0, 1, 2, 0, 2, 3]
@@ -125,7 +125,7 @@ internal func quad_indices() str {
     return bytes
 }
 
-internal func storage(minimum:int) str {
+func storage(minimum:int) str {
     var bytes = "\0"
     while C.byte_count(bytes) < minimum as uint { bytes = bytes + bytes }
     return bytes
@@ -153,14 +153,14 @@ local func write_vec4(address:uint, offset:int, value:Math.Vec4) {
     write_float(address, offset + 12, value.w)
 }
 
-internal func write_mat4(address:uint, offset:int, value:Math.Mat4) {
+func write_mat4(address:uint, offset:int, value:Math.Mat4) {
     write_vec4(address, offset, value.x)
     write_vec4(address, offset + 16, value.y)
     write_vec4(address, offset + 32, value.z)
     write_vec4(address, offset + 48, value.w)
 }
 
-internal func write_affine_instance(
+func write_affine_instance(
     address:uint,
     offset:int,
     x:Math.Vec2,
@@ -177,7 +177,7 @@ internal func write_affine_instance(
     write_color(address, offset + 32, color)
 }
 
-internal func write_color(address:uint, offset:int, value:Color) {
+func write_color(address:uint, offset:int, value:Color) {
     write_float(address, offset, value.r)
     write_float(address, offset + 4, value.g)
     write_float(address, offset + 8, value.b)

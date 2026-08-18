@@ -4,18 +4,18 @@ use GFX.ECS
 class Position {
     private var current_x:int
 
-    public init(x:int) { self.current_x = x }
-    public func advance(amount:int) { self.current_x += amount }
-    public func x() int { return self.current_x }
+    init(x:int) { self.current_x = x }
+    func advance(amount:int) { self.current_x += amount }
+    func x() int { return self.current_x }
 }
 
 class StatefulPlugin:Application.Plugin {
     private var updates:int
 
-    public init() { self.updates = 0 }
-    public func id() str { return "GFX.ECS.Tests.Stateful" }
+    init() { self.updates = 0 }
+    func id() str { return "GFX.ECS.Tests.Stateful" }
 
-    public func build(application:Application) {
+    func build(application:Application) {
         application.add_plugin(ECS.Plugin())
         application.add_system(Application.Schedule.startup, StatefulPlugin.spawn)
         application.add_system(Application.Schedule.update, StatefulPlugin.update)
@@ -42,7 +42,7 @@ class StatefulPlugin:Application.Plugin {
         for (entity, position) in positions { assert(position.x() == 42) }
     }
 
-    public func update_count() int { return self.updates }
+    func update_count() int { return self.updates }
 }
 
 func observe_shutdown(world:@ECS.World, commands:@ECS.Commands) {}

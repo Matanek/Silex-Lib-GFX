@@ -107,24 +107,24 @@ public struct ComputePipelineSettings {
 }
 
 public struct ShaderProgram {
-    internal let vertex_msl:str?
-    internal let fragment_msl:str?
-    internal let vertex_spirv:str?
-    internal let fragment_spirv:str?
-    internal let vertex_dxil:str?
-    internal let fragment_dxil:str?
-    internal let vertex_entry:str
-    internal let fragment_entry:str
-    internal let vertex_samplers:int
-    internal let vertex_storage_textures:int
-    internal let vertex_storage_buffers:int
-    internal let vertex_uniform_buffers:int
-    internal let fragment_samplers:int
-    internal let fragment_storage_textures:int
-    internal let fragment_storage_buffers:int
-    internal let fragment_uniform_buffers:int
+    module let vertex_msl:str?
+    module let fragment_msl:str?
+    module let vertex_spirv:str?
+    module let fragment_spirv:str?
+    module let vertex_dxil:str?
+    module let fragment_dxil:str?
+    module let vertex_entry:str
+    module let fragment_entry:str
+    module let vertex_samplers:int
+    module let vertex_storage_textures:int
+    module let vertex_storage_buffers:int
+    module let vertex_uniform_buffers:int
+    module let fragment_samplers:int
+    module let fragment_storage_textures:int
+    module let fragment_storage_buffers:int
+    module let fragment_uniform_buffers:int
 
-    public static func hlsl(
+    static func hlsl(
         source:str = "",
         file:str = "",
         vertex:str = "vertex_main",
@@ -135,21 +135,21 @@ public struct ShaderProgram {
 }
 
 public struct ComputeProgram {
-    internal let msl:str?
-    internal let spirv:str?
-    internal let dxil:str?
-    internal let entry:str
-    internal let samplers:int
-    internal let read_only_storage_textures:int
-    internal let read_only_storage_buffers:int
-    internal let read_write_storage_textures:int
-    internal let read_write_storage_buffers:int
-    internal let uniform_buffers:int
-    internal let threads_x:int
-    internal let threads_y:int
-    internal let threads_z:int
+    module let msl:str?
+    module let spirv:str?
+    module let dxil:str?
+    module let entry:str
+    module let samplers:int
+    module let read_only_storage_textures:int
+    module let read_only_storage_buffers:int
+    module let read_write_storage_textures:int
+    module let read_write_storage_buffers:int
+    module let uniform_buffers:int
+    module let threads_x:int
+    module let threads_y:int
+    module let threads_z:int
 
-    public static func hlsl(
+    static func hlsl(
         source:str = "",
         file:str = "",
         entry:str = "compute_main"
@@ -164,7 +164,7 @@ public class Shader {
     private var device_owner:Device? = null
     private var current_stage:Types.ShaderStage? = null
 
-    internal init(device:Device, stage:Types.ShaderStage, format:Types.ShaderFormat, code:@uint8[..], settings:ShaderSettings) {
+    module init(device:Device, stage:Types.ShaderStage, format:Types.ShaderFormat, code:@uint8[..], settings:ShaderSettings) {
         if code.count() == 0 { panic("GFX.GPU shader code cannot be empty") }
         validate_shader_counts(settings)
         var properties = Properties()
@@ -197,12 +197,12 @@ public class Shader {
         self.device_owner = null
     }
 
-    public func stage() Types.ShaderStage {
+    func stage() Types.ShaderStage {
         if let stage = self.current_stage { return stage }
         panic("GFX.GPU shader has no stage")
     }
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 public class GraphicsPipeline {
@@ -210,7 +210,7 @@ public class GraphicsPipeline {
     private let handle:uint
     private var device_owner:Device? = null
 
-    internal init(device:Device, vertex:@Shader, fragment:@Shader, settings:GraphicsPipelineSettings) {
+    module init(device:Device, vertex:@Shader, fragment:@Shader, settings:GraphicsPipelineSettings) {
         if vertex.owner_handle() != device.native_handle() || fragment.owner_handle() != device.native_handle() {
             panic("GFX.GPU pipeline shaders must belong to its device")
         }
@@ -271,8 +271,8 @@ public class GraphicsPipeline {
         self.device_owner = null
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 public class ComputePipeline {
@@ -280,7 +280,7 @@ public class ComputePipeline {
     private let handle:uint
     private var device_owner:Device? = null
 
-    internal init(device:Device, format:Types.ShaderFormat, code:@uint8[..], settings:ComputePipelineSettings) {
+    module init(device:Device, format:Types.ShaderFormat, code:@uint8[..], settings:ComputePipelineSettings) {
         if code.count() == 0 { panic("GFX.GPU compute shader code cannot be empty") }
         validate_compute_counts(settings)
         if settings.threads_x == 0 || settings.threads_y == 0 || settings.threads_z == 0 {
@@ -319,16 +319,16 @@ public class ComputePipeline {
         self.device_owner = null
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 extend Device {
-    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:@uint8[..], settings:ShaderSettings = ShaderSettings()) Shader {
+    func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:@uint8[..], settings:ShaderSettings = ShaderSettings()) Shader {
         return Shader(self, stage, format, input, settings)
     }
 
-    public func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:str, settings:ShaderSettings = ShaderSettings()) Shader {
+    func shader(stage:Types.ShaderStage, format:Types.ShaderFormat, input:str, settings:ShaderSettings = ShaderSettings()) Shader {
         var code:uint8[] = []
         let count = C.byte_count(input)
         var index:uint = 0
@@ -339,11 +339,11 @@ extend Device {
         return Shader(self, stage, format, @code[0:code.count()], settings)
     }
 
-    public func graphics_pipeline(vertex:@Shader, fragment:@Shader, settings:GraphicsPipelineSettings) GraphicsPipeline {
+    func graphics_pipeline(vertex:@Shader, fragment:@Shader, settings:GraphicsPipelineSettings) GraphicsPipeline {
         return GraphicsPipeline(self, vertex, fragment, settings)
     }
 
-    public func graphics_pipeline(program:@ShaderProgram, settings:GraphicsPipelineSettings) GraphicsPipeline {
+    func graphics_pipeline(program:@ShaderProgram, settings:GraphicsPipelineSettings) GraphicsPipeline {
         let formats = self.shader_formats()
         if formats.msl {
             if let vertex_code = program.vertex_msl {
@@ -405,11 +405,11 @@ extend Device {
         panic("GFX.GPU device has no shader format compatible with this HLSL program")
     }
 
-    public func compute_pipeline(input:Types.ShaderFormat, data:@uint8[..], settings:ComputePipelineSettings) ComputePipeline {
+    func compute_pipeline(input:Types.ShaderFormat, data:@uint8[..], settings:ComputePipelineSettings) ComputePipeline {
         return ComputePipeline(self, input, data, settings)
     }
 
-    public func compute_pipeline(input:Types.ShaderFormat, data:str, settings:ComputePipelineSettings) ComputePipeline {
+    func compute_pipeline(input:Types.ShaderFormat, data:str, settings:ComputePipelineSettings) ComputePipeline {
         var code:uint8[] = []
         let count = C.byte_count(data)
         var index:uint = 0
@@ -420,7 +420,7 @@ extend Device {
         return ComputePipeline(self, input, @code[0:code.count()], settings)
     }
 
-    public func compute_pipeline(input:@ComputeProgram, data:str? = null) ComputePipeline {
+    func compute_pipeline(input:@ComputeProgram, data:str? = null) ComputePipeline {
         let formats = self.shader_formats()
         let settings = ComputePipelineSettings(
             entry:copy input.entry,

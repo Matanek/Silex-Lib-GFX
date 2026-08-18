@@ -1,19 +1,19 @@
 use GFX.FrameGraph.Resource.Usage
 
 public struct Pass {
-    internal let index:int
+    module let index:int
 
-    public init() { self.index = -1 }
-    internal init(index:int) { self.index = index }
-    public func is_valid() bool { return self.index >= 0 }
+    init() { self.index = -1 }
+    module init(index:int) { self.index = index }
+    func is_valid() bool { return self.index >= 0 }
 }
 
-internal struct Record {
-    internal let name:str
-    internal var usages:Usage[]
-    internal var dependencies:Pass[]
+struct Record {
+    let name:str
+    var usages:Usage[]
+    var dependencies:Pass[]
 
-    internal init(name:str) {
+    init(name:str) {
         self.name = name
         self.usages = []
         self.dependencies = []

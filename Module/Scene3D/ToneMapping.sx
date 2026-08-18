@@ -52,7 +52,7 @@ public struct Tables {
         self.filmic_looks_bytes = filmic_looks
     }
 
-    public static func bundled() Tables {
+    static func bundled() Tables {
         return Tables(
             embed_bytes("../../Assets/Scene3D/ToneMapping/AgXBase.rgba16f"),
             embed_bytes("../../Assets/Scene3D/ToneMapping/PBRNeutral.rgba16f"),
@@ -61,36 +61,36 @@ public struct Tables {
         )
     }
 
-    public func agx_base() @self:uint8[..] {
+    func agx_base() @self:uint8[..] {
         return @self.agx_base_bytes[0:self.agx_base_bytes.count()]
     }
 
-    public func neutral() @self:uint8[..] {
+    func neutral() @self:uint8[..] {
         return @self.neutral_bytes[0:self.neutral_bytes.count()]
     }
 
-    public func filmic_desaturation() @self:uint8[..] {
+    func filmic_desaturation() @self:uint8[..] {
         return @self.filmic_desaturation_bytes[0:self.filmic_desaturation_bytes.count()]
     }
 
-    public func filmic_looks() @self:uint8[..] {
+    func filmic_looks() @self:uint8[..] {
         return @self.filmic_looks_bytes[0:self.filmic_looks_bytes.count()]
     }
 
-    public func agx_base_byte_count() int { return self.agx_base_bytes.count() }
-    public func neutral_byte_count() int { return self.neutral_bytes.count() }
-    public func filmic_desaturation_byte_count() int {
+    func agx_base_byte_count() int { return self.agx_base_bytes.count() }
+    func neutral_byte_count() int { return self.neutral_bytes.count() }
+    func filmic_desaturation_byte_count() int {
         return self.filmic_desaturation_bytes.count()
     }
-    public func filmic_looks_byte_count() int {
+    func filmic_looks_byte_count() int {
         return self.filmic_looks_bytes.count()
     }
 
-    public static func agx_size() int { return 57 }
-    public static func neutral_size() int { return 57 }
-    public static func filmic_desaturation_size() int { return 33 }
-    public static func filmic_look_width() int { return 4096 }
-    public static func filmic_look_count() int { return 7 }
+    static func agx_size() int { return 57 }
+    static func neutral_size() int { return 57 }
+    static func filmic_desaturation_size() int { return 33 }
+    static func filmic_look_width() int { return 4096 }
+    static func filmic_look_count() int { return 7 }
 }
 
 public struct ToneMapping {
@@ -103,7 +103,7 @@ public struct ToneMapping {
     var split_comparison:bool
     var split_position:float
 
-    public init(
+    init(
         method:Operator = Operator.none,
         filmic_look:FilmicLook = FilmicLook.medium_high_contrast,
         agx_look:AgXLook = AgXLook.base_contrast,
@@ -123,11 +123,11 @@ public struct ToneMapping {
         self.split_position = split_position
     }
 
-    public static func none() ToneMapping {
+    static func none() ToneMapping {
         return ToneMapping()
     }
 
-    public static func reinhard(
+    static func reinhard(
         exposure:float = 0.0,
         white_point:float = 16.0,
         normalization:Normalization = Normalization.reference,
@@ -144,7 +144,7 @@ public struct ToneMapping {
         )
     }
 
-    public static func aces(
+    static func aces(
         exposure:float = 0.0,
         normalization:Normalization = Normalization.reference,
         split_comparison:bool = false,
@@ -159,7 +159,7 @@ public struct ToneMapping {
         )
     }
 
-    public static func neutral(
+    static func neutral(
         exposure:float = 0.0,
         normalization:Normalization = Normalization.reference,
         split_comparison:bool = false,
@@ -174,7 +174,7 @@ public struct ToneMapping {
         )
     }
 
-    public static func filmic(
+    static func filmic(
         look:FilmicLook = FilmicLook.medium_high_contrast,
         exposure:float = 0.0,
         normalization:Normalization = Normalization.reference,
@@ -191,7 +191,7 @@ public struct ToneMapping {
         )
     }
 
-    public static func agx(
+    static func agx(
         look:AgXLook = AgXLook.base_contrast,
         exposure:float = 0.0,
         normalization:Normalization = Normalization.reference,

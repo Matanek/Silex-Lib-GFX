@@ -99,7 +99,7 @@ public class Window {
     private var current_title:str
     private var current_parent:Window?
 
-    public init(settings:Settings = Settings()) {
+    init(settings:Settings = Settings()) {
         validate_size(settings.width, settings.height)
         validate_settings(settings)
         initialize_runtime()
@@ -113,7 +113,7 @@ public class Window {
         self.current_parent = null
     }
 
-    internal init(handle:uint, parent:Window) {
+    module init(handle:uint, parent:Window) {
         if handle == 0 as uint { panic("GFX.Window could not create a popup window") }
         initialize_runtime()
         self.handle = handle
@@ -121,7 +121,7 @@ public class Window {
         self.current_parent = parent
     }
 
-    public static func popup(parent:Window, area:Math.Rect, kind:PopupKind) Window {
+    static func popup(parent:Window, area:Math.Rect, kind:PopupKind) Window {
         validate_rect(area)
         var flags:uint = 0x0008_0000
         if kind == PopupKind.tooltip { flags = 0x0004_0000 }
@@ -143,61 +143,61 @@ public class Window {
         shutdown_runtime()
     }
 
-    public func id() Id {
+    func id() Id {
         return Id(value:id(self.handle))
     }
 
-    public func presentation_handle() uint {
+    func presentation_handle() uint {
         return Platform.presentation_handle(self.handle)
     }
 
-    public func native_handle() uint { return self.handle }
+    func native_handle() uint { return self.handle }
 
-    public func title() str {
+    func title() str {
         return self.current_title
     }
 
-    public func set_title(title:str) {
+    func set_title(title:str) {
         require_action(set_title(self.handle, title), "set its title")
         self.current_title = title
     }
 
-    public func size() Math.Vec2 {
+    func size() Math.Vec2 {
         return Math.Vec2(width(self.handle, false) as float, height(self.handle, false) as float)
     }
 
-    public func pixel_size() Math.Vec2 {
+    func pixel_size() Math.Vec2 {
         return Math.Vec2(width(self.handle, true) as float, height(self.handle, true) as float)
     }
 
-    public func position() Math.Vec2 {
+    func position() Math.Vec2 {
         var x:int32 = 0
         var y:int32 = 0
         require_action(sdl_get_window_position(C.pointer_bits(self.handle), C.mutable_pointer(x), C.mutable_pointer(y)) != 0, "query its position")
         return Math.Vec2(x as float, y as float)
     }
 
-    public func set_position(position:Math.Vec2) {
+    func set_position(position:Math.Vec2) {
         require_action(sdl_set_window_position(C.pointer_bits(self.handle), checked_coordinate(position.x), checked_coordinate(position.y)) != 0, "change its position")
     }
 
-    public func center(display:Display.Id) {
+    func center(display:Display.Id) {
         let centered = (0x2fff_0000 as uint32) + display.value
         require_action(sdl_set_window_position(C.pointer_bits(self.handle), centered as int32, centered as int32) != 0, "center on a display")
     }
 
-    public func display() Display.Id {
+    func display() Display.Id {
         let value = sdl_get_display_for_window(C.pointer_bits(self.handle))
         if value == 0 { panic("GFX.Window could not identify its display") }
         return Display.Id(value:value)
     }
 
-    public func pixel_density() float { return sdl_get_window_pixel_density(C.pointer_bits(self.handle)) as float }
-    public func display_scale() float { return sdl_get_window_display_scale(C.pointer_bits(self.handle)) as float }
+    func pixel_density() float { return sdl_get_window_pixel_density(C.pointer_bits(self.handle)) as float }
+    func display_scale() float { return sdl_get_window_display_scale(C.pointer_bits(self.handle)) as float }
 
-    public func safe_area() Math.Rect { return window_rect(self.handle, true) }
+    func safe_area() Math.Rect { return window_rect(self.handle, true) }
 
-    public func borders() (top:int, left:int, bottom:int, right:int) {
+    func borders() (top:int, left:int, bottom:int, right:int) {
         var top:int32 = 0
         var left:int32 = 0
         var bottom:int32 = 0
@@ -206,22 +206,22 @@ public class Window {
         return (top:top as int, left:left as int, bottom:bottom as int, right:right as int)
     }
 
-    public func minimum_size() Math.Vec2? { return size_limit(self.handle, true) }
-    public func maximum_size() Math.Vec2? { return size_limit(self.handle, false) }
+    func minimum_size() Math.Vec2? { return size_limit(self.handle, true) }
+    func maximum_size() Math.Vec2? { return size_limit(self.handle, false) }
 
-    public func set_minimum_size(size:Math.Vec2) {
+    func set_minimum_size(size:Math.Vec2) {
         require_action(sdl_set_window_minimum_size(C.pointer_bits(self.handle), checked_dimension(size.x), checked_dimension(size.y)) != 0, "change its minimum size")
     }
 
-    public func clear_minimum_size() { require_action(sdl_set_window_minimum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its minimum size") }
+    func clear_minimum_size() { require_action(sdl_set_window_minimum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its minimum size") }
 
-    public func set_maximum_size(size:Math.Vec2) {
+    func set_maximum_size(size:Math.Vec2) {
         require_action(sdl_set_window_maximum_size(C.pointer_bits(self.handle), checked_dimension(size.x), checked_dimension(size.y)) != 0, "change its maximum size")
     }
 
-    public func clear_maximum_size() { require_action(sdl_set_window_maximum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its maximum size") }
+    func clear_maximum_size() { require_action(sdl_set_window_maximum_size(C.pointer_bits(self.handle), 0, 0) != 0, "clear its maximum size") }
 
-    public func aspect_ratio() (minimum:float, maximum:float)? {
+    func aspect_ratio() (minimum:float, maximum:float)? {
         var minimum:float32 = 0.0
         var maximum:float32 = 0.0
         require_action(sdl_get_window_aspect_ratio(C.pointer_bits(self.handle), C.mutable_pointer(minimum), C.mutable_pointer(maximum)) != 0, "query its aspect ratio")
@@ -229,60 +229,60 @@ public class Window {
         return (minimum:minimum as float, maximum:maximum as float)
     }
 
-    public func set_aspect_ratio(minimum:float, maximum:float) {
+    func set_aspect_ratio(minimum:float, maximum:float) {
         if minimum < 0.0 || maximum < 0.0 || (maximum > 0.0 && minimum > maximum) {
             panic("GFX.Window aspect ratios must be positive and ordered")
         }
         require_action(sdl_set_window_aspect_ratio(C.pointer_bits(self.handle), minimum as float32, maximum as float32) != 0, "change its aspect ratio")
     }
 
-    public func clear_aspect_ratio() {
+    func clear_aspect_ratio() {
         require_action(sdl_set_window_aspect_ratio(C.pointer_bits(self.handle), 0.0, 0.0) != 0, "clear its aspect ratio")
     }
 
-    public func resize(size:Math.Vec2) {
+    func resize(size:Math.Vec2) {
         require_action(set_size(self.handle, checked_dimension(size.x) as int, checked_dimension(size.y) as int), "change its size")
     }
 
-    public func show() {
+    func show() {
         require_action(show(self.handle), "show")
     }
 
-    public func hide() {
+    func hide() {
         require_action(hide(self.handle), "hide")
     }
 
-    public func raise() {
+    func raise() {
         require_action(raise(self.handle), "raise")
     }
 
-    public func sync() {
+    func sync() {
         require_action(sync(self.handle), "synchronize")
     }
 
-    public func maximize() {
+    func maximize() {
         require_action(maximize(self.handle), "maximize")
     }
 
-    public func minimize() {
+    func minimize() {
         require_action(minimize(self.handle), "minimize")
     }
 
-    public func restore() {
+    func restore() {
         require_action(restore(self.handle), "restore")
     }
 
-    public func set_fullscreen(enabled:bool) {
+    func set_fullscreen(enabled:bool) {
         require_action(set_fullscreen(self.handle, enabled), "change fullscreen state")
     }
 
-    public func fullscreen_mode() Display.Mode? {
+    func fullscreen_mode() Display.Mode? {
         let address = C.address_bits(sdl_get_window_fullscreen_mode(C.pointer_bits(self.handle)))
         if address == 0 as uint { return null }
         return read_display_mode(address)
     }
 
-    public func set_fullscreen_mode(mode:Display.Mode?) {
+    func set_fullscreen_mode(mode:Display.Mode?) {
         if let value = mode {
             var storage:uint[5]
             require_action(sdl_get_closest_fullscreen_mode(
@@ -299,49 +299,49 @@ public class Window {
         require_action(sdl_set_window_fullscreen_mode(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "clear its fullscreen mode")
     }
 
-    public func is_fullscreen() bool {
+    func is_fullscreen() bool {
         return is_fullscreen(self.handle)
     }
 
-    public func state() State { return state_from_flags(sdl_get_window_flags(C.pointer_bits(self.handle))) }
+    func state() State { return state_from_flags(sdl_get_window_flags(C.pointer_bits(self.handle))) }
 
-    public func set_bordered(enabled:bool) { require_action(sdl_set_window_bordered(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its border") }
-    public func set_resizable(enabled:bool) { require_action(sdl_set_window_resizable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its resizable state") }
-    public func set_always_on_top(enabled:bool) { require_action(sdl_set_window_always_on_top(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its always-on-top state") }
-    public func set_focusable(enabled:bool) { require_action(sdl_set_window_focusable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its focusable state") }
+    func set_bordered(enabled:bool) { require_action(sdl_set_window_bordered(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its border") }
+    func set_resizable(enabled:bool) { require_action(sdl_set_window_resizable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its resizable state") }
+    func set_always_on_top(enabled:bool) { require_action(sdl_set_window_always_on_top(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its always-on-top state") }
+    func set_focusable(enabled:bool) { require_action(sdl_set_window_focusable(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change its focusable state") }
 
-    public func opacity() float { return sdl_get_window_opacity(C.pointer_bits(self.handle)) as float }
+    func opacity() float { return sdl_get_window_opacity(C.pointer_bits(self.handle)) as float }
 
-    public func set_opacity(value:float) {
+    func set_opacity(value:float) {
         if value < 0.0 || value > 1.0 { panic("GFX.Window opacity must be between 0.0 and 1.0") }
         require_action(sdl_set_window_opacity(C.pointer_bits(self.handle), value as float32) != 0, "change its opacity")
     }
 
-    public func set_mouse_grabbed(enabled:bool) { require_action(sdl_set_window_mouse_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change mouse capture") }
-    public func is_mouse_grabbed() bool { return sdl_get_window_mouse_grab(C.pointer_bits(self.handle)) != 0 }
-    public func set_keyboard_grabbed(enabled:bool) { require_action(sdl_set_window_keyboard_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change keyboard capture") }
-    public func is_keyboard_grabbed() bool { return sdl_get_window_keyboard_grab(C.pointer_bits(self.handle)) != 0 }
-    public func set_relative_mouse(enabled:bool) { require_action(sdl_set_window_relative_mouse(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change relative mouse mode") }
-    public func is_relative_mouse() bool { return sdl_get_window_relative_mouse(C.pointer_bits(self.handle)) != 0 }
+    func set_mouse_grabbed(enabled:bool) { require_action(sdl_set_window_mouse_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change mouse capture") }
+    func is_mouse_grabbed() bool { return sdl_get_window_mouse_grab(C.pointer_bits(self.handle)) != 0 }
+    func set_keyboard_grabbed(enabled:bool) { require_action(sdl_set_window_keyboard_grab(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change keyboard capture") }
+    func is_keyboard_grabbed() bool { return sdl_get_window_keyboard_grab(C.pointer_bits(self.handle)) != 0 }
+    func set_relative_mouse(enabled:bool) { require_action(sdl_set_window_relative_mouse(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change relative mouse mode") }
+    func is_relative_mouse() bool { return sdl_get_window_relative_mouse(C.pointer_bits(self.handle)) != 0 }
 
-    public func confine_mouse(area:Math.Rect) {
+    func confine_mouse(area:Math.Rect) {
         validate_rect(area)
         var storage:uint[2]
         write_rect(C.address_bits(C.mutable_pointer(storage)), area)
         require_action(sdl_set_window_mouse_rect(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage)))) != 0, "confine the mouse")
     }
 
-    public func release_mouse_confinement() { require_action(sdl_set_window_mouse_rect(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "release mouse confinement") }
+    func release_mouse_confinement() { require_action(sdl_set_window_mouse_rect(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "release mouse confinement") }
 
-    public func mouse_confinement() Math.Rect? {
+    func mouse_confinement() Math.Rect? {
         let address = C.address_bits(sdl_get_window_mouse_rect(C.pointer_bits(self.handle)))
         if address == 0 as uint { return null }
         return read_rect(address)
     }
 
-    public func warp_mouse(position:Math.Vec2) { sdl_warp_mouse(C.pointer_bits(self.handle), position.x as float32, position.y as float32) }
+    func warp_mouse(position:Math.Vec2) { sdl_warp_mouse(C.pointer_bits(self.handle), position.x as float32, position.y as float32) }
 
-    public func start_text_input() {
+    func start_text_input() {
         self.start_text_input(TextInputSettings(
             kind:TextInputType.text,
             capitalization:Capitalization.sentences,
@@ -350,7 +350,7 @@ public class Window {
         ))
     }
 
-    public func start_text_input(settings:TextInputSettings) {
+    func start_text_input(settings:TextInputSettings) {
         let properties = sdl_create_properties()
         if properties == 0 { panic("GFX.Window could not create text input settings") }
         require_property(sdl_set_number_property(properties, C.terminated_pointer("SDL.textinput.type"), text_input_type(settings.kind) as int) != 0, properties)
@@ -362,29 +362,29 @@ public class Window {
         require_action(success, "start text input")
     }
 
-    public func stop_text_input() { require_action(sdl_stop_text_input(C.pointer_bits(self.handle)) != 0, "stop text input") }
-    public func is_text_input_active() bool { return sdl_text_input_active(C.pointer_bits(self.handle)) != 0 }
-    public func clear_text_composition() { require_action(sdl_clear_composition(C.pointer_bits(self.handle)) != 0, "clear text composition") }
+    func stop_text_input() { require_action(sdl_stop_text_input(C.pointer_bits(self.handle)) != 0, "stop text input") }
+    func is_text_input_active() bool { return sdl_text_input_active(C.pointer_bits(self.handle)) != 0 }
+    func clear_text_composition() { require_action(sdl_clear_composition(C.pointer_bits(self.handle)) != 0, "clear text composition") }
 
-    public func set_text_input_area(value:TextInputArea) {
+    func set_text_input_area(value:TextInputArea) {
         validate_rect(value.area)
         var storage:uint[2]
         write_rect(C.address_bits(C.mutable_pointer(storage)), value.area)
         require_action(sdl_set_text_input_area(C.pointer_bits(self.handle), C.pointer_bits(C.address_bits(C.mutable_pointer(storage))), value.cursor as int32) != 0, "change text input area")
     }
 
-    public func text_input_area() TextInputArea {
+    func text_input_area() TextInputArea {
         var storage:uint[2]
         var cursor:int32 = 0
         require_action(sdl_get_text_input_area(C.pointer_bits(self.handle), C.mutable_pointer(storage), C.mutable_pointer(cursor)) != 0, "query text input area")
         return TextInputArea(area:read_rect(C.address_bits(C.mutable_pointer(storage))), cursor:cursor as int)
     }
 
-    public func is_screen_keyboard_shown() bool { return sdl_screen_keyboard_shown(C.pointer_bits(self.handle)) != 0 }
+    func is_screen_keyboard_shown() bool { return sdl_screen_keyboard_shown(C.pointer_bits(self.handle)) != 0 }
 
-    public func parent() Window? { return self.current_parent }
+    func parent() Window? { return self.current_parent }
 
-    public func set_parent(parent:Window) {
+    func set_parent(parent:Window) {
         if parent.handle == self.handle { panic("GFX.Window cannot be its own parent") }
         if parent.has_ancestor(self.handle) { panic("GFX.Window parent relationships cannot form a cycle") }
         require_action(sdl_set_window_parent(C.pointer_bits(self.handle), C.pointer_bits(parent.handle)) != 0, "set its parent")
@@ -397,28 +397,28 @@ public class Window {
         return false
     }
 
-    public func clear_parent() {
+    func clear_parent() {
         if self.state().modal { self.set_modal(false) }
         require_action(sdl_set_window_parent(C.pointer_bits(self.handle), C.pointer_bits(0 as uint)) != 0, "clear its parent")
         self.current_parent = null
     }
 
-    public func set_modal(enabled:bool) {
+    func set_modal(enabled:bool) {
         if enabled && self.current_parent == null { panic("GFX.Window requires a parent before becoming modal") }
         require_action(sdl_set_window_modal(C.pointer_bits(self.handle), native_bool(enabled)) != 0, "change modal state")
     }
 
-    public func request_attention(attention:Attention) { require_action(sdl_flash_window(C.pointer_bits(self.handle), attention_value(attention) as int32) != 0, "request attention") }
+    func request_attention(attention:Attention) { require_action(sdl_flash_window(C.pointer_bits(self.handle), attention_value(attention) as int32) != 0, "request attention") }
 
-    public func progress_state() ProgressState { return progress_state(sdl_get_window_progress_state(C.pointer_bits(self.handle))) }
-    public func set_progress_state(value:ProgressState) { require_action(sdl_set_window_progress_state(C.pointer_bits(self.handle), progress_value(value) as int32) != 0, "change progress state") }
-    public func progress() float { return sdl_get_window_progress_value(C.pointer_bits(self.handle)) as float }
-    public func set_progress(value:float) {
+    func progress_state() ProgressState { return progress_state(sdl_get_window_progress_state(C.pointer_bits(self.handle))) }
+    func set_progress_state(value:ProgressState) { require_action(sdl_set_window_progress_state(C.pointer_bits(self.handle), progress_value(value) as int32) != 0, "change progress state") }
+    func progress() float { return sdl_get_window_progress_value(C.pointer_bits(self.handle)) as float }
+    func set_progress(value:float) {
         if value < 0.0 || value > 1.0 { panic("GFX.Window progress must be between 0.0 and 1.0") }
         require_action(sdl_set_window_progress_value(C.pointer_bits(self.handle), value as float32) != 0, "change progress")
     }
 
-    public func show_system_menu(position:Math.Vec2) { require_action(sdl_show_window_system_menu(C.pointer_bits(self.handle), checked_coordinate(position.x), checked_coordinate(position.y)) != 0, "show its system menu") }
+    func show_system_menu(position:Math.Vec2) { require_action(sdl_show_window_system_menu(C.pointer_bits(self.handle), checked_coordinate(position.x), checked_coordinate(position.y)) != 0, "show its system menu") }
 }
 
 func validate_size(width:int, height:int) {

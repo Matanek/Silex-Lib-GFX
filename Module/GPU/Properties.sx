@@ -1,10 +1,10 @@
 use Interop.C
 use Interop.Boundary
 
-internal class Properties {
+class Properties {
     private let handle:uint32
 
-    internal init() {
+    init() {
         let handle = sdl_create_properties()
         if handle == 0 { panic("GFX.GPU could not create native properties: " + property_error()) }
         self.handle = handle
@@ -12,40 +12,40 @@ internal class Properties {
 
     drop { sdl_destroy_properties(self.handle) }
 
-    internal func boolean(name:str, value:bool) {
+    func boolean(name:str, value:bool) {
         require_property(sdl_set_boolean_property(
             self.handle, C.terminated_pointer(name), native_bool(value)
         ) != 0, name)
     }
 
-    internal func number(name:str, value:int) {
+    func number(name:str, value:int) {
         require_property(sdl_set_number_property(
             self.handle, C.terminated_pointer(name), value
         ) != 0, name)
     }
 
-    internal func decimal(name:str, value:float) {
+    func decimal(name:str, value:float) {
         require_property(sdl_set_float_property(
             self.handle, C.terminated_pointer(name), value as float32
         ) != 0, name)
     }
 
-    internal func text(name:str, value:str) {
+    func text(name:str, value:str) {
         require_property(sdl_set_string_property(
             self.handle, C.terminated_pointer(name), C.terminated_pointer(value)
         ) != 0, name)
     }
 
-    internal func pointer(name:str, address:uint) {
+    func pointer(name:str, address:uint) {
         require_property(sdl_set_pointer_property(
             self.handle, C.terminated_pointer(name), C.pointer_bits(address)
         ) != 0, name)
     }
 
-    internal func native_handle() uint32 { return self.handle }
+    func native_handle() uint32 { return self.handle }
 }
 
-internal func property_text(properties:uint32, name:str) str? {
+func property_text(properties:uint32, name:str) str? {
     let address = C.address_bits(sdl_get_string_property(
         properties, C.terminated_pointer(name), C.pointer_bits(0 as uint)
     ))

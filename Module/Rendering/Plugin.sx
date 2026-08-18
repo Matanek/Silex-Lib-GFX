@@ -12,7 +12,7 @@ public struct Settings {
 public struct Plugin:PluginProtocol {
     private let settings:Settings
 
-    public init(settings:Settings = Settings()) { self.settings = settings }
+    init(settings:Settings = Settings()) { self.settings = settings }
 
     func id() str { return "GFX.Rendering.Plugin" }
 

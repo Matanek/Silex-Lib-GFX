@@ -3,11 +3,11 @@ use GFX.Application
 class Gate {
     var ready:bool
 
-    internal init() { self.ready = false }
+    init() { self.ready = false }
 
-    internal func signal() { mutex { self.ready = true } }
+    func signal() { mutex { self.ready = true } }
 
-    internal func wait() {
+    func wait() {
         var attempts = 0
         while attempts < 100_000_000 {
             var completed = false
@@ -24,8 +24,8 @@ struct MainProbe { var gate:Gate }
 
 class MainThreadEffect {
     static var observed:int = 0
-    internal static func observe() { MainThreadEffect.observed++ }
-    internal static func count() int { return MainThreadEffect.observed }
+    static func observe() { MainThreadEffect.observed++ }
+    static func count() int { return MainThreadEffect.observed }
 }
 
 func worker_signal(probe:&WorkerProbe) {
@@ -116,7 +116,7 @@ func run_single_worker(application:Application) int {
     return 0
 }
 
-test "preserve barriers with the internal single-worker executor" {
+test "preserve barriers with the single-worker executor" {
     var application = Application(1)
     var resources = application.resources()
     resources.insert(ConflictState(step:0))

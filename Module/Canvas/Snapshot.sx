@@ -14,7 +14,7 @@ public class Snapshot {
     private let text_height:int
     private var text_scale:float
 
-    public init() {
+    init() {
         self.identity = Snapshot.next_identity
         Snapshot.next_identity++
         self.retained_geometry = Mesh()
@@ -24,7 +24,7 @@ public class Snapshot {
         self.text_scale = 1.0
     }
 
-    internal init(geometry:Mesh, commands:Command[], width:int, height:int) {
+    module init(geometry:Mesh, commands:Command[], width:int, height:int) {
         self.identity = Snapshot.next_identity
         Snapshot.next_identity++
         self.retained_geometry = geometry
@@ -34,11 +34,11 @@ public class Snapshot {
         self.text_scale = 1.0
     }
 
-    public func geometry() Mesh { return self.retained_geometry }
-    public func id() int { return self.identity }
-    public func has_text() bool { return self.text_commands.count() > 0 }
-    public func has_cached_text() bool { return self.retained_text != null }
-    public func text(scale:float = 1.0) Image {
+    func geometry() Mesh { return self.retained_geometry }
+    func id() int { return self.identity }
+    func has_text() bool { return self.text_commands.count() > 0 }
+    func has_cached_text() bool { return self.retained_text != null }
+    func text(scale:float = 1.0) Image {
         if !Math.nearly_equal(scale, self.text_scale) || self.retained_text == null {
             self.retained_text = Rasterizer.rasterize_cropped_text(
                 self.text_commands,
@@ -52,7 +52,7 @@ public class Snapshot {
         panic("GFX retained drawing could not cache its text image")
     }
 
-    public func text_layer(scale:float = 1.0) Rasterizer.TextImage {
+    func text_layer(scale:float = 1.0) Rasterizer.TextImage {
         let image = self.text(scale)
         if let layer = self.retained_text { return layer }
         panic("GFX retained drawing could not cache its text layer")

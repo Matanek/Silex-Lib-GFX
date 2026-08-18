@@ -29,7 +29,7 @@ struct FramePacing {
 public struct Plugin:PluginProtocol {
     private let settings:Settings
 
-    public init(settings:Settings = Settings()) {
+    init(settings:Settings = Settings()) {
         self.settings = settings
     }
 

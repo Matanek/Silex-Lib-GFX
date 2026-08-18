@@ -14,7 +14,7 @@ public struct TubeProjectorLight {
     var shadow:Shadow
     var enabled:bool
 
-    public init(
+    init(
         direction:Math.Vec3 = Math.Vec3(-0.4, -1.0, -0.3),
         color:Color = Color.white(),
         intensity:float = 1.0,

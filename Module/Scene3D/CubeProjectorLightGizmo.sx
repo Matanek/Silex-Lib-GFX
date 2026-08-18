@@ -5,7 +5,7 @@ public struct CubeProjectorLightGizmo {
     var show_falloff:bool
     var visible:bool
 
-    public init(color:Color = Color.gizmos(), visible:bool = true) {
+    init(color:Color = Color.gizmos(), visible:bool = true) {
         self.color = color
         self.show_falloff = true
         self.visible = visible

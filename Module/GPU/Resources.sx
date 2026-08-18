@@ -57,7 +57,7 @@ public class Buffer {
     private let byte_count:int
     private var current_usage:Types.BufferUsage? = null
 
-    internal init(device:Device, settings:BufferSettings) {
+    module init(device:Device, settings:BufferSettings) {
         if settings.size <= 0 { panic("GFX.GPU buffer size must be positive") }
         let usage = Types.buffer_usage_flags(settings.usage)
         if usage == 0 { panic("GFX.GPU buffer requires at least one usage") }
@@ -84,14 +84,14 @@ public class Buffer {
         self.device_owner = null
     }
 
-    public func size() int { return self.byte_count }
-    public func usage() Types.BufferUsage { return required_buffer_usage(self.current_usage) }
-    public func name(value:str) {
+    func size() int { return self.byte_count }
+    func usage() Types.BufferUsage { return required_buffer_usage(self.current_usage) }
+    func name(value:str) {
         sdl_set_gpu_buffer_name(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), C.terminated_pointer(value))
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 public class Texture {
@@ -100,7 +100,7 @@ public class Texture {
     private var device_owner:Device? = null
     private var current_settings:TextureSettings? = null
 
-    internal init(device:Device, settings:TextureSettings) {
+    module init(device:Device, settings:TextureSettings) {
         validate_texture(settings)
         var properties = Properties()
         if let name = settings.name { properties.text("SDL.gpu.texture.create.name", name) }
@@ -138,23 +138,23 @@ public class Texture {
         self.device_owner = null
     }
 
-    public func format() Types.TextureFormat { return required_format(required_texture_settings(self.current_settings).format) }
-    public func type() Types.TextureType { return texture_type(required_texture_settings(self.current_settings).type) }
-    public func usage() Types.TextureUsage { return required_texture_settings(self.current_settings).usage }
-    public func width() int { return required_texture_settings(self.current_settings).width }
-    public func height() int { return required_texture_settings(self.current_settings).height }
-    public func layers_or_depth() int { return required_texture_settings(self.current_settings).layers_or_depth }
-    public func mip_levels() int { return required_texture_settings(self.current_settings).mip_levels }
-    public func samples() Types.Samples { return sample_count(required_texture_settings(self.current_settings).samples) }
-    public func byte_count() int {
+    func format() Types.TextureFormat { return required_format(required_texture_settings(self.current_settings).format) }
+    func type() Types.TextureType { return texture_type(required_texture_settings(self.current_settings).type) }
+    func usage() Types.TextureUsage { return required_texture_settings(self.current_settings).usage }
+    func width() int { return required_texture_settings(self.current_settings).width }
+    func height() int { return required_texture_settings(self.current_settings).height }
+    func layers_or_depth() int { return required_texture_settings(self.current_settings).layers_or_depth }
+    func mip_levels() int { return required_texture_settings(self.current_settings).mip_levels }
+    func samples() Types.Samples { return sample_count(required_texture_settings(self.current_settings).samples) }
+    func byte_count() int {
         return texture_byte_count(self.format(), self.width(), self.height(), self.layers_or_depth())
     }
-    public func name(value:str) {
+    func name(value:str) {
         sdl_set_gpu_texture_name(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle), C.terminated_pointer(value))
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 public func texel_block_size(format:Types.TextureFormat) int {
@@ -181,7 +181,7 @@ public class Sampler {
     private let handle:uint
     private var device_owner:Device? = null
 
-    internal init(device:Device, settings:SamplerSettings) {
+    module init(device:Device, settings:SamplerSettings) {
         var properties = Properties()
         if let name = settings.name { properties.text("SDL.gpu.sampler.create.name", name) }
         var storage:uint[7]
@@ -214,8 +214,8 @@ public class Sampler {
         self.device_owner = null
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 public class TransferBuffer {
@@ -225,7 +225,7 @@ public class TransferBuffer {
     private let byte_count:int
     private var current_direction:Types.TransferDirection? = null
 
-    internal init(device:Device, settings:TransferBufferSettings) {
+    module init(device:Device, settings:TransferBufferSettings) {
         if settings.size <= 0 { panic("GFX.GPU transfer buffer size must be positive") }
         var properties = Properties()
         if let name = settings.name { properties.text("SDL.gpu.transferbuffer.create.name", name) }
@@ -250,10 +250,10 @@ public class TransferBuffer {
         self.device_owner = null
     }
 
-    public func size() int { return self.byte_count }
-    public func direction() Types.TransferDirection { return required_direction(self.current_direction) }
+    func size() int { return self.byte_count }
+    func direction() Types.TransferDirection { return required_direction(self.current_direction) }
 
-    public func write(bytes:@uint8[..], offset:int = 0, cycle:bool = false) {
+    func write(bytes:@uint8[..], offset:int = 0, cycle:bool = false) {
         if required_direction(self.current_direction) != Types.TransferDirection.upload { panic("GFX.GPU can only write an upload transfer buffer") }
         validate_range(self.byte_count, offset, bytes.count())
         let address = C.address_bits(sdl_map_gpu_transfer_buffer(
@@ -268,7 +268,7 @@ public class TransferBuffer {
         sdl_unmap_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
     }
 
-    public func write_packed(bytes:str, count:int, offset:int = 0, cycle:bool = false) {
+    func write_packed(bytes:str, count:int, offset:int = 0, cycle:bool = false) {
         if required_direction(self.current_direction) != Types.TransferDirection.upload { panic("GFX.GPU can only write an upload transfer buffer") }
         validate_range(self.byte_count, offset, count)
         if count < 0 || count as uint > C.byte_count(bytes) { panic("GFX.GPU packed upload exceeds its source bytes") }
@@ -284,7 +284,7 @@ public class TransferBuffer {
         sdl_unmap_gpu_transfer_buffer(C.pointer_bits(self.device_handle), C.pointer_bits(self.handle))
     }
 
-    public func read(offset:int = 0, count:int = -1) uint8[] {
+    func read(offset:int = 0, count:int = -1) uint8[] {
         if required_direction(self.current_direction) != Types.TransferDirection.download { panic("GFX.GPU can only read a download transfer buffer") }
         var resolved_count = count
         if resolved_count < 0 { resolved_count = self.byte_count - offset }
@@ -303,19 +303,19 @@ public class TransferBuffer {
         return result
     }
 
-    internal func native_handle() uint { return self.handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_handle() uint { return self.handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
 extend Device {
-    public func buffer(settings:BufferSettings) Buffer { return Buffer(self, settings) }
-    public func texture(settings:TextureSettings) Texture { return Texture(self, settings) }
-    public func sampler(settings:SamplerSettings = SamplerSettings()) Sampler { return Sampler(self, settings) }
-    public func transfer_buffer(settings:TransferBufferSettings) TransferBuffer { return TransferBuffer(self, settings) }
-    public func upload_buffer(size:int, name:str? = null) TransferBuffer {
+    func buffer(settings:BufferSettings) Buffer { return Buffer(self, settings) }
+    func texture(settings:TextureSettings) Texture { return Texture(self, settings) }
+    func sampler(settings:SamplerSettings = SamplerSettings()) Sampler { return Sampler(self, settings) }
+    func transfer_buffer(settings:TransferBufferSettings) TransferBuffer { return TransferBuffer(self, settings) }
+    func upload_buffer(size:int, name:str? = null) TransferBuffer {
         return TransferBuffer(self, TransferBufferSettings(size:size, direction:Types.TransferDirection.upload, name:name))
     }
-    public func download_buffer(size:int, name:str? = null) TransferBuffer {
+    func download_buffer(size:int, name:str? = null) TransferBuffer {
         return TransferBuffer(self, TransferBufferSettings(size:size, direction:Types.TransferDirection.download, name:name))
     }
 }

@@ -8,7 +8,7 @@ public struct Image {
     private let image_pixels:uint8[]
     private let packed:str
 
-    public init() {
+    init() {
         self.image_width = 1
         self.image_height = 1
         let pixels:uint8[] = [255, 255, 255, 255]
@@ -16,7 +16,7 @@ public struct Image {
         self.packed = C.string(@pixels[0:pixels.count()])
     }
 
-    public init(width:int, height:int, rgba:uint8[]) {
+    init(width:int, height:int, rgba:uint8[]) {
         require_dimensions(width, height, rgba.count())
         self.image_width = width
         self.image_height = height
@@ -34,15 +34,15 @@ public struct Image {
         self.packed = rgba
     }
 
-    public static func rgba8(width:int, height:int, pixels:uint8[]) Image {
+    static func rgba8(width:int, height:int, pixels:uint8[]) Image {
         return Image(width, height, pixels)
     }
 
-    public static func packed_rgba8(width:int, height:int, pixels:str) Image {
+    static func packed_rgba8(width:int, height:int, pixels:str) Image {
         return Image(width, height, pixels)
     }
 
-    public static func solid(color:Color = Color.white()) Image {
+    static func solid(color:Color = Color.white()) Image {
         let pixels:uint8[] = [
             channel(color.r),
             channel(color.g),
@@ -52,12 +52,12 @@ public struct Image {
         return Image(1, 1, pixels)
     }
 
-    public func width() int { return self.image_width }
-    public func height() int { return self.image_height }
-    public func byte_count() int { return self.image_width * self.image_height * 4 }
-    public func packed_pixels() str { return self.packed }
+    func width() int { return self.image_width }
+    func height() int { return self.image_height }
+    func byte_count() int { return self.image_width * self.image_height * 4 }
+    func packed_pixels() str { return self.packed }
 
-    public func pixels() uint8[] {
+    func pixels() uint8[] {
         if self.image_pixels.count() != 0 { return self.image_pixels }
         var result:uint8[] = []
         var index:uint = 0

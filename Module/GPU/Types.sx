@@ -339,10 +339,10 @@ public struct BufferUsage {
     var compute_read:bool = false
     var compute_write:bool = false
 
-    public static func vertex() BufferUsage { return BufferUsage(vertices:true) }
-    public static func index() BufferUsage { return BufferUsage(indices:true) }
-    public static func indirect_commands() BufferUsage { return BufferUsage(indirect:true) }
-    public static func storage() BufferUsage {
+    static func vertex() BufferUsage { return BufferUsage(vertices:true) }
+    static func index() BufferUsage { return BufferUsage(indices:true) }
+    static func indirect_commands() BufferUsage { return BufferUsage(indirect:true) }
+    static func storage() BufferUsage {
         return BufferUsage(graphics_storage:true, compute_read:true, compute_write:true)
     }
 }
@@ -356,15 +356,15 @@ public struct TextureUsage {
     var compute_write:bool = false
     var compute_read_write:bool = false
 
-    public static func for_sampling() TextureUsage { return TextureUsage(sampled:true) }
-    public static func as_color_target() TextureUsage { return TextureUsage(color_target:true) }
-    public static func as_depth_target() TextureUsage { return TextureUsage(depth_stencil_target:true) }
-    public static func storage() TextureUsage {
+    static func for_sampling() TextureUsage { return TextureUsage(sampled:true) }
+    static func as_color_target() TextureUsage { return TextureUsage(color_target:true) }
+    static func as_depth_target() TextureUsage { return TextureUsage(depth_stencil_target:true) }
+    static func storage() TextureUsage {
         return TextureUsage(graphics_storage:true, compute_read:true, compute_write:true)
     }
 }
 
-internal func buffer_usage_flags(usage:BufferUsage) uint32 {
+func buffer_usage_flags(usage:BufferUsage) uint32 {
     var result:uint32 = 0
     if usage.vertices { result += (1 as uint32) << 0 }
     if usage.indices { result += (1 as uint32) << 1 }
@@ -375,7 +375,7 @@ internal func buffer_usage_flags(usage:BufferUsage) uint32 {
     return result
 }
 
-internal func texture_usage_flags(usage:TextureUsage) uint32 {
+func texture_usage_flags(usage:TextureUsage) uint32 {
     var result:uint32 = 0
     if usage.sampled { result += (1 as uint32) << 0 }
     if usage.color_target { result += (1 as uint32) << 1 }
@@ -387,7 +387,7 @@ internal func texture_usage_flags(usage:TextureUsage) uint32 {
     return result
 }
 
-internal func native_bool(value:bool) int32 {
+func native_bool(value:bool) int32 {
     if value { return 1 }
     return 0
 }

@@ -35,7 +35,7 @@ public struct Info {
 }
 
 public class Displays {
-    public init() {
+    init() {
         initialize_runtime()
     }
 
@@ -43,7 +43,7 @@ public class Displays {
         shutdown_runtime()
     }
 
-    public func all() Id[] {
+    func all() Id[] {
         var count:int32 = 0
         let address = C.address_bits(sdl_get_displays(C.mutable_pointer(count)))
         if address == 0 as uint {
@@ -60,13 +60,13 @@ public class Displays {
         return result
     }
 
-    public func primary() Id {
+    func primary() Id {
         let value = sdl_get_primary_display()
         if value == 0 { panic("GFX.Display could not identify the primary display") }
         return Id(value:value)
     }
 
-    public func info(display:Id) Info {
+    func info(display:Id) Info {
         let name_address = C.address_bits(sdl_get_display_name(display.value))
         if name_address == 0 as uint { panic("GFX.Display could not query the display name") }
 
@@ -88,7 +88,7 @@ public class Displays {
         return result
     }
 
-    public func modes(display:Id) Mode[] {
+    func modes(display:Id) Mode[] {
         var count:int32 = 0
         let root = C.address_bits(sdl_get_fullscreen_modes(display.value, C.mutable_pointer(count)))
         if root == 0 as uint {
@@ -106,11 +106,11 @@ public class Displays {
         return result
     }
 
-    public func desktop_mode(display:Id) Mode {
+    func desktop_mode(display:Id) Mode {
         return required_mode(C.address_bits(sdl_get_desktop_mode(display.value)), "query its desktop mode")
     }
 
-    public func current_mode(display:Id) Mode {
+    func current_mode(display:Id) Mode {
         return required_mode(C.address_bits(sdl_get_current_mode(display.value)), "query its current mode")
     }
 }

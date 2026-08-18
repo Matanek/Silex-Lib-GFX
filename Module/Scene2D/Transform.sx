@@ -5,7 +5,7 @@ public struct Transform {
     var rotation:float
     var scale:Math.Vec2
 
-    public init(
+    init(
         position:Math.Vec2 = Math.Vec2(),
         rotation:float = 0.0,
         scale:Math.Vec2 = Math.Vec2(1.0)
@@ -15,7 +15,7 @@ public struct Transform {
         self.scale = scale
     }
 
-    public func matrix() Math.Mat4 {
+    func matrix() Math.Mat4 {
         return Math.Mat4.transform(
             Math.Vec3(self.position.x, self.position.y, 0.0),
             Math.Quat.angle_axis(self.rotation, Math.Vec3.back()).to_mat3(),
@@ -23,7 +23,7 @@ public struct Transform {
         )
     }
 
-    public func view_matrix() Math.Mat4 {
+    func view_matrix() Math.Mat4 {
         return self.matrix().inverted()
     }
 }

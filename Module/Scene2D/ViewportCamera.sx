@@ -16,7 +16,7 @@ public struct Controls {
     var zoom_in:Input.Key
     var zoom_out:Input.Key
 
-    public init(
+    init(
         pan:Input.MouseButton = Input.MouseButton.middle,
         zoom_in:Input.Key = Input.Key.page_up,
         zoom_out:Input.Key = Input.Key.page_down
@@ -54,7 +54,7 @@ public class Controller {
     private var desired_zoom:float
     private var clock:Clock
 
-    public init(settings:Settings = Settings()) {
+    init(settings:Settings = Settings()) {
         validate(settings)
         self.settings = settings
         var controls = Controls()
@@ -68,27 +68,27 @@ public class Controller {
         self.clock = Clock()
     }
 
-    public func entity() ECS.Entity { return self.camera_entity }
-    public func position() Math.Vec2 { return self.desired_position }
-    public func zoom() float { return self.desired_zoom }
-    internal func controls() Controls { return self.configured_controls }
+    func entity() ECS.Entity { return self.camera_entity }
+    func position() Math.Vec2 { return self.desired_position }
+    func zoom() float { return self.desired_zoom }
+    module func controls() Controls { return self.configured_controls }
 
-    public func set_position(position:Math.Vec2) {
+    func set_position(position:Math.Vec2) {
         self.current_position = position
         self.desired_position = position
     }
 
-    public func set_zoom(zoom:float) {
+    func set_zoom(zoom:float) {
         let clamped = Math.clamp(zoom, self.settings.min_zoom, self.settings.max_zoom)
         self.current_zoom = clamped
         self.desired_zoom = clamped
     }
 
-    public func pan(delta:Math.Vec2) { self.apply_pan(delta.x, delta.y) }
+    func pan(delta:Math.Vec2) { self.apply_pan(delta.x, delta.y) }
 
-    internal func attach(entity:ECS.Entity) { self.camera_entity = entity }
+    module func attach(entity:ECS.Entity) { self.camera_entity = entity }
 
-    public func camera() Camera {
+    func camera() Camera {
         return Camera(
             self.settings.active,
             self.current_zoom,
@@ -97,9 +97,9 @@ public class Controller {
         )
     }
 
-    internal func configure_camera(camera:&Camera) { camera.zoom = self.current_zoom }
+    module func configure_camera(camera:&Camera) { camera.zoom = self.current_zoom }
 
-    internal func apply_pan(mouse_x:float, mouse_y:float) {
+    module func apply_pan(mouse_x:float, mouse_y:float) {
         if !self.settings.active { return }
         let scale = self.settings.pan_sensitivity / self.desired_zoom
         self.desired_position = self.desired_position.subtract(
@@ -107,13 +107,13 @@ public class Controller {
         )
     }
 
-    internal func zoom_wheel(delta:float) {
+    module func zoom_wheel(delta:float) {
         if !self.settings.active { return }
         self.desired_zoom *= 1.0 + delta * self.settings.scroll_zoom_speed
         self.clamp_zoom()
     }
 
-    internal func advance(zooming_in:bool, zooming_out:bool) {
+    module func advance(zooming_in:bool, zooming_out:bool) {
         if !self.settings.active { return }
         var clock = self.clock
         let dt = Math.clamp(clock.tick(), 0.0, self.settings.max_delta_time)
@@ -132,7 +132,7 @@ public class Controller {
         )
     }
 
-    public func transform() Transform { return Transform(self.current_position) }
+    func transform() Transform { return Transform(self.current_position) }
 
     private func clamp_zoom() {
         self.desired_zoom = Math.clamp(
@@ -146,7 +146,7 @@ public class Controller {
 public struct ViewportCamera:PluginProtocol {
     private let settings:Settings
 
-    public init(settings:Settings = Settings()) { self.settings = settings }
+    init(settings:Settings = Settings()) { self.settings = settings }
 
     func id() str { return "GFX.Scene2D.ViewportCamera" }
 

@@ -27,7 +27,7 @@ Custom shaders belong to the extension that defines the pass:
 let program = GPU.ShaderProgram.hlsl(file:"Shaders/Scene.hlsl")
 ```
 
-This extension requires no `internal` access to `GFX.Rendering`.
+This extension requires no non-public access to `GFX.Rendering`.
 
 A pass that performs depth testing requests the shared frame depth target when
 it is registered:

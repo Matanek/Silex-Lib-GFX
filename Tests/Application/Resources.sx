@@ -25,7 +25,7 @@ struct Second {
 }
 
 class DropTrace {
-    public var next:int
+    var next:int
 }
 
 test "isolate and mutate application resources" {

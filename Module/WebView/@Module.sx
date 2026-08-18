@@ -54,7 +54,7 @@ public func media_type_text(media_type:MediaType) str {
     }
 }
 
-internal enum AssetContent {
+enum AssetContent {
     empty
     text(str)
     bytes(uint8[])
@@ -65,35 +65,35 @@ public struct Asset {
     private let media_type_value:MediaType
     private let embedded_content:AssetContent
 
-    public init(content:str, path:str, media_type:MediaType) {
+    init(content:str, path:str, media_type:MediaType) {
         self.logical_path = path
         self.media_type_value = media_type
         self.embedded_content = AssetContent.text(content)
     }
 
-    public init(content:uint8[], path:str, media_type:MediaType) {
+    init(content:uint8[], path:str, media_type:MediaType) {
         self.logical_path = path
         self.media_type_value = media_type
         self.embedded_content = AssetContent.bytes(content)
     }
 
-    public static func html(text:str, path:str = "/index.html") Asset {
+    static func html(text:str, path:str = "/index.html") Asset {
         return Asset(content:text, path:path, media_type:MediaType.html)
     }
 
-    public static func css(text:str, path:str = "/style.css") Asset {
+    static func css(text:str, path:str = "/style.css") Asset {
         return Asset(content:text, path:path, media_type:MediaType.css)
     }
 
-    public static func javascript(text:str, path:str = "/app.js") Asset {
+    static func javascript(text:str, path:str = "/app.js") Asset {
         return Asset(content:text, path:path, media_type:MediaType.javascript)
     }
 
-    public func path() str { return self.logical_path }
-    public func media_type() MediaType { return self.media_type_value }
-    public func media_type_text() str { return media_type_text(self.media_type_value) }
+    func path() str { return self.logical_path }
+    func media_type() MediaType { return self.media_type_value }
+    func media_type_text() str { return media_type_text(self.media_type_value) }
 
-    public func text() str {
+    func text() str {
         return match self.embedded_content {
             empty => missing_asset_text()
             text(value) => value
@@ -101,7 +101,7 @@ public struct Asset {
         }
     }
 
-    internal func is_text() bool {
+    module func is_text() bool {
         return match self.embedded_content {
             empty => false
             text(_) => true
@@ -109,7 +109,7 @@ public struct Asset {
         }
     }
 
-    internal func data() uint8[] {
+    module func data() uint8[] {
         return match self.embedded_content {
             empty => empty_asset_data()
             text(value) => utf8_bytes(value)
@@ -118,11 +118,11 @@ public struct Asset {
     }
 }
 
-internal func missing_asset_text() str {
+func missing_asset_text() str {
     panic("GFX.WebView.Asset contains bytes, not text")
 }
 
-internal func empty_asset_data() uint8[] {
+func empty_asset_data() uint8[] {
     let result:uint8[] = []
     return result
 }
@@ -136,11 +136,11 @@ public struct Site {
         self.embedded_assets = [entry]
     }
 
-    public static func html(text:str) Site {
+    static func html(text:str) Site {
         return Site(Asset.html(text))
     }
 
-    public func add(asset:Asset) {
+    func add(asset:Asset) {
         for let existing in self.embedded_assets {
             if existing.path() == asset.path() {
                 panic("GFX.WebView.Site cannot contain two assets with the same path")
@@ -149,27 +149,27 @@ public struct Site {
         self.embedded_assets.append(asset)
     }
 
-    public func entry() Asset {
+    func entry() Asset {
         return self.require(self.entry_path)
     }
 
-    public func find(path:str) Asset? {
+    func find(path:str) Asset? {
         for let asset in self.embedded_assets {
             if asset.path() == path { return asset }
         }
         return null
     }
 
-    public func require(path:str) Asset {
+    func require(path:str) Asset {
         if let asset = self.find(path) { return asset }
         panic("GFX.WebView.Site does not contain the requested asset")
     }
 
-    public func assets() @self:Asset[..] {
+    func assets() @self:Asset[..] {
         return @self.embedded_assets[0:self.embedded_assets.count()]
     }
 
-    public func count() int { return self.embedded_assets.count() }
+    func count() int { return self.embedded_assets.count() }
 }
 
 public enum Status {
@@ -186,17 +186,17 @@ public struct Availability {
     private let available_value:bool
     private let reason_value:str
 
-    internal static func available() Availability {
+    module static func available() Availability {
         return Availability(available_value:true, reason_value:"")
     }
 
-    internal static func unavailable(reason:str) Availability {
+    module static func unavailable(reason:str) Availability {
         return Availability(available_value:false, reason_value:reason)
     }
 
-    public func is_available() bool { return self.available_value }
+    func is_available() bool { return self.available_value }
 
-    public func reason() str? {
+    func reason() str? {
         if self.available_value { return null }
         return self.reason_value
     }
@@ -207,20 +207,20 @@ public struct Message {
     let payload:str
 }
 
-internal class Bridge {
+class Bridge {
     private var incoming:Message[]
     private var outgoing:Message[]
     private var received_batches:int
     private var sent_batches:int
 
-    public init() {
+    init() {
         self.incoming = []
         self.outgoing = []
         self.received_batches = 0
         self.sent_batches = 0
     }
 
-    internal func record(encoded_batch:str) {
+    func record(encoded_batch:str) {
         match JSON.parse(encoded_batch) {
             failure(error) => {}
             success(var batch) => {
@@ -244,29 +244,29 @@ internal class Bridge {
         }
     }
 
-    internal func queue(message:Message) {
+    func queue(message:Message) {
         var outgoing = self.outgoing
         outgoing.append(message)
         self.outgoing = outgoing
     }
 
-    internal func take_incoming() Message[] {
+    func take_incoming() Message[] {
         let result = self.incoming
         self.incoming = []
         return result
     }
 
-    internal func take_outgoing() Message[] {
+    func take_outgoing() Message[] {
         let result = self.outgoing
         self.outgoing = []
         return result
     }
 
-    internal func restore_outgoing(messages:Message[]) { self.outgoing = messages }
-    internal func mark_sent() { self.sent_batches++ }
+    func restore_outgoing(messages:Message[]) { self.outgoing = messages }
+    func mark_sent() { self.sent_batches++ }
 
-    internal func received_batch_count() int { return self.received_batches }
-    internal func sent_batch_count() int { return self.sent_batches }
+    func received_batch_count() int { return self.received_batches }
+    func sent_batch_count() int { return self.sent_batches }
 }
 
 func receive_bridge_message(handler:uint, command:uint, controller:uint, message:uint) {
@@ -290,7 +290,7 @@ public class View {
     private let handle:uint
     private let document_value:str
 
-    public init(window:@Window, site:Site, settings:Settings = Settings()) {
+    init(window:@Window, site:Site, settings:Settings = Settings()) {
         let availability = availability()
         if !availability.is_available() {
             if let reason = availability.reason() { panic("GFX.WebView is unavailable: " + reason) }
@@ -325,21 +325,21 @@ public class View {
         Platform.destroy(self.handle)
     }
 
-    public func reload() {
+    func reload() {
         if !Platform.load(self.handle, self.document_value) {
             panic("GFX.WebView could not reload its embedded document")
         }
     }
 
-    public func set_visible(visible:bool) {
+    func set_visible(visible:bool) {
         Platform.set_visible(self.handle, visible)
     }
 
-    public func is_visible() bool {
+    func is_visible() bool {
         return Platform.is_visible(self.handle)
     }
 
-    public func set_background(color:Color) {
+    func set_background(color:Color) {
         Platform.set_background(
             self.platform_window,
             self.handle,
@@ -350,16 +350,16 @@ public class View {
         )
     }
 
-    public func status() Status {
+    func status() Status {
         if Platform.loading(self.handle) { return Status.loading }
         return Status.ready
     }
 
-    public func send(name:str, payload:str = "") {
+    func send(name:str, payload:str = "") {
         self.bridge.queue(Message(name:name, payload:payload))
     }
 
-    public func flush() bool {
+    func flush() bool {
         if self.status() == Status.loading { return false }
         let messages = self.bridge.take_outgoing()
         if messages.count() == 0 { return false }
@@ -371,17 +371,17 @@ public class View {
         return false
     }
 
-    public func receive() Message[] { return self.bridge.take_incoming() }
+    func receive() Message[] { return self.bridge.take_incoming() }
 
-    internal func received_batch_count() int { return self.bridge.received_batch_count() }
-    internal func sent_batch_count() int { return self.bridge.sent_batch_count() }
+    module func received_batch_count() int { return self.bridge.received_batch_count() }
+    module func sent_batch_count() int { return self.bridge.sent_batch_count() }
 
-    internal func simulate_close_request() {
+    module func simulate_close_request() {
         Platform.simulate_close_request(self.platform_window)
     }
 }
 
-internal func document(site:Site, settings:Settings = Settings()) str {
+func document(site:Site, settings:Settings = Settings()) str {
     var result = site.entry().text() +
         "\n<script>" + context_menu_script(settings) + "</script>\n"
     for let asset in site.assets() {
@@ -404,11 +404,11 @@ internal func document(site:Site, settings:Settings = Settings()) str {
     return result
 }
 
-internal func data_uri(asset:Asset) str {
+func data_uri(asset:Asset) str {
     return "data:" + asset.media_type_text() + ";base64," + base64(asset.data())
 }
 
-internal func base64(values:uint8[]) str {
+func base64(values:uint8[]) str {
     let alphabet = utf8_bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
     var output:uint8[] = []
     var index = 0
@@ -436,7 +436,7 @@ internal func base64(values:uint8[]) str {
     return C.string(@output[0:output.count()])
 }
 
-internal func replace_all(text:str, pattern:str, replacement:str) str {
+func replace_all(text:str, pattern:str, replacement:str) str {
     let input = utf8_bytes(text)
     let searched = utf8_bytes(pattern)
     if searched.count() == 0 { return text }
@@ -461,7 +461,7 @@ internal func replace_all(text:str, pattern:str, replacement:str) str {
     return C.string(@output[0:output.count()])
 }
 
-internal func is_css(media_type:MediaType) bool {
+func is_css(media_type:MediaType) bool {
     return match media_type {
         css => true
         custom(value) => value == "text/css" || value == "text/css; charset=utf-8"
@@ -469,7 +469,7 @@ internal func is_css(media_type:MediaType) bool {
     }
 }
 
-internal func is_javascript(media_type:MediaType) bool {
+func is_javascript(media_type:MediaType) bool {
     return match media_type {
         javascript => true
         custom(value) => value == "text/javascript" || value == "text/javascript; charset=utf-8"
@@ -477,7 +477,7 @@ internal func is_javascript(media_type:MediaType) bool {
     }
 }
 
-internal func context_menu_script(settings:Settings) str {
+func context_menu_script(settings:Settings) str {
     if settings.context_menu { return "" }
     return "document.addEventListener('contextmenu',event=>event.preventDefault(),{capture:true});"
 }

@@ -3,34 +3,34 @@ use GFX.ECS.EntityRecipe.EntityRecipe
 use GFX.ECS.World.World
 use Interop.C
 
-internal protocol StructuralCommand {
+protocol StructuralCommand {
     func apply(world:&World)
 }
 
 // Keeps the erased command family concrete even in programs that only use
 // spawn/destroy. Generic insert/remove implementations are added on demand.
-internal struct EmptyStructuralCommand:StructuralCommand {
+struct EmptyStructuralCommand:StructuralCommand {
     func apply(world:&World) {}
 }
 
-internal enum Command {
+enum Command {
     spawn(EntityRecipe)
     destroy(Entity)
     structural(StructuralCommand)
 }
 
-internal struct CommandEntry {
+struct CommandEntry {
     let system_order:int
     let interval_order:int
     let sequence:int
     var command:Command
 }
 
-internal struct InsertCommand<T>:StructuralCommand {
+struct InsertCommand<T>:StructuralCommand {
     private let entity:Entity
     private var component:T?
 
-    internal init(entity:Entity, component:T) {
+    init(entity:Entity, component:T) {
         self.entity = entity
         self.component = component
     }
@@ -47,10 +47,10 @@ internal struct InsertCommand<T>:StructuralCommand {
     }
 }
 
-internal struct RemoveCommand<T>:StructuralCommand {
+struct RemoveCommand<T>:StructuralCommand {
     private let entity:Entity
 
-    internal init(entity:Entity) { self.entity = entity }
+    init(entity:Entity) { self.entity = entity }
 
     func apply(world:&World) {
         if world.is_alive(self.entity) { world.remove<T>(self.entity) }
@@ -64,7 +64,7 @@ public class Commands {
     private var interval_order:int
     private var next_sequence:int
 
-    internal init() {
+    module init() {
         self.pending = []
         self.parent_address = 0
         self.system_order = -1
@@ -72,7 +72,7 @@ public class Commands {
         self.next_sequence = 0
     }
 
-    internal init(parent_address:uint, system_order:int, interval_order:int) {
+    module init(parent_address:uint, system_order:int, interval_order:int) {
         self.pending = []
         self.parent_address = parent_address
         self.system_order = system_order
@@ -80,13 +80,13 @@ public class Commands {
         self.next_sequence = 0
     }
 
-    internal func __silex_address() uint { return C.object_address(self) }
+    module func __silex_address() uint { return C.object_address(self) }
 
-    internal static func __silex_writer(parent_address:uint, system_order:int, interval_order:int) Commands {
+    module static func __silex_writer(parent_address:uint, system_order:int, interval_order:int) Commands {
         return Commands(parent_address, system_order, interval_order)
     }
 
-    internal func __silex_finish() {
+    module func __silex_finish() {
         if self.parent_address == 0 { return }
         var root = C.object_from_address<Commands>(self.parent_address)
         var entries = self.pending
@@ -94,23 +94,23 @@ public class Commands {
         root.accept(entries)
     }
 
-    public func spawn(recipe:EntityRecipe) {
+    func spawn(recipe:EntityRecipe) {
         self.append(Command.spawn(recipe))
     }
 
-    public func destroy(entity:Entity) {
+    func destroy(entity:Entity) {
         self.append(Command.destroy(entity))
     }
 
-    public func insert<T>(entity:Entity, component:T) {
+    func insert<T>(entity:Entity, component:T) {
         self.append(Command.structural(InsertCommand<T>(entity, component)))
     }
 
-    public func remove<T>(entity:Entity) {
+    func remove<T>(entity:Entity) {
         self.append(Command.structural(RemoveCommand<T>(entity)))
     }
 
-    internal func flush(world:&World) {
+    module func flush(world:&World) {
         if self.parent_address != 0 {
             var root = C.object_from_address<Commands>(self.parent_address)
             root.flush(world)

@@ -14,5 +14,5 @@ let region = Assets.ImageRegion(x:0, y:0, width:16, height:16)
 ```
 
 `Assets.Plugin` installs the catalogs into `Application`. Handles separate
-public identity from the internal organization of collections; they contain no
+public identity from the module-private organization of collections; they contain no
 SDL or GPU pointer.

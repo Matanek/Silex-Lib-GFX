@@ -1,21 +1,21 @@
 public struct MeshHandle {
-    internal let asset_index:int
-    internal let asset_generation:int
+    module let asset_index:int
+    module let asset_generation:int
 
-    public init() {
+    init() {
         self.asset_index = -1
         self.asset_generation = 0
     }
 
-    internal init(index:int, generation:int) {
+    module init(index:int, generation:int) {
         self.asset_index = index
         self.asset_generation = generation
     }
 
-    public func is_valid() bool {
+    func is_valid() bool {
         return self.asset_index >= 0 && self.asset_generation > 0
     }
 
-    internal func index() int { return self.asset_index }
-    internal func generation() int { return self.asset_generation }
+    module func index() int { return self.asset_index }
+    module func generation() int { return self.asset_generation }
 }

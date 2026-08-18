@@ -6,33 +6,33 @@ use STD.Threading
 public intrinsic class Resources {
     // Inserts a resource or replaces the resource of the same type. Replacing a
     // resource releases the previous value after active borrows have ended.
-    public func insert<T>(value:T)
+    func insert<T>(value:T)
 
     // Retains a class value and consumes a structure value. Used internally so
     // add_plugin gives stateful class plugins application lifetime.
-    internal func retain_class<T>(value:T)
+    module func retain_class<T>(value:T)
 
     // Returns whether a resource of type T is currently stored.
-    public func has<T>() bool
+    func has<T>() bool
 
     // Borrows the resource of type T for reading, or panics when it is absent.
-    public func get<T>() @T
+    func get<T>() @T
 
     // Borrows the resource of type T for mutation, or panics when it is absent.
-    public func get_mut<T>() &T
+    func get_mut<T>() &T
 
     // Borrows the resource of type T for reading when it is present.
-    public func try_get<T>() @T?
+    func try_get<T>() @T?
 
     // Borrows the resource of type T for mutation when it is present.
-    public func try_get_mut<T>() &T?
+    func try_get_mut<T>() &T?
 
     // Removes and returns the resource of type T, transferring ownership to the
     // caller, or returns null when it is absent.
-    public func remove<T>() T?
+    func remove<T>() T?
 
     // Removes every resource and releases their values in reverse insertion order.
-    public func clear()
+    func clear()
 }
 
 public enum Schedule {
@@ -52,15 +52,15 @@ public protocol Plugin {
 }
 
 class RegisteredSystem {
-    internal let schedule:Schedule
-    internal let after:bool
-    internal let callback:func(Application)
-    internal let typed_callback:func(Application, int)
-    internal let reads:str[]
-    internal let writes:str[]
-    internal let flags:uint
+    let schedule:Schedule
+    let after:bool
+    let callback:func(Application)
+    let typed_callback:func(Application, int)
+    let reads:str[]
+    let writes:str[]
+    let flags:uint
 
-    internal init(
+    init(
         schedule:Schedule,
         after:bool,
         callback:func(Application),
@@ -78,9 +78,9 @@ class RegisteredSystem {
         self.flags = flags
     }
 
-    internal func has_flag(flag:uint) bool { return (self.flags & flag) != 0 }
+    func has_flag(flag:uint) bool { return (self.flags & flag) != 0 }
 
-    internal func execute(application:Application, order:int) {
+    func execute(application:Application, order:int) {
         if self.has_flag(16) {
             self.typed_callback(application, order)
         } else {
@@ -90,18 +90,18 @@ class RegisteredSystem {
 }
 
 class SystemStage {
-    internal var systems:int[]
-    internal init() {
+    var systems:int[]
+    init() {
         self.systems = []
     }
 }
 
 class SchedulePlan {
-    internal let schedule:Schedule
-    internal let after:bool
-    internal var stages:SystemStage[]
+    let schedule:Schedule
+    let after:bool
+    var stages:SystemStage[]
 
-    internal init(schedule:Schedule, after:bool) {
+    init(schedule:Schedule, after:bool) {
         self.schedule = schedule
         self.after = after
         self.stages = []
@@ -134,19 +134,19 @@ struct QueryJob:Threading.ParallelJob {
 public class Controller {
     private var running:bool
 
-    internal init() {
+    module init() {
         self.running = false
     }
 
-    public func stop() {
+    func stop() {
         self.running = false
     }
 
-    internal func start() {
+    module func start() {
         self.running = true
     }
 
-    internal func is_running() bool {
+    module func is_running() bool {
         return self.running
     }
 }
@@ -164,7 +164,7 @@ public class Application {
     private var query_local_dispatches:int
     private var query_parallel_dispatches:int
 
-    public init() {
+    init() {
         self.resource_store = Resources()
         self.registered_systems = []
         self.installed_plugin_ids = []
@@ -179,7 +179,7 @@ public class Application {
         self.resource_store.insert(Controller())
     }
 
-    public init(worker_count:int) {
+    init(worker_count:int) {
         self.resource_store = Resources()
         self.registered_systems = []
         self.installed_plugin_ids = []
@@ -194,11 +194,11 @@ public class Application {
         self.resource_store.insert(Controller())
     }
 
-    public func resources() Resources {
+    func resources() Resources {
         return self.resource_store
     }
 
-    public func add_resource<T>(value:T) Application {
+    func add_resource<T>(value:T) Application {
         if self.configuration_locked {
             panic("Application cannot add a resource after run")
         }
@@ -210,7 +210,7 @@ public class Application {
         self.resource_store.clear()
     }
 
-    public func add_plugin<T:Plugin>(plugin:T) Application {
+    func add_plugin<T:Plugin>(plugin:T) Application {
         if self.configuration_locked {
             panic("Application cannot add a plugin after run")
         }
@@ -239,19 +239,19 @@ public class Application {
     }
 
     // Compatibility alias. New code should use the canonical add_plugin name.
-    public func install<T:Plugin>(plugin:T) Application {
+    func install<T:Plugin>(plugin:T) Application {
         return self.add_plugin(plugin)
     }
 
-    public func has_plugin(id:str) bool {
+    func has_plugin(id:str) bool {
         return contains(self.installed_plugin_ids, id)
     }
 
-    public func installed_plugins() str[] {
+    func installed_plugins() str[] {
         return self.installed_plugin_ids
     }
 
-    public func add_system(schedule:Schedule, callback:func(Application)) Application {
+    func add_system(schedule:Schedule, callback:func(Application)) Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
@@ -269,11 +269,11 @@ public class Application {
         return self
     }
 
-    public func add_system<System>(schedule:Schedule, callback:System) Application {
+    func add_system<System>(schedule:Schedule, callback:System) Application {
         panic("typed system registration was not specialized")
     }
 
-    public func add_after_system(schedule:Schedule, callback:func(Application)) Application {
+    func add_after_system(schedule:Schedule, callback:func(Application)) Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
@@ -291,11 +291,11 @@ public class Application {
         return self
     }
 
-    public func add_after_system<System>(schedule:Schedule, callback:System) Application {
+    func add_after_system<System>(schedule:Schedule, callback:System) Application {
         panic("typed system registration was not specialized")
     }
 
-    internal func __silex_add_system(
+    module func __silex_add_system(
         schedule:Schedule,
         callback:func(Application, int),
         after:bool,
@@ -320,7 +320,7 @@ public class Application {
         return self
     }
 
-    internal func __silex_run_query(
+    module func __silex_run_query(
         count:int,
         system_order:int,
         commands_address:uint,
@@ -343,7 +343,7 @@ public class Application {
         ).complete()
     }
 
-    public func with_runner(runner:func(Application) int) Application {
+    func with_runner(runner:func(Application) int) Application {
         if self.configuration_locked {
             panic("Application cannot replace its runner after run")
         }
@@ -351,7 +351,7 @@ public class Application {
         return self
     }
 
-    public func run() int {
+    func run() int {
         if self.configuration_locked {
             panic("Application can only run once")
         }
@@ -360,7 +360,7 @@ public class Application {
         return self.current_runner(self)
     }
 
-    public func run_schedule(schedule:Schedule) {
+    func run_schedule(schedule:Schedule) {
         let reversed = schedule == Schedule.shutdown || schedule == Schedule.finalize
         if !reversed && self.configuration_locked {
             self.run_plan(schedule, false)
@@ -371,34 +371,34 @@ public class Application {
         }
     }
 
-    public func stop() {
+    func stop() {
         var resources = self.resource_store
         var controller:&Controller = resources.get_mut<Controller>()
         controller.stop()
     }
 
-    public func is_running() bool {
+    func is_running() bool {
         var resources = self.resource_store
         let controller:@Controller = resources.get<Controller>()
         return controller.is_running()
     }
 
-    internal func start() {
+    module func start() {
         var resources = self.resource_store
         var controller:&Controller = resources.get_mut<Controller>()
         controller.start()
     }
 
-    internal func scheduler_plan_build_count() int { return self.schedule_plan_builds }
+    package func scheduler_plan_build_count() int { return self.schedule_plan_builds }
 
-    internal func scheduler_stage_count(schedule:Schedule, after:bool) int {
+    package func scheduler_stage_count(schedule:Schedule, after:bool) int {
         for plan in self.schedule_plans {
             if plan.schedule == schedule && plan.after == after { return plan.stages.count() }
         }
         return 0
     }
 
-    internal func scheduler_worker_system_count(schedule:Schedule, after:bool) int {
+    module func scheduler_worker_system_count(schedule:Schedule, after:bool) int {
         var count = 0
         for plan in self.schedule_plans {
             if plan.schedule != schedule || plan.after != after { continue }
@@ -412,7 +412,7 @@ public class Application {
         return count
     }
 
-    internal func scheduler_parallel_query_system_count(schedule:Schedule, after:bool) int {
+    package func scheduler_parallel_query_system_count(schedule:Schedule, after:bool) int {
         var count = 0
         for system in self.registered_systems {
             if system.schedule == schedule && system.after == after && system.has_flag(32) { count++ }
@@ -420,8 +420,8 @@ public class Application {
         return count
     }
 
-    internal func query_local_dispatch_count() int { return self.query_local_dispatches }
-    internal func query_parallel_dispatch_count() int { return self.query_parallel_dispatches }
+    module func query_local_dispatch_count() int { return self.query_local_dispatches }
+    package func query_parallel_dispatch_count() int { return self.query_parallel_dispatches }
     private func run_systems(schedule:Schedule, after:bool, reversed:bool) {
         if reversed {
             var index = self.registered_systems.count() - 1

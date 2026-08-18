@@ -17,19 +17,19 @@ use Interop.C
 use STD.Math
 
 class CachedOverlay {
-    internal let entity:ECS.Entity
-    internal var revision:int
-    internal var vertices:GPU.Buffer? = null
-    internal var vertex_upload:GPU.TransferBuffer? = null
-    internal var vertex_capacity:int
-    internal var vertex_count:int
-    internal var instance:GPU.Buffer? = null
-    internal var instance_upload:GPU.TransferBuffer? = null
-    internal var text:GPU.Texture? = null
-    internal var text_revision:int
-    internal var text_scale:float
+    let entity:ECS.Entity
+    var revision:int
+    var vertices:GPU.Buffer? = null
+    var vertex_upload:GPU.TransferBuffer? = null
+    var vertex_capacity:int
+    var vertex_count:int
+    var instance:GPU.Buffer? = null
+    var instance_upload:GPU.TransferBuffer? = null
+    var text:GPU.Texture? = null
+    var text_revision:int
+    var text_scale:float
 
-    internal init(entity:ECS.Entity) {
+    init(entity:ECS.Entity) {
         self.entity = entity
         self.revision = 0
         self.vertex_capacity = 0
@@ -40,25 +40,25 @@ class CachedOverlay {
 }
 
 class CachedSceneDrawing {
-    internal let snapshot_id:int
-    internal var vertices:GPU.Buffer? = null
-    internal var upload:GPU.TransferBuffer? = null
-    internal var vertex_count:int
+    let snapshot_id:int
+    var vertices:GPU.Buffer? = null
+    var upload:GPU.TransferBuffer? = null
+    var vertex_count:int
 
-    internal init(snapshot_id:int) {
+    init(snapshot_id:int) {
         self.snapshot_id = snapshot_id
         self.vertex_count = 0
     }
 }
 
 class CachedImage {
-    internal let kind:int
-    internal let index:int
-    internal let generation:int
-    internal var revision:int
-    internal var texture:GPU.Texture? = null
+    let kind:int
+    let index:int
+    let generation:int
+    var revision:int
+    var texture:GPU.Texture? = null
 
-    internal init(kind:int, index:int, generation:int) {
+    init(kind:int, index:int, generation:int) {
         self.kind = kind
         self.index = index
         self.generation = generation
@@ -67,49 +67,49 @@ class CachedImage {
 }
 
 struct Draw {
-    internal let cache:int
-    internal let model:Math.Mat4
-    internal let text_model:Math.Mat4
-    internal let text_size:Math.Vec2
-    internal let text_pivot:Math.Vec2
-    internal let color:Color
-    internal let layer:int
-    internal let order:int
+    let cache:int
+    let model:Math.Mat4
+    let text_model:Math.Mat4
+    let text_size:Math.Vec2
+    let text_pivot:Math.Vec2
+    let color:Color
+    let layer:int
+    let order:int
 }
 
 struct SceneDraw {
-    internal let cache:int
-    internal let model_x:Math.Vec2
-    internal let model_y:Math.Vec2
-    internal let model_translation:Math.Vec2
-    internal let color:Color
-    internal let layer:int
-    internal let depth:float
-    internal let order:int
+    let cache:int
+    let model_x:Math.Vec2
+    let model_y:Math.Vec2
+    let model_translation:Math.Vec2
+    let color:Color
+    let layer:int
+    let depth:float
+    let order:int
 }
 
 struct SpriteDraw {
-    internal let cache:int
-    internal let model:Math.Mat4
-    internal let size:Math.Vec2
-    internal let pivot:Math.Vec2
-    internal let color:Color
-    internal let region:Math.Vec4
-    internal let sampling:int
-    internal let layer:int
-    internal let depth:float
-    internal let order:int
+    let cache:int
+    let model:Math.Mat4
+    let size:Math.Vec2
+    let pivot:Math.Vec2
+    let color:Color
+    let region:Math.Vec4
+    let sampling:int
+    let layer:int
+    let depth:float
+    let order:int
 }
 
 struct SceneEntry {
-    internal let kind:int
-    internal let index:int
-    internal let layer:int
-    internal let depth:float
-    internal let order:int
+    let kind:int
+    let index:int
+    let layer:int
+    let depth:float
+    let order:int
 }
 
-internal class Renderer {
+class Renderer {
     private var drawing_pipeline:GPU.GraphicsPipeline? = null
     private var sprite_pipeline:GPU.GraphicsPipeline? = null
     private var grid_pipeline:GPU.GraphicsPipeline? = null
@@ -133,7 +133,7 @@ internal class Renderer {
     private var camera_ready:bool
     private var grid:Grid? = null
 
-    internal init() {
+    init() {
         self.overlays = []
         self.draws = []
         self.scene_drawing_cache = []
@@ -148,7 +148,7 @@ internal class Renderer {
         self.camera_ready = false
     }
 
-    internal func start(device:@GPU.Device, surface:@GPU.Surface) {
+    func start(device:@GPU.Device, surface:@GPU.Surface) {
         let target = color_target(surface.format())
 
         var drawing_buffers:GPU.VertexBufferLayout[] = []
@@ -234,7 +234,7 @@ internal class Renderer {
         )
     }
 
-    internal func prepare(
+    func prepare(
         device:@GPU.Device,
         world:@ECS.World,
         window:@Window,
@@ -403,7 +403,7 @@ internal class Renderer {
         sort_draws(self.draws)
     }
 
-    internal func draw(pass:@GPU.RenderPass) {
+    func draw(pass:@GPU.RenderPass) {
         self.draw_grid(pass)
         self.draw_scene(pass)
         var projection = Packing.view_projection(self.projection)
@@ -428,7 +428,7 @@ internal class Renderer {
         }
     }
 
-    internal func set_grid(value:Grid) { self.grid = value }
+    func set_grid(value:Grid) { self.grid = value }
 
     private func find_camera(world:@ECS.World, viewport:Math.Vec2) {
         self.camera_ready = false

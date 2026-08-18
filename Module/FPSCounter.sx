@@ -25,7 +25,7 @@ public struct Settings {
     var margin:Math.Vec2
     var refresh_interval:float
 
-    public init() {
+    init() {
         self.anchor = Anchor.top_left
         self.margin = Math.Vec2(16.0)
         self.refresh_interval = 0.25
@@ -33,13 +33,13 @@ public struct Settings {
 }
 
 class State {
-    internal let settings:Settings
-    internal var elapsed:float
-    internal var frames:int
-    internal var display:ECS.Entity
-    internal var clock:Clock
+    let settings:Settings
+    var elapsed:float
+    var frames:int
+    var display:ECS.Entity
+    var clock:Clock
 
-    internal init(settings:Settings) {
+    init(settings:Settings) {
         self.settings = settings
         self.elapsed = 0.0
         self.frames = 0
@@ -51,7 +51,7 @@ class State {
 public struct Plugin:PluginProtocol {
     private let settings:Settings
 
-    public init(settings:Settings = Settings()) {
+    init(settings:Settings = Settings()) {
         if settings.margin.x < 0.0 || settings.margin.y < 0.0 {
             panic("GFX.FPSCounter margins must not be negative")
         }

@@ -27,7 +27,7 @@ struct AnalyticQuad {
     let mode:float
 }
 
-internal func geometry(commands:@Command[]) Mesh {
+func geometry(commands:@Command[]) Mesh {
     var vertices:Vertex[] = []
     var indices:uint32[] = []
     for command in commands {

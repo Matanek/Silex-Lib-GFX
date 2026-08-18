@@ -1,45 +1,5 @@
-use Interop.C
-use Interop.Boundary
-
-let sdl_init_subsystem = C.function<func(uint32) int32>(
-    library:Boundary.SDL3_mixer,
-    name:"SDL_InitSubSystem"
-)
-
-let sdl_quit_subsystem = C.function<func(uint32) void>(
-    library:Boundary.SDL3_mixer,
-    name:"SDL_QuitSubSystem"
-)
-
-let mix_init = C.function<func() int32>(
-    library:Boundary.SDL3_mixer,
-    name:"MIX_Init"
-)
-
-let mix_decoder_count = C.function<func() int32>(
-    library:Boundary.SDL3_mixer,
-    name:"MIX_GetNumAudioDecoders"
-)
-
-let mix_quit = C.function<func() void>(
-    library:Boundary.SDL3_mixer,
-    name:"MIX_Quit"
-)
+use GFX.Audio
 
 func main() {
-    let audio = 0x0000_0010 as uint32
-    if sdl_init_subsystem(audio) == 0 {
-        panic("SDL3 audio could not initialize")
-    }
-    if mix_init() == 0 {
-        sdl_quit_subsystem(audio)
-        panic("SDL3_mixer could not initialize")
-    }
-    if mix_decoder_count() < 7 {
-        mix_quit()
-        sdl_quit_subsystem(audio)
-        panic("SDL3_mixer is missing required decoders")
-    }
-    mix_quit()
-    sdl_quit_subsystem(audio)
+    var audio = Audio()
 }

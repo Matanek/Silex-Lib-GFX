@@ -66,7 +66,7 @@ class MersenneTwister {
     var state:uint[]
     var index:int
 
-    public init(seed:uint) {
+    init(seed:uint) {
         self.state = []
         self.index = 624
         self.initialize(seed)
@@ -94,7 +94,7 @@ class MersenneTwister {
         return value & 0xFFFF_FFFF
     }
 
-    public func unit_float() float {
+    func unit_float() float {
         let value = self.next_uint32()
         let high = (value >> 16) as float
         let low = (value & 0xFFFF) as float

@@ -1,18 +1,18 @@
 public struct Entity {
-    public let index:int
-    public let generation:int
+    let index:int
+    let generation:int
 
-    public init() {
+    init() {
         self.index = -1
         self.generation = 0
     }
 
-    internal init(index:int, generation:int) {
+    module init(index:int, generation:int) {
         self.index = index
         self.generation = generation
     }
 
-    public func is_valid() bool {
+    func is_valid() bool {
         return self.index >= 0 && self.generation > 0
     }
 }

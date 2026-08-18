@@ -1,20 +1,20 @@
 use GFX.ECS.ComponentStore.ComponentStore
 use GFX.ECS.Entity.Entity
 
-internal protocol ComponentValue {
+protocol ComponentValue {
     func apply(store:&ComponentStore, entity:Entity) int
 }
 
 // Keeps the erased component family concrete in programs that construct a
 // World but never add a component. Real values always use TypedComponentValue.
-internal struct EmptyComponentValue:ComponentValue {
+struct EmptyComponentValue:ComponentValue {
     func apply(store:&ComponentStore, entity:Entity) int { return -1 }
 }
 
-internal struct TypedComponentValue<T>:ComponentValue {
+struct TypedComponentValue<T>:ComponentValue {
     private var value:T?
 
-    internal init(value:T) { self.value = value }
+    init(value:T) { self.value = value }
 
     func apply(store:&ComponentStore, entity:Entity) int {
         var component = self.value
@@ -28,12 +28,12 @@ public class EntityRecipe {
     private var spawned:bool
     private var components:ComponentValue[]
 
-    public init() {
+    init() {
         self.spawned = false
         self.components = []
     }
 
-    public func with<T>(component:T) EntityRecipe {
+    func with<T>(component:T) EntityRecipe {
         if self.spawned {
             panic("GFX.ECS cannot change an entity recipe after it was spawned")
         }
@@ -41,7 +41,7 @@ public class EntityRecipe {
         return self
     }
 
-    internal func take_components() ComponentValue[] {
+    module func take_components() ComponentValue[] {
         if self.spawned {
             panic("GFX.ECS entity recipe was already spawned")
         }

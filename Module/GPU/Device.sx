@@ -68,7 +68,7 @@ public struct SurfaceSettings {
 public class Device {
     private let handle:uint
 
-    public init(settings:DeviceSettings = DeviceSettings()) {
+    init(settings:DeviceSettings = DeviceSettings()) {
         let flags = shader_format_flags(settings.shader_formats)
         if flags == 0 { panic("GFX.GPU requires at least one shader format") }
         initialize_runtime()
@@ -86,7 +86,7 @@ public class Device {
         shutdown_runtime()
     }
 
-    public static func is_supported(settings:DeviceSettings = DeviceSettings()) bool {
+    static func is_supported(settings:DeviceSettings = DeviceSettings()) bool {
         if shader_format_flags(settings.shader_formats) == 0 { return false }
         initialize_runtime()
         let supported = query_device(settings, false) != 0 as uint
@@ -94,7 +94,7 @@ public class Device {
         return supported
     }
 
-    public static func drivers() str[] {
+    static func drivers() str[] {
         var result:str[] = []
         let count = sdl_get_num_gpu_drivers()
         var index:int32 = 0
@@ -105,11 +105,11 @@ public class Device {
         return result
     }
 
-    public func driver() str {
+    func driver() str {
         return copy_text(C.address_bits(sdl_get_gpu_device_driver(C.pointer_bits(self.handle))))
     }
 
-    public func shader_formats() ShaderFormats {
+    func shader_formats() ShaderFormats {
         let flags = sdl_get_gpu_shader_formats(C.pointer_bits(self.handle))
         return ShaderFormats(
             platform_private:(flags & (1 as uint32)) != 0,
@@ -121,7 +121,7 @@ public class Device {
         )
     }
 
-    public func info() DeviceInfo {
+    func info() DeviceInfo {
         let properties = sdl_get_gpu_device_properties(C.pointer_bits(self.handle))
         if properties == 0 { panic("GFX.GPU could not inspect the device: " + gpu_error()) }
         return DeviceInfo(
@@ -132,16 +132,16 @@ public class Device {
         )
     }
 
-    public func present(window:Window, settings:SurfaceSettings = SurfaceSettings()) Surface {
+    func present(window:Window, settings:SurfaceSettings = SurfaceSettings()) Surface {
         return Surface(self, window, settings)
     }
 
-    public func allows_frames_in_flight(count:int) bool {
+    func allows_frames_in_flight(count:int) bool {
         if count < 1 || count > 3 { panic("GFX.GPU frames in flight must be between 1 and 3") }
         return sdl_set_gpu_allowed_frames_in_flight(C.pointer_bits(self.handle), count as uint32) != 0
     }
 
-    public func supports(feature:Types.TextureFormat, options:Types.TextureUsage, type:Types.TextureType = Types.TextureType.texture_2d) bool {
+    func supports(feature:Types.TextureFormat, options:Types.TextureUsage, type:Types.TextureType = Types.TextureType.texture_2d) bool {
         return sdl_gpu_texture_supports_format(
             C.pointer_bits(self.handle),
             feature.raw_value as int32,
@@ -150,7 +150,7 @@ public class Device {
         ) != 0
     }
 
-    public func supports(feature:Types.TextureFormat, options:Types.Samples) bool {
+    func supports(feature:Types.TextureFormat, options:Types.Samples) bool {
         return sdl_gpu_texture_supports_sample_count(
             C.pointer_bits(self.handle),
             feature.raw_value as int32,
@@ -158,14 +158,14 @@ public class Device {
         ) != 0
     }
 
-    public func wait_until_idle() {
+    func wait_until_idle() {
         require_gpu_action(sdl_wait_for_gpu_idle(C.pointer_bits(self.handle)) != 0, "wait until idle")
     }
 
-    public func suspend() { sdl_gdk_suspend_gpu(C.pointer_bits(self.handle)) }
-    public func resume() { sdl_gdk_resume_gpu(C.pointer_bits(self.handle)) }
+    func suspend() { sdl_gdk_suspend_gpu(C.pointer_bits(self.handle)) }
+    func resume() { sdl_gdk_resume_gpu(C.pointer_bits(self.handle)) }
 
-    internal func native_handle() uint { return self.handle }
+    module func native_handle() uint { return self.handle }
 }
 
 public class Surface {
@@ -176,7 +176,7 @@ public class Surface {
     private var current_present_mode:Types.PresentMode? = null
     private var current_color_space:Types.ColorSpace? = null
 
-    internal init(device:Device, window:Window, settings:SurfaceSettings) {
+    module init(device:Device, window:Window, settings:SurfaceSettings) {
         let device_handle = device.native_handle()
         let window_handle = window.native_handle()
         require_gpu_action(
@@ -208,29 +208,29 @@ public class Surface {
         self.device_owner = null
     }
 
-    public func format() Types.TextureFormat {
+    func format() Types.TextureFormat {
         return texture_format(sdl_get_gpu_swapchain_texture_format(
             C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle)
         ))
     }
 
-    public func present_mode() Types.PresentMode { return required_present_mode(self.current_present_mode) }
-    public func color_space() Types.ColorSpace { return required_color_space(self.current_color_space) }
-    public func is_presentable() bool { return self.format() != Types.TextureFormat.invalid }
+    func present_mode() Types.PresentMode { return required_present_mode(self.current_present_mode) }
+    func color_space() Types.ColorSpace { return required_color_space(self.current_color_space) }
+    func is_presentable() bool { return self.format() != Types.TextureFormat.invalid }
 
-    public func supports(feature:Types.PresentMode) bool {
+    func supports(feature:Types.PresentMode) bool {
         return sdl_window_supports_gpu_present_mode(
             C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), feature.raw_value as int32
         ) != 0
     }
 
-    public func supports(feature:Types.ColorSpace) bool {
+    func supports(feature:Types.ColorSpace) bool {
         return sdl_window_supports_gpu_swapchain_composition(
             C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle), feature.raw_value as int32
         ) != 0
     }
 
-    public func configure(settings:SurfaceSettings) {
+    func configure(settings:SurfaceSettings) {
         var present_mode = required_present_mode(self.current_present_mode)
         var color_space = required_color_space(self.current_color_space)
         if let configured = settings.present_mode { present_mode = configured }
@@ -243,21 +243,21 @@ public class Surface {
         self.current_color_space = color_space
     }
 
-    public func wait_until_ready() {
+    func wait_until_ready() {
         require_gpu_action(sdl_wait_for_gpu_swapchain(
             C.pointer_bits(self.device_handle), C.pointer_bits(self.window_handle)
         ) != 0, "wait for window presentation")
     }
 
-    internal func native_window() uint { return self.window_handle }
-    internal func owner_handle() uint { return self.device_handle }
+    module func native_window() uint { return self.window_handle }
+    module func owner_handle() uint { return self.device_handle }
 }
 
-internal func require_gpu_action(success:bool, action:str) {
+func require_gpu_action(success:bool, action:str) {
     if !success { panic("GFX.GPU could not " + action + ": " + gpu_error()) }
 }
 
-internal func gpu_error() str {
+func gpu_error() str {
     return copy_text(C.address_bits(sdl_get_error()))
 }
 
@@ -361,7 +361,7 @@ local func required_color_space(value:Types.ColorSpace?) Types.ColorSpace {
     panic("GFX.GPU surface has no color space")
 }
 
-internal func texture_format(value:int32) Types.TextureFormat {
+func texture_format(value:int32) Types.TextureFormat {
     if value == 4 { return Types.TextureFormat.rgba8_unorm }
     if value == 8 { return Types.TextureFormat.rgb10a2_unorm }
     if value == 12 { return Types.TextureFormat.bgra8_unorm }

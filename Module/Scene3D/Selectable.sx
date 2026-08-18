@@ -6,21 +6,21 @@ use STD.Math
 public struct Selectable {
     var enabled:bool
     var screen_radius:float
-    internal var selected:bool
-    internal var outline:Color
+    module var selected:bool
+    module var outline:Color
 
-    public init(enabled:bool = true, screen_radius:float = 14.0) {
+    init(enabled:bool = true, screen_radius:float = 14.0) {
         self.enabled = enabled
         self.screen_radius = screen_radius
         self.selected = false
         self.outline = Color.amber_400()
     }
 
-    public func is_selected() bool { return self.selected }
-    public func point_radius() float { return Math.max(0.0, self.screen_radius) }
-    public func set_selected(value:bool, color:Color) {
+    func is_selected() bool { return self.selected }
+    func point_radius() float { return Math.max(0.0, self.screen_radius) }
+    func set_selected(value:bool, color:Color) {
         self.selected = value
         self.outline = color
     }
-    public func outline_color() Color { return self.outline }
+    func outline_color() Color { return self.outline }
 }

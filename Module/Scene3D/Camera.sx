@@ -9,7 +9,7 @@ public struct Camera {
     var order:int
     private var orthographic_height:float
 
-    public init(
+    init(
         active:bool = true,
         vertical_fov:float = 1.04719758,
         near_plane:float = 0.1,
@@ -24,24 +24,24 @@ public struct Camera {
         self.orthographic_height = 0.0
     }
 
-    public func view(transform:@Transform) Math.Mat4 {
+    func view(transform:@Transform) Math.Mat4 {
         return transform.view_matrix()
     }
 
-    public func is_active() bool { return self.active }
+    func is_active() bool { return self.active }
 
-    public func render_order() int { return self.order }
+    func render_order() int { return self.order }
 
-    public func use_perspective() { self.orthographic_height = 0.0 }
+    func use_perspective() { self.orthographic_height = 0.0 }
 
-    public func use_orthographic(height:float) {
+    func use_orthographic(height:float) {
         if height <= 0.0 { panic("GFX.Camera orthographic height must be positive") }
         self.orthographic_height = height
     }
 
-    public func is_orthographic() bool { return self.orthographic_height > 0.0 }
+    func is_orthographic() bool { return self.orthographic_height > 0.0 }
 
-    public func projection(aspect_ratio:float) Math.Mat4 {
+    func projection(aspect_ratio:float) Math.Mat4 {
         var aspect = aspect_ratio
         if aspect <= 0.0 { aspect = 1.0 }
         var fov = self.vertical_fov
@@ -65,7 +65,7 @@ public struct Camera {
         return Math.Mat4.perspective(fov, aspect, near, far)
     }
 
-    public func project(point:Math.Vec3, transform:@Transform, viewport:Math.Vec2) Math.Vec2? {
+    func project(point:Math.Vec3, transform:@Transform, viewport:Math.Vec2) Math.Vec2? {
         if viewport.x <= 0.0 || viewport.y <= 0.0 { return null }
         let clip = self.projection(viewport.x / viewport.y)
             .multiply(self.view(transform))

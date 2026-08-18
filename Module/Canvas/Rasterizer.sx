@@ -15,18 +15,18 @@ use STD.Text.UTF8
 use Interop.Boundary
 use Interop.C
 
-internal struct Polyline {
-    internal var points:Math.Vec2[]
-    internal var closed:bool
+struct Polyline {
+    var points:Math.Vec2[]
+    var closed:bool
 }
 
-internal struct RectFillCoverage { internal let position:Math.Vec2; internal let size:Math.Vec2; internal let radius:float }
-internal struct RectStrokeCoverage { internal let position:Math.Vec2; internal let size:Math.Vec2; internal let radius:float; internal let width:float }
-internal struct CircleFillCoverage { internal let center:Math.Vec2; internal let radius:float }
-internal struct CircleStrokeCoverage { internal let center:Math.Vec2; internal let radius:float; internal let width:float }
-internal struct LineStrokeCoverage { internal let start:Math.Vec2; internal let end:Math.Vec2; internal let width:float }
+struct RectFillCoverage { let position:Math.Vec2; let size:Math.Vec2; let radius:float }
+struct RectStrokeCoverage { let position:Math.Vec2; let size:Math.Vec2; let radius:float; let width:float }
+struct CircleFillCoverage { let center:Math.Vec2; let radius:float }
+struct CircleStrokeCoverage { let center:Math.Vec2; let radius:float; let width:float }
+struct LineStrokeCoverage { let start:Math.Vec2; let end:Math.Vec2; let width:float }
 
-internal enum Coverage {
+enum Coverage {
     rect_fill(RectFillCoverage)
     rect_stroke(RectStrokeCoverage)
     circle_fill(CircleFillCoverage)
@@ -34,22 +34,22 @@ internal enum Coverage {
     line_stroke(LineStrokeCoverage)
 }
 
-internal struct Bounds {
-    internal let minimum:Math.Vec2
-    internal let maximum:Math.Vec2
+struct Bounds {
+    let minimum:Math.Vec2
+    let maximum:Math.Vec2
 }
 
 public struct TextImage {
-    public let image:Image
-    public let origin:Math.Vec2
-    public let size:Math.Vec2
+    let image:Image
+    let origin:Math.Vec2
+    let size:Math.Vec2
 }
 
-internal func rasterize(commands:@Command[], width:int, height:int, background:Color) Image {
+func rasterize(commands:@Command[], width:int, height:int, background:Color) Image {
     return rasterize_selected(commands, width, height, background, true, true)
 }
 
-internal func rasterize_text(
+func rasterize_text(
     commands:@Command[],
     width:int,
     height:int,
@@ -67,7 +67,7 @@ internal func rasterize_text(
     )
 }
 
-internal func rasterize_cropped_text(
+func rasterize_cropped_text(
     commands:@Command[],
     width:int,
     height:int,
@@ -219,7 +219,7 @@ func rasterize_selected(
     return Image.packed_rgba8(width, height, pixels)
 }
 
-internal func measure_text(value:str, style:TextStyle) TextMetrics {
+func measure_text(value:str, style:TextStyle) TextMetrics {
     if style.size <= 0.0 { panic("GFX.Canvas text size must be positive") }
     return measure_font_text(value, style.size, style.weight, style.typeface())
 }
@@ -494,7 +494,7 @@ func curve_midpoint(a:Math.Vec2, b:Math.Vec2) Math.Vec2 {
     return Math.Vec2((a.x + b.x) * 0.5, (a.y + b.y) * 0.5)
 }
 
-internal func round_curve_segments(radius:float, sweep:float) int {
+func round_curve_segments(radius:float, sweep:float) int {
     let tolerance = 0.05
     let cosine = Math.clamp(1.0 - tolerance / radius, -1.0, 1.0)
     let maximum_step = 2.0 * Math.acos(cosine)
@@ -546,7 +546,7 @@ func append_flattened_cubic(
     append_flattened_cubic(points, split, right_control, b_end, end, depth + 1)
 }
 
-internal func flatten(path:Path) Polyline {
+func flatten(path:Path) Polyline {
     var points:Math.Vec2[] = []
     var current = Math.Vec2()
     var first = Math.Vec2()

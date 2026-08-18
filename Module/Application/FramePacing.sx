@@ -5,10 +5,10 @@ use Interop.Boundary
 use Interop.C
 
 class State {
-    internal let frame_nanoseconds:uint
-    internal var deadline_nanoseconds:uint
+    let frame_nanoseconds:uint
+    var deadline_nanoseconds:uint
 
-    internal init(frames_per_second:int) {
+    init(frames_per_second:int) {
         self.frame_nanoseconds = (1_000_000_000 / frames_per_second) as uint
         self.deadline_nanoseconds = 0 as uint
     }
@@ -17,7 +17,7 @@ class State {
 public struct FramePacing:PluginProtocol {
     private let frames_per_second:int
 
-    public init(frames_per_second:int = 60) {
+    init(frames_per_second:int = 60) {
         if frames_per_second < 1 || frames_per_second > 1_000 {
             panic("GFX.Application.FramePacing rate must be between 1 and 1000 frames per second")
         }

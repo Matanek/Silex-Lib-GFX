@@ -15,18 +15,18 @@ use GFX.Scene3D.Transform
 use STD.Math
 
 class CachedMesh {
-    internal let index:int
-    internal let generation:int
-    internal var revision:int
-    internal var vertices:GPU.Buffer? = null
-    internal var indices:GPU.Buffer? = null
-    internal var vertex_upload:GPU.TransferBuffer? = null
-    internal var index_upload:GPU.TransferBuffer? = null
-    internal var vertex_capacity:int
-    internal var index_capacity:int
-    internal var index_count:int
+    let index:int
+    let generation:int
+    var revision:int
+    var vertices:GPU.Buffer? = null
+    var indices:GPU.Buffer? = null
+    var vertex_upload:GPU.TransferBuffer? = null
+    var index_upload:GPU.TransferBuffer? = null
+    var vertex_capacity:int
+    var index_capacity:int
+    var index_count:int
 
-    internal init(handle:MeshHandle) {
+    init(handle:MeshHandle) {
         self.index = handle.index()
         self.generation = handle.generation()
         self.revision = 0
@@ -37,12 +37,12 @@ class CachedMesh {
 }
 
 struct Draw {
-    internal let cache:int
-    internal let model:Math.Mat4
-    internal let material:Material
+    let cache:int
+    let model:Math.Mat4
+    let material:Material
 }
 
-internal class Renderer {
+class Renderer {
     private var pipeline:GPU.GraphicsPipeline? = null
     private var shadow_pipeline:GPU.GraphicsPipeline? = null
     private var point_shadow_pipeline:GPU.GraphicsPipeline? = null
@@ -71,7 +71,7 @@ internal class Renderer {
     private var gizmo_count:int
     private var grid:Grid? = null
 
-    internal init() {
+    init() {
         self.meshes = []
         self.draws = []
         self.lighting = Lighting.Frame()
@@ -90,7 +90,7 @@ internal class Renderer {
         self.gizmo_count = 0
     }
 
-    internal func start(device:@GPU.Device, surface:@GPU.Surface) {
+    func start(device:@GPU.Device, surface:@GPU.Surface) {
         var buffers:GPU.VertexBufferLayout[] = []
         buffers.append(GPU.VertexBufferLayout(slot:0, pitch:48))
         var attributes:GPU.VertexAttribute[] = []
@@ -208,7 +208,7 @@ internal class Renderer {
         self.ensure_shadow_resources(device, 1)
     }
 
-    internal func prepare(
+    func prepare(
         device:@GPU.Device,
         world:@ECS.World,
         catalog:@Meshes
@@ -243,17 +243,17 @@ internal class Renderer {
         self.render_shadows(device)
     }
 
-    internal func set_viewport(size:Math.Vec2) {
+    func set_viewport(size:Math.Vec2) {
         self.viewport = size
     }
 
-    internal func set_tone_mapping(value:ToneMapping) {
+    func set_tone_mapping(value:ToneMapping) {
         self.tone_mapping = value
     }
 
-    internal func set_grid(value:Grid) { self.grid = value }
+    func set_grid(value:Grid) { self.grid = value }
 
-    internal func draw(pass:@GPU.RenderPass) {
+    func draw(pass:@GPU.RenderPass) {
         if !self.camera_ready { return }
         if let pipeline = self.pipeline {
             pass.bind(pipeline)

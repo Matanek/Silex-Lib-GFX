@@ -17,7 +17,7 @@ public struct Plugin:PluginProtocol {
     private let site:Site?
     private let settings:Settings
 
-    public init(site:Site, settings:Settings = Settings()) {
+    init(site:Site, settings:Settings = Settings()) {
         self.site = site
         self.settings = settings
     }
