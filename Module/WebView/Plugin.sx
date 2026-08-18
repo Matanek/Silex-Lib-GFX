@@ -24,11 +24,11 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.WebView.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(WindowPlugin())
         application.add_plugin(InputPlugin())
         if let site = self.site {
-            application.resources().insert(Configuration(
+            application.add_resource(Configuration(
                 site:site,
                 settings:self.settings
             ))

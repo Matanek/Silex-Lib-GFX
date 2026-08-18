@@ -26,8 +26,8 @@ public struct FramePacing:PluginProtocol {
 
     func id() str { return "GFX.Application.FramePacing" }
 
-    func build(application:Application) {
-        application.resources().insert(State(self.frames_per_second))
+    func build(application:&Application) {
+        application.add_resource(State(self.frames_per_second))
         application.add_after_system(Schedule.render, pace_frame)
         application.add_system(Schedule.shutdown, stop_pacing)
     }

@@ -23,7 +23,7 @@ func run_once(application:Application) int {
 
 test "format values inside injected application systems" {
     var application = Application()
-    application.resources().insert(FormattingConfig(
+    application.add_resource(FormattingConfig(
         color:Color(r:0.25, g:0.5, b:0.75, a:1.0),
         vector:Vec3(1.0, 2.0, 3.0)
     ))

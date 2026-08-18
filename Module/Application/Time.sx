@@ -6,8 +6,8 @@ use GFX.Application.FrameTime
 public struct Time:PluginProtocol {
     func id() str { return "GFX.Application.Time" }
 
-    func build(application:Application) {
-        application.resources().insert(FrameTime())
+    func build(application:&Application) {
+        application.add_resource(FrameTime())
         application.add_system(Schedule.pre_update, advance_time)
         application.add_system(Schedule.shutdown, stop_time)
     }

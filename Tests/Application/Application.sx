@@ -5,7 +5,7 @@ struct FoundationPlugin:Application.Plugin {
         return "Foundation"
     }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_system(Application.Schedule.startup, foundation_startup)
         application.add_system(Application.Schedule.shutdown, foundation_shutdown)
     }
@@ -18,7 +18,7 @@ struct GamePlugin:Application.Plugin {
         return "Game"
     }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(FoundationPlugin())
         application.add_system(Application.Schedule.startup, game_startup)
         application.add_after_system(Application.Schedule.startup, after_startup)
@@ -27,6 +27,31 @@ struct GamePlugin:Application.Plugin {
         application.add_after_system(Application.Schedule.shutdown, after_shutdown)
     }
 }
+
+struct PluginSelection {
+    let value:int
+    let builds:int
+}
+
+struct ConfigurablePlugin:Application.Plugin {
+    let value:int
+
+    func id() str { return "Configurable" }
+
+    func build(application:&Application) {
+        application.add_resource(PluginSelection(value:self.value, builds:1))
+    }
+}
+
+struct DependentPlugin:Application.Plugin {
+    func id() str { return "Dependent" }
+
+    func build(application:&Application) {
+        application.add_plugin(ConfigurablePlugin(value:1))
+    }
+}
+
+func resolve_plugins_only(application:Application) int { return 0 }
 
 struct ScheduleTrace {
     var step:int
@@ -92,11 +117,12 @@ func verify_application() {
     compatibility.install(FoundationPlugin())
     assert(compatibility.has_plugin("Foundation"))
 
-    assert(application.has_plugin("Foundation"))
+    assert(!application.has_plugin("Foundation"))
     assert(application.has_plugin("Game"))
+    assert(application.run() == 0)
+    assert(application.has_plugin("Foundation"))
     let plugins = application.installed_plugins()
     assert(plugins.count() == 2)
-    assert(application.run() == 0)
     if true {
         let trace:@ScheduleTrace = resources.get<ScheduleTrace>()
         assert(trace.step == 7)
@@ -110,4 +136,36 @@ func verify_application() {
 
 test "compose plugins and schedules" {
     verify_application()
+}
+
+test "prefer an explicit plugin configured after its dependent" {
+    var application = Application()
+        ..add_plugin(DependentPlugin())
+        ..add_plugin(ConfigurablePlugin(value:7))
+        ..with_runner(resolve_plugins_only)
+    assert(application.run() == 0)
+    let selected = application.resources().get<PluginSelection>()
+    assert(selected.value == 7)
+    assert(selected.builds == 1)
+}
+
+test "prefer an explicit plugin configured before its dependent" {
+    var application = Application()
+        ..add_plugin(ConfigurablePlugin(value:9))
+        ..add_plugin(DependentPlugin())
+        ..with_runner(resolve_plugins_only)
+    assert(application.run() == 0)
+    let selected = application.resources().get<PluginSelection>()
+    assert(selected.value == 9)
+    assert(selected.builds == 1)
+}
+
+test "resolve a dependency with its fallback settings" {
+    var application = Application()
+        ..add_plugin(DependentPlugin())
+        ..with_runner(resolve_plugins_only)
+    assert(application.run() == 0)
+    let selected = application.resources().get<PluginSelection>()
+    assert(selected.value == 1)
+    assert(selected.builds == 1)
 }

@@ -20,6 +20,7 @@ func run_update(application:Application) int {
 test "derive resource, component, World, and Application access descriptors" {
     var application = Application(1)
     application.add_plugin(ECS.Plugin())
+    application.prepare()
     if true {
         var resources = application.resources()
         var world:&ECS.World = resources.get_mut<ECS.World>()
@@ -52,8 +53,8 @@ func chain_last(right:@ChainRight) { assert(right.value == 1) }
 
 test "preserve transitive registration dependencies between stages" {
     var application = Application(1)
-    application.resources().insert(ChainLeft(value:0))
-    application.resources().insert(ChainRight(value:0))
+    application.add_resource(ChainLeft(value:0))
+    application.add_resource(ChainRight(value:0))
     application.add_system(Application.Schedule.update, chain_first)
     application.add_system(Application.Schedule.update, chain_middle)
     application.add_system(Application.Schedule.update, chain_last)

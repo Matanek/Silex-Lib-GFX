@@ -5,6 +5,7 @@ use GFX.Application.Time as TimePlugin
 test "add the frame time resource" {
     var application = Application()
     application.add_plugin(TimePlugin())
+    application.prepare()
 
     var resources = application.resources()
     let time:@FrameTime = resources.get<FrameTime>()

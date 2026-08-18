@@ -32,8 +32,8 @@ test "display and replace an image through the public viewer" {
     ))
     application.add_plugin(Viewer.Plugin(Assets.Image.solid(Color.sky_400())))
     assert(application.has_plugin("GFX.Window.Plugin"))
-    assert(application.has_plugin("GFX.Input.Plugin"))
-    assert(application.has_plugin("GFX.GPU.Plugin"))
     application.add_system(Application.Schedule.startup, replace_and_close)
     application.run()
+    assert(application.has_plugin("GFX.Input.Plugin"))
+    assert(application.has_plugin("GFX.GPU.Plugin"))
 }

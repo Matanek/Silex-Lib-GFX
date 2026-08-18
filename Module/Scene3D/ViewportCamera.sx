@@ -310,10 +310,10 @@ public struct ViewportCamera:PluginProtocol {
 
     func id() str { return "GFX.Scene3D.ViewportCamera" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(InputPlugin())
         application.add_plugin(ScenePlugin())
-        application.resources().insert(Controller(self.settings))
+        application.add_resource(Controller(self.settings))
         application.add_system(Schedule.startup, create_camera)
         application.add_system(Schedule.update, update_camera)
     }

@@ -22,4 +22,6 @@ let compute = GPU.ComputeProgram.hlsl(source:"...", entry:"compute_main")
 
 Silex compiles these programs for the target; GFX does not impose scene
 shaders. `GPU.Plugin` integrates a surface and the presentation lifecycle with
-`Application`, while the direct API remains available without a plugin.
+`Application`, while the direct API remains available without a plugin. The
+plugin installs `Window.Plugin` with its defaults when the application does not
+provide a configured window explicitly; either plugin may be added first.

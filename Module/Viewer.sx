@@ -159,7 +159,7 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.Viewer.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         let width = viewer_extent(
             self.settings.width,
             self.initial_image.width(),
@@ -183,8 +183,8 @@ public struct Plugin:PluginProtocol {
         application.add_plugin(GPUPlugin(GPUPlugin.Settings()
             ..present_on_start = false
         ))
-        application.resources().insert(View(self.initial_image))
-        application.resources().insert(self.settings)
+        application.add_resource(View(self.initial_image))
+        application.add_resource(self.settings)
         application.add_system(Schedule.startup, start_viewer)
         application.add_system(Schedule.render, render_viewer)
         application.add_system(Schedule.shutdown, stop_viewer)

@@ -21,7 +21,7 @@ struct CloseProbePlugin:Plugin {
 
     func id() str { return self.id_value }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_system(Schedule.startup, push_close_request)
         if self.manual {
             application.add_system(Schedule.update, stop_manually)

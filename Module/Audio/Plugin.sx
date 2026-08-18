@@ -6,7 +6,7 @@ use GFX.Audio
 public struct Plugin:PluginProtocol {
     func id() str { return "GFX.Audio.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_system(Schedule.startup, start_audio)
         application.add_system(Schedule.post_update, collect_finished_audio)
         application.add_system(Schedule.shutdown, stop_audio)

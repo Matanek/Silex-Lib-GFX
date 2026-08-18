@@ -40,7 +40,7 @@ public struct Grid:PluginProtocol {
 
     func id() str { return "GFX.Scene3D.Grid" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(ScenePlugin())
         var resources = application.resources()
         var renderer = resources.get_mut<Renderer>()

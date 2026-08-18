@@ -16,7 +16,7 @@ test "pace an application without requiring a renderer" {
     stopwatch.start()
 
     var application = Application()
-    application.resources().insert(Frames(count:0))
+    application.add_resource(Frames(count:0))
     application
         ..add_plugin(FramePacing(1_000))
         ..add_system(Application.Schedule.update, count_frames)

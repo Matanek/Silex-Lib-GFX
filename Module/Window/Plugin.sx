@@ -87,8 +87,8 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.Window.Plugin" }
 
-    func build(application:Application) {
-        application.resources().insert(Configuration(
+    func build(application:&Application) {
+        application.add_resource(Configuration(
             settings:WindowApi.Settings(
                 title:self.settings.title,
                 width:self.settings.width,
@@ -107,7 +107,7 @@ public struct Plugin:PluginProtocol {
             ),
             visible_on_ready:!self.settings.hidden
         ))
-        application.resources().insert(ClosePolicy(self.settings.close_behavior))
+        application.add_resource(ClosePolicy(self.settings.close_behavior))
         application.add_system(Schedule.startup, start_window)
         application.add_after_system(Schedule.startup, present_without_renderer)
         application.add_system(Schedule.pre_update, pump_window_events)

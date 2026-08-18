@@ -79,7 +79,7 @@ test "play through the added audio plugin from a consumer system" {
     }
 
     var application = Application()
-    application.resources().insert(AudioPluginProbe(played:false))
+    application.add_resource(AudioPluginProbe(played:false))
     application
         ..add_plugin(Audio.Plugin())
         ..add_system(Application.Schedule.startup, play_from_plugin)

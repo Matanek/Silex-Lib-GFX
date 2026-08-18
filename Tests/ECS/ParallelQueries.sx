@@ -35,6 +35,7 @@ func run_case(count:int) int[] {
         ..add_plugin(ECS.Plugin())
         ..add_system(Application.Schedule.update, update_and_destroy)
         ..with_runner(run_update)
+    application.prepare()
     let entities = seed(application, count)
     assert(application.run() == 0)
     var survivors:int[] = []
@@ -98,6 +99,7 @@ test "parallelize a query helper that mutates only its current component" {
         ..add_plugin(ECS.Plugin())
         ..add_system(Application.Schedule.update, update_through_mutating_helper)
         ..with_runner(run_helper_update)
+    application.prepare()
     var resources = application.resources()
     var world:&ECS.World = resources.get_mut<ECS.World>()
     var index = 0
@@ -155,6 +157,7 @@ test "stress deterministic structural commands and generation reuse" {
             ..add_system(Application.Schedule.update, remove_multiples_of_five)
             ..add_system(Application.Schedule.update, insert_odd_markers)
             ..with_runner(run_update)
+        application.prepare()
         let entities = seed(application, 193)
         assert(application.run() == 0)
         var resources = application.resources()

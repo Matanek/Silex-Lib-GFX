@@ -213,20 +213,20 @@ func update_clock(
 }
 
 func main() {
-    var application = Application()
-    application.resources().insert(ClockFace(since_sync:0.0))
-    application.add_plugin(Plugins.Window(Plugins.WindowSettings()
-        ..title = "Clock — GFX.Canvas"
-        ..width = Constants.canvas_size
-        ..height = Constants.canvas_size
-    ))
-    application.add_plugin(Plugins.Input())
-    application.add_plugin(Plugins.Time())
-    application.add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
-        ..clear = Constants.background_color()
-    ))
-    application.add_plugin(Plugins.Scene2D())
-    application.add_system(Application.Schedule.startup, create_clock)
-    application.add_system(Application.Schedule.update, update_clock)
-    application.run()
+    Application()
+        ..add_resource(ClockFace(since_sync:0.0))
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Clock — GFX.Canvas"
+            ..width = Constants.canvas_size
+            ..height = Constants.canvas_size
+        ))
+        ..add_plugin(Plugins.Input())
+        ..add_plugin(Plugins.Time())
+        ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
+            ..clear = Constants.background_color()
+        ))
+        ..add_plugin(Plugins.Scene2D())
+        ..add_system(Application.Schedule.startup, create_clock)
+        ..add_system(Application.Schedule.update, update_clock)
+        ..run()
 }

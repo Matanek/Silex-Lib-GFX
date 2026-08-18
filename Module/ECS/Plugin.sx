@@ -7,7 +7,7 @@ use GFX.ECS.World
 public struct Plugin:PluginProtocol {
     func id() str { return "GFX.ECS.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_resource(World())
         application.add_resource(Commands())
         application.add_after_system(Schedule.post_update, flush_commands)

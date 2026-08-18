@@ -7,6 +7,7 @@ use GFX.GPU as GPUApi
 use GFX.GPU.Commands
 use GFX.Color
 use GFX.Window
+use GFX.Window.Plugin as WindowPlugin
 
 public struct Settings {
     var device:GPUApi.DeviceSettings? = null
@@ -35,15 +36,13 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.GPU.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         var device = GPUApi.DeviceSettings()
         var surface = GPUApi.SurfaceSettings()
         if let configured_device = self.settings.device { device = configured_device }
         if let configured_surface = self.settings.surface { surface = configured_surface }
-        if !application.has_plugin("GFX.Window.Plugin") {
-            panic("GFX.GPU.Plugin requires GFX.Window.Plugin to be added first")
-        }
-        application.resources().insert(Configuration(
+        application.add_plugin(WindowPlugin())
+        application.add_resource(Configuration(
             device:device,
             surface:surface
         ))
@@ -55,7 +54,7 @@ public struct Plugin:PluginProtocol {
             panic("GFX.GPU.Plugin frame interval must be between 0 and 1000 milliseconds")
         }
         if self.settings.frame_interval_ms > 0 {
-            application.resources().insert(FramePacing(milliseconds:self.settings.frame_interval_ms as uint32))
+            application.add_resource(FramePacing(milliseconds:self.settings.frame_interval_ms as uint32))
             application.add_after_system(Schedule.render, pace_frame)
         }
         application.add_system(Schedule.shutdown, stop_gpu)

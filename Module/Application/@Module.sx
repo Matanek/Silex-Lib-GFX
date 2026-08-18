@@ -48,7 +48,7 @@ public enum Schedule {
 
 public protocol Plugin {
     func id() str
-    func build(application:Application)
+    func build(application:&Application)
 }
 
 class RegisteredSystem {
@@ -154,8 +154,12 @@ public class Controller {
 public class Application {
     private var resource_store:Resources
     private var registered_systems:RegisteredSystem[]
+    private var requested_plugin_ids:str[]
+    private var requested_plugins:Plugin[]
     private var installed_plugin_ids:str[]
     private var installing_plugins:str[]
+    private var resolving_plugins:bool
+    private var plugins_prepared:bool
     private var current_runner:func(Application) int
     private var configuration_locked:bool
     private var executor:Threading.Executor
@@ -167,8 +171,12 @@ public class Application {
     init() {
         self.resource_store = Resources()
         self.registered_systems = []
+        self.requested_plugin_ids = []
+        self.requested_plugins = []
         self.installed_plugin_ids = []
         self.installing_plugins = []
+        self.resolving_plugins = false
+        self.plugins_prepared = false
         self.current_runner = run_default
         self.configuration_locked = false
         self.executor = Threading.Executor()
@@ -182,8 +190,12 @@ public class Application {
     init(worker_count:int) {
         self.resource_store = Resources()
         self.registered_systems = []
+        self.requested_plugin_ids = []
+        self.requested_plugins = []
         self.installed_plugin_ids = []
         self.installing_plugins = []
+        self.resolving_plugins = false
+        self.plugins_prepared = false
         self.current_runner = run_default
         self.configuration_locked = false
         self.executor = Threading.Executor(worker_count)
@@ -211,30 +223,29 @@ public class Application {
     }
 
     func add_plugin<T:Plugin>(plugin:T) Application {
+        if self.resolving_plugins {
+            let id = plugin.id()
+            if !contains(self.requested_plugin_ids, id) {
+                self.resource_store.retain_class(plugin)
+                self.requested_plugin_ids.append(id)
+                self.requested_plugins.append(plugin)
+            }
+            var dependency:Plugin = plugin
+            self.resolve_plugin(id, dependency)
+            return self
+        }
         if self.configuration_locked {
             panic("Application cannot add a plugin after run")
         }
+        if self.plugins_prepared {
+            panic("Application cannot add a plugin after prepare")
+        }
 
         let id = plugin.id()
-        if contains(self.installed_plugin_ids, id) {
-            return self
-        }
-        if contains(self.installing_plugins, id) {
-            panic("Application plugin dependency cycle: " + id)
-        }
-
-        var installing = self.installing_plugins
-        installing.append(id)
-        self.installing_plugins = installing
-        plugin.build(self)
-        self.resource_store.retain_class(move plugin)
-        installing = self.installing_plugins
-        let completed = installing.take_last()
-        self.installing_plugins = installing
-        assert(completed == id)
-        var installed = self.installed_plugin_ids
-        installed.append(id)
-        self.installed_plugin_ids = installed
+        if contains(self.requested_plugin_ids, id) { return self }
+        self.resource_store.retain_class(plugin)
+        self.requested_plugin_ids.append(id)
+        self.requested_plugins.append(plugin)
         return self
     }
 
@@ -244,7 +255,7 @@ public class Application {
     }
 
     func has_plugin(id:str) bool {
-        return contains(self.installed_plugin_ids, id)
+        return contains(self.installed_plugin_ids, id) || contains(self.requested_plugin_ids, id)
     }
 
     func installed_plugins() str[] {
@@ -355,12 +366,55 @@ public class Application {
         if self.configuration_locked {
             panic("Application can only run once")
         }
+        self.prepare_plugins()
         self.configuration_locked = true
         self.build_schedule_plans()
         return self.current_runner(self)
     }
 
+    func prepare() Application {
+        self.prepare_plugins()
+        return self
+    }
+
+    private func prepare_plugins() {
+        if self.plugins_prepared { return }
+        var application_systems = self.registered_systems
+        self.registered_systems = []
+        self.resolving_plugins = true
+        var requested_index = 0
+        while requested_index < self.requested_plugins.count() {
+            var plugin:Plugin = self.requested_plugins[requested_index]
+            self.resolve_plugin(self.requested_plugin_ids[requested_index], plugin)
+            requested_index++
+        }
+        self.resolving_plugins = false
+        for system in application_systems {
+            self.registered_systems.append(system)
+        }
+        self.plugins_prepared = true
+    }
+
+    private func resolve_plugin(id:str, candidate:Plugin) {
+        var plugin = candidate
+        let requested_index = index_of(self.requested_plugin_ids, id)
+        if requested_index >= 0 {
+            plugin = self.requested_plugins[requested_index]
+        }
+        if contains(self.installed_plugin_ids, id) { return }
+        if contains(self.installing_plugins, id) {
+            panic("Application plugin dependency cycle: " + id)
+        }
+
+        self.installing_plugins.append(id)
+        plugin.build(self)
+        let completed = self.installing_plugins.take_last()
+        assert(completed == id)
+        self.installed_plugin_ids.append(id)
+    }
+
     func run_schedule(schedule:Schedule) {
+        self.prepare_plugins()
         let reversed = schedule == Schedule.shutdown || schedule == Schedule.finalize
         if !reversed && self.configuration_locked {
             self.run_plan(schedule, false)
@@ -578,6 +632,15 @@ func contains(values:@str[], expected:str) bool {
         }
     }
     return false
+}
+
+func index_of(values:@str[], expected:str) int {
+    var index = 0
+    while index < values.count() {
+        if values[index] == expected { return index }
+        index++
+    }
+    return -1
 }
 
 func run_default(application:Application) int {

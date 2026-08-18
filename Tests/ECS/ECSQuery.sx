@@ -59,6 +59,7 @@ test "query filters components, mutates in place, and commands flush later" {
         ..add_system(Schedule.update, destroy_stationary)
         ..add_system(Schedule.update, change_structure)
         ..with_runner(run_frame)
+    application.prepare()
 
     var first = ECS.Entity()
     var second = ECS.Entity()
@@ -110,6 +111,7 @@ test "query injection preserves the resource world across repeated frames" {
         ..add_plugin(ECS.Plugin())
         ..add_system(Schedule.update, inspect_positions)
         ..with_runner(run_query_many)
+    application.prepare()
 
     if true {
         var resources = application.resources()
@@ -129,6 +131,7 @@ test "query injection preserves the world owned by resources" {
         ..add_plugin(ECS.Plugin())
         ..add_system(Schedule.update, inspect_positions)
         ..with_runner(run_query_once)
+    application.prepare()
 
     if true {
         var resources = application.resources()
@@ -174,6 +177,7 @@ test "readonly queries retrieve dense components after pool compaction" {
         ..add_plugin(ECS.Plugin())
         ..add_system(Schedule.update, capture_read_query)
         ..with_runner(run_query_once)
+    application.prepare()
 
     if true {
         var resources = application.resources()

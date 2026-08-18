@@ -63,9 +63,9 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.FPSCounter.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(Scene2D.Plugin())
-        application.resources().insert(State(self.settings))
+        application.add_resource(State(self.settings))
         application.add_system(Schedule.startup, create_counter)
         application.add_system(Schedule.update, update_counter)
         application.add_system(Schedule.shutdown, stop_counter)

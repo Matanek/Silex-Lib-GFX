@@ -16,9 +16,9 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.Rendering.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(GPUPlugin())
-        application.resources().insert(Renderer(self.settings.clear))
+        application.add_resource(Renderer(self.settings.clear))
         application.add_after_system(Schedule.render, render_frame)
         application.add_system(Schedule.shutdown, stop_renderer)
     }

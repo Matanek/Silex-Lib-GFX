@@ -24,6 +24,17 @@ describe the recurring lifecycle. Systems declare their access through
 injected parameters so the application can order or parallelize compatible
 work.
 
+`add_plugin` records explicit plugin instances until `run`. During resolution,
+calls to `add_plugin` from a plugin's `build` install its dependencies
+recursively. An explicit instance always replaces the dependency's fallback
+instance, even when it was added later, so plugin configuration does not depend
+on call order. Each plugin identifier is built only once.
+
+`run` performs this preparation automatically. Code that needs a plugin-owned
+resource before starting the application can call `prepare()` explicitly after
+adding every plugin, then access `resources()`. No plugin can be added after
+that preparation boundary.
+
 `Application.Time` provides `FrameTime`. `Application.FramePacing` limits a
 loop that does not already have its own presentation mechanism.
 

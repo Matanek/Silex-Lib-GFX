@@ -36,10 +36,10 @@ test "destroy an application WebView before its window" {
     ))
     application.add_plugin(WebViewPlugin(site))
     assert(application.has_plugin("GFX.Window.Plugin"))
-    assert(application.has_plugin("GFX.Input.Plugin"))
     application.add_system(Schedule.update, inspect_web_view)
     application.with_runner(run_lifecycle)
     application.run()
+    assert(application.has_plugin("GFX.Input.Plugin"))
 }
 
 func request_close(window:@Window) {

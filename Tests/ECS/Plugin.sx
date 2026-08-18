@@ -15,7 +15,7 @@ class StatefulPlugin:Application.Plugin {
     init() { self.updates = 0 }
     func id() str { return "GFX.ECS.Tests.Stateful" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_plugin(ECS.Plugin())
         application.add_system(Application.Schedule.startup, StatefulPlugin.spawn)
         application.add_system(Application.Schedule.update, StatefulPlugin.update)
@@ -59,8 +59,6 @@ test "install and remove ECS through its plugin" {
     application.add_system(Application.Schedule.shutdown, observe_shutdown)
 
     assert(application.has_plugin("GFX.ECS.Plugin"))
-    assert(resources.has<ECS.World>())
-    assert(resources.has<ECS.Commands>())
     assert(application.run() == 0)
     assert(plugin.update_count() == 1)
     assert(!resources.has<ECS.World>())

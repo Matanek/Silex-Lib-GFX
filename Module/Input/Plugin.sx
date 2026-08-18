@@ -12,7 +12,7 @@ public struct Plugin:PluginProtocol {
 
     func id() str { return "GFX.Input.Plugin" }
 
-    func build(application:Application) {
+    func build(application:&Application) {
         application.add_system(Schedule.startup, start_input)
         application.add_after_system(Schedule.pre_update, update_input)
         application.add_after_system(Schedule.pre_update, handle_close_request)
