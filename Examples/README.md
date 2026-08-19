@@ -51,7 +51,9 @@ the GPU.
 - `Scene3D/Lighting.sx` switches between sun, spot, cube, tube, and point
   lights with the number keys 1–5.
 - `Scene3D/World.sx` provides a reusable 100 m × 100 m textured world with a
-  first-person camera and a deterministic field of randomized rock cubes.
+  first-person camera, deterministic scatters for rocks, pebbles, trees, and
+  grass, and a live GPU performance panel demonstrating automatic instance
+  batching.
 
 ## WebView
 

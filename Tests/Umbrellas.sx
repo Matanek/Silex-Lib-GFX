@@ -78,6 +78,9 @@ test "expose components resources and plugins through intentional umbrellas" {
     let fps_counter = Plugins.FPSCounter(Plugins.FPSCounterSettings()
         ..anchor = Plugins.FPSCounterAnchor.bottom_right
     )
+    let performance_panel = Plugins.PerformancePanel(Plugins.PerformancePanelSettings()
+        ..anchor = Plugins.FPSCounterAnchor.top_left
+    )
     let grid_2d = Plugins.Grid2D()
     let grid_3d = Plugins.Grid3D()
     let window = Plugins.Window(Plugins.WindowSettings()..hidden = true)

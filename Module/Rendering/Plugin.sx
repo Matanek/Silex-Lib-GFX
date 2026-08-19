@@ -19,9 +19,14 @@ public struct Plugin:PluginProtocol {
     func build(application:&Application) {
         application.add_plugin(GPUPlugin())
         application.add_resource(Renderer(self.settings.clear))
+        application.add_system(Schedule.render, begin_frame_stats)
         application.add_after_system(Schedule.render, render_frame)
         application.add_system(Schedule.shutdown, stop_renderer)
     }
+}
+
+func begin_frame_stats(device:&GPU.Device) {
+    device.reset_command_stats()
 }
 
 func render_frame(application:Application) {

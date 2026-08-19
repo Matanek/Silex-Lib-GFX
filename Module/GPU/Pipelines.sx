@@ -211,6 +211,7 @@ public class GraphicsPipeline {
     private let device_handle:uint
     private let handle:uint
     private var device_owner:Device? = null
+    private let current_primitive:Types.Primitive
 
     module init(device:Device, vertex:@Shader, fragment:@Shader, settings:GraphicsPipelineSettings) {
         if vertex.owner_handle() != device.native_handle() || fragment.owner_handle() != device.native_handle() {
@@ -266,6 +267,7 @@ public class GraphicsPipeline {
         self.device_handle = device.native_handle()
         self.handle = handle
         self.device_owner = device
+        self.current_primitive = primitive_type(settings.primitive)
     }
 
     drop {
@@ -275,6 +277,7 @@ public class GraphicsPipeline {
 
     module func native_handle() uint { return self.handle }
     module func owner_handle() uint { return self.device_handle }
+    module func primitive() Types.Primitive { return self.current_primitive }
 }
 
 // Public opaque compute pipeline. Applications obtain it from Device and pass

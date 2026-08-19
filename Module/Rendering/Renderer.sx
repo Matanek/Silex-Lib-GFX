@@ -103,7 +103,7 @@ public class Renderer {
             pass.finish()
         }
         commands.submit()
-        self.current_stats.record_frame(graph.plan_count())
+        self.current_stats.record_frame(graph.plan_count(), device.command_stats())
     }
 
     private func ensure_depth(device:@GPU.Device, width:int, height:int) {

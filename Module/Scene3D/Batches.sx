@@ -1,0 +1,109 @@
+use GFX.GPU
+use GFX.Scene3D.Material
+use STD.Math
+
+package struct DrawSettings {
+    let alpha:GFX.Scene3D.Material.AlphaMode
+    let alpha_cutoff:float
+    let double_sided:bool
+    let unlit:bool
+
+    init(
+        alpha:GFX.Scene3D.Material.AlphaMode =
+            GFX.Scene3D.Material.AlphaMode.opaque,
+        alpha_cutoff:float = 0.5,
+        double_sided:bool = false,
+        unlit:bool = false
+    ) {
+        self.alpha = alpha
+        self.alpha_cutoff = alpha_cutoff
+        self.double_sided = double_sided
+        self.unlit = unlit
+    }
+}
+
+package struct Draw {
+    let cache:int
+    let model:Math.Mat4
+    let material:Material
+    let settings:DrawSettings
+    let distance:float
+    let textures:GFX.Scene3D.Material.MaterialTextures
+}
+
+package class Batch {
+    var cache:int
+    var settings:DrawSettings
+    var draw_index:int
+    var models:Math.Mat4[]
+    var instances:GPU.Buffer? = null
+    var upload:GPU.TransferBuffer? = null
+    var capacity:int
+
+    init(draw:@Draw, draw_index:int) {
+        self.cache = draw.cache
+        self.settings = draw.settings
+        self.draw_index = draw_index
+        self.models = []
+        self.capacity = 0
+    }
+
+    func reset(draw:@Draw, draw_index:int) {
+        self.cache = draw.cache
+        self.settings = draw.settings
+        self.draw_index = draw_index
+        self.models.clear()
+    }
+
+    func accepts(source:@Draw, draw:@Draw) bool {
+        return self.settings.alpha != GFX.Scene3D.Material.AlphaMode.blend &&
+            self.cache == draw.cache &&
+            self.settings.alpha == draw.settings.alpha &&
+            self.settings.alpha_cutoff == draw.settings.alpha_cutoff &&
+            self.settings.double_sided == draw.settings.double_sided &&
+            self.settings.unlit == draw.settings.unlit &&
+            same_material(source.material, draw.material) &&
+            same_textures(source.textures, draw.textures)
+    }
+
+}
+
+func same_material(left:Material, right:Material) bool {
+    return left.albedo == right.albedo &&
+        left.metallic == right.metallic &&
+        left.roughness == right.roughness &&
+        left.occlusion == right.occlusion &&
+        left.emission == right.emission &&
+        left.emission_intensity == right.emission_intensity
+}
+
+func same_textures(
+    left:GFX.Scene3D.Material.MaterialTextures,
+    right:GFX.Scene3D.Material.MaterialTextures
+) bool {
+    return left.normal_scale == right.normal_scale &&
+        same_texture(left.albedo, right.albedo) &&
+        same_texture(left.normal, right.normal) &&
+        same_texture(left.metallic_roughness, right.metallic_roughness) &&
+        same_texture(left.occlusion, right.occlusion) &&
+        same_texture(left.emission, right.emission)
+}
+
+func same_texture(
+    left:GFX.Scene3D.Material.MaterialTexture?,
+    right:GFX.Scene3D.Material.MaterialTexture?
+) bool {
+    if let left_value = left {
+        if let right_value = right {
+            return left_value.image.index() == right_value.image.index() &&
+                left_value.image.generation() == right_value.image.generation() &&
+                left_value.offset.x == right_value.offset.x &&
+                left_value.offset.y == right_value.offset.y &&
+                left_value.scale.x == right_value.scale.x &&
+                left_value.scale.y == right_value.scale.y &&
+                left_value.rotation == right_value.rotation
+        }
+        return false
+    }
+    return right == null
+}

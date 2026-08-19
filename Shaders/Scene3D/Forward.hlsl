@@ -3,10 +3,13 @@ struct VertexInput {
     float3 normal : TEXCOORD1;
     float2 uv : TEXCOORD2;
     float4 color : TEXCOORD3;
+    float4 modelColumn0 : TEXCOORD4;
+    float4 modelColumn1 : TEXCOORD5;
+    float4 modelColumn2 : TEXCOORD6;
+    float4 modelColumn3 : TEXCOORD7;
 };
 
 cbuffer DrawUniforms : register(b0, space1) {
-    float4x4 model;
     float4x4 viewProjection;
     float4 materialAlbedo;
 };
@@ -86,6 +89,12 @@ struct VertexOutput {
 
 VertexOutput vertex_main(VertexInput input) {
     VertexOutput output;
+    const float4x4 model = transpose(float4x4(
+        input.modelColumn0,
+        input.modelColumn1,
+        input.modelColumn2,
+        input.modelColumn3
+    ));
     const float4 world = mul(model, float4(input.position, 1.0));
     output.position = mul(viewProjection, world);
     output.worldPosition = world.xyz;
@@ -359,24 +368,25 @@ float atlas_shadow_depth(float2 uv, float4 rect, float localTexel) {
 }
 
 float pcf_shadow(float2 uv, float4 rect, float receiverDepth, float texel, float softness) {
-    const float radius = max(0.75, 0.75 + softness * 1.5);
+    if (softness <= 0.0001) {
+        const float storedDepth = atlas_shadow_depth(uv, rect, texel);
+        return receiverDepth <= storedDepth ? 1.0 : 0.0;
+    }
+    const float radius = 1.0 + softness * 2.0;
     float visibility = 0.0;
-    float weightSum = 0.0;
     [unroll]
-    for (int y = -2; y <= 2; ++y) {
+    for (int y = -1; y <= 1; ++y) {
         [unroll]
-        for (int x = -2; x <= 2; ++x) {
-            const float weight = float(3 - abs(x)) * float(3 - abs(y));
+        for (int x = -1; x <= 1; ++x) {
             const float storedDepth = atlas_shadow_depth(
                 uv + float2(float(x), float(y)) * texel * radius,
                 rect,
                 texel
             );
-            visibility += (receiverDepth <= storedDepth ? 1.0 : 0.0) * weight;
-            weightSum += weight;
+            visibility += receiverDepth <= storedDepth ? 1.0 : 0.0;
         }
     }
-    return visibility / weightSum;
+    return visibility / 9.0;
 }
 
 float point_face_shadow(

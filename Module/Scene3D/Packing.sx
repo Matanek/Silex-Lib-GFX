@@ -54,10 +54,36 @@ func draw(
     return bytes
 }
 
+func instance_draw(view_projection:Math.Mat4, albedo:Color) str {
+    var bytes = storage(80)
+    let address = C.address_bits(C.mutable_string_pointer(bytes))
+    write_mat4(address, 0, view_projection)
+    write_color(address, 64, albedo)
+    return bytes
+}
+
+func instances(values:@Math.Mat4[]) str {
+    var bytes = storage(values.count() * 64)
+    let address = C.address_bits(C.mutable_string_pointer(bytes))
+    var index = 0
+    while index < values.count() {
+        write_mat4(address, index * 64, values[index])
+        index++
+    }
+    return bytes
+}
+
 func matrix(value:Math.Mat4) str {
     var bytes = storage(64)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, value)
+    return bytes
+}
+
+func vector(value:Math.Vec4) str {
+    var bytes = storage(16)
+    let address = C.address_bits(C.mutable_string_pointer(bytes))
+    write_vec4(address, 0, value)
     return bytes
 }
 

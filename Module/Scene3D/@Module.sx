@@ -16,6 +16,8 @@ public use GFX.Scene3D.PointLightGizmo.PointLightGizmo
 public use GFX.Scene3D.Plugin.Plugin
 public use GFX.Scene3D.Rotator.Rotator
 public use GFX.Scene3D.Sampling.Sampling
+public use GFX.Scene3D.Scatter.Scatter
+public use GFX.Scene3D.Scatter.ScatterArea
 public use GFX.Scene3D.Selectable.Selectable
 public use GFX.Scene3D.Shadow.Shadow
 public use GFX.Scene3D.Skybox.ProceduralSky

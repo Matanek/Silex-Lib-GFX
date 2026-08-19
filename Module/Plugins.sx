@@ -9,6 +9,12 @@ public use GFX.ECS.Plugin as ECS
 public use GFX.FPSCounter.Anchor as FPSCounterAnchor
 public use GFX.FPSCounter.Plugin as FPSCounter
 public use GFX.FPSCounter.Settings as FPSCounterSettings
+public func PerformancePanel(
+    settings:GFX.FPSCounter.PerformanceSettings = GFX.FPSCounter.PerformanceSettings()
+) GFX.FPSCounter.Plugin {
+    return GFX.FPSCounter.Plugin(settings)
+}
+public use GFX.FPSCounter.PerformanceSettings as PerformancePanelSettings
 public use GFX.GPU.Plugin as GPU
 public use GFX.GPU.Plugin.Settings as GPUSettings
 public use GFX.Input.Plugin as Input

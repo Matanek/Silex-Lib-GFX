@@ -6,16 +6,29 @@ use STD.Math
 
 struct Probe {
     var overlays:int
+    var width:int
+    var height:int
+    var draw_calls:int
+    var render_passes:int
 }
 
 func inspect_counter(
     probe:&Probe,
     world:@Resources.World,
+    renderer:@Resources.Renderer,
     controller:&Application.Controller
 ) {
     for entity in world.entities() {
-        if world.has<Components.Overlay2D>(entity) { probe.overlays++ }
+        if world.has<Components.Overlay2D>(entity) {
+            let overlay = world.get<Components.Overlay2D>(entity)
+            probe.overlays++
+            probe.width = overlay.width()
+            probe.height = overlay.height()
+        }
     }
+    let stats = renderer.stats()
+    probe.draw_calls = stats.draw_calls()
+    probe.render_passes = stats.render_passes()
     controller.stop()
 }
 
@@ -33,8 +46,36 @@ test "display a frame-rate counter through the public plugin umbrella" {
         ))
         ..add_after_system(Application.Schedule.render, inspect_counter)
     var resources = application.resources()
-    resources.insert(Probe(overlays:0))
+    resources.insert(Probe(overlays:0, width:0, height:0, draw_calls:0, render_passes:0))
 
     assert(application.run() == 0)
     assert(resources.get<Probe>().overlays == 1)
+    assert(resources.get<Probe>().width == 116)
+    assert(resources.get<Probe>().height == 34)
+    assert(resources.get<Probe>().draw_calls > 0)
+    assert(resources.get<Probe>().render_passes > 0)
+}
+
+test "display GPU performance statistics through the public plugin umbrella" {
+    var application = Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Performance panel test"
+            ..width = 320
+            ..height = 240
+            ..hidden = true
+        ))
+        ..add_plugin(Plugins.PerformancePanel(Plugins.PerformancePanelSettings()
+            ..anchor = Plugins.FPSCounterAnchor.top_left
+            ..margin = Math.Vec2(8.0)
+        ))
+        ..add_after_system(Application.Schedule.render, inspect_counter)
+    var resources = application.resources()
+    resources.insert(Probe(overlays:0, width:0, height:0, draw_calls:0, render_passes:0))
+
+    assert(application.run() == 0)
+    assert(resources.get<Probe>().overlays == 1)
+    assert(resources.get<Probe>().width == 252)
+    assert(resources.get<Probe>().height == 214)
+    assert(resources.get<Probe>().draw_calls > 0)
+    assert(resources.get<Probe>().render_passes > 0)
 }

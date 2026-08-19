@@ -65,8 +65,44 @@ public struct SurfaceSettings {
     var color_space:Types.ColorSpace? = null
 }
 
+package struct CommandStats {
+    var render_passes:int
+    var draw_calls:int
+    var pipeline_bindings:int
+    var triangles:int
+    var vertices:int
+    var indices:int
+    var instances:int
+    var uniform_bytes:int
+    var texture_bindings:int
+
+    init() {
+        self.render_passes = 0
+        self.draw_calls = 0
+        self.pipeline_bindings = 0
+        self.triangles = 0
+        self.vertices = 0
+        self.indices = 0
+        self.instances = 0
+        self.uniform_bytes = 0
+        self.texture_bindings = 0
+    }
+
+    func pass_count() int { return self.render_passes }
+    func draw_count() int { return self.draw_calls }
+    func pipeline_count() int { return self.pipeline_bindings }
+    func triangle_count() int { return self.triangles }
+    func vertex_count() int { return self.vertices }
+    func index_count() int { return self.indices }
+    func instance_count() int { return self.instances }
+    func uniforms_size() int { return self.uniform_bytes }
+    func texture_count() int { return self.texture_bindings }
+}
+
 public class Device {
     private let handle:uint
+    private var current_command_stats:CommandStats
+    private var current_primitive:Types.Primitive
 
     init(settings:DeviceSettings = DeviceSettings()) {
         let flags = shader_format_flags(settings.shader_formats)
@@ -78,6 +114,8 @@ public class Device {
             panic("GFX.GPU could not create a device: " + gpu_error())
         }
         self.handle = handle
+        self.current_command_stats = CommandStats()
+        self.current_primitive = Types.Primitive.triangles
     }
 
     drop {
@@ -164,6 +202,30 @@ public class Device {
 
     func suspend() { sdl_gdk_suspend_gpu(C.pointer_bits(self.handle)) }
     func resume() { sdl_gdk_resume_gpu(C.pointer_bits(self.handle)) }
+
+    package func reset_command_stats() { self.current_command_stats = CommandStats() }
+    package func command_stats() CommandStats { return self.current_command_stats }
+    module func record_render_pass() { self.current_command_stats.render_passes++ }
+    module func record_pipeline_binding(primitive:Types.Primitive) {
+        self.current_command_stats.pipeline_bindings++
+        self.current_primitive = primitive
+    }
+    module func record_uniform(byte_count:int) { self.current_command_stats.uniform_bytes += byte_count }
+    module func record_texture_binding() { self.current_command_stats.texture_bindings++ }
+    module func record_draw(elements:int, instances:int, indexed:bool) {
+        self.current_command_stats.draw_calls++
+        self.current_command_stats.instances += instances
+        if indexed { self.current_command_stats.indices += elements * instances }
+        else { self.current_command_stats.vertices += elements * instances }
+
+        var triangles = 0
+        if self.current_primitive == Types.Primitive.triangles { triangles = elements / 3 }
+        else if self.current_primitive == Types.Primitive.triangle_strip && elements > 2 { triangles = elements - 2 }
+        self.current_command_stats.triangles += triangles * instances
+    }
+    module func record_indirect_draw(count:int) {
+        self.current_command_stats.draw_calls += count
+    }
 
     module func native_handle() uint { return self.handle }
 }

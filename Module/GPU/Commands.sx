@@ -239,6 +239,7 @@ public class CommandBuffer {
         ))
         if handle == 0 as uint { panic("GFX.GPU could not begin a render pass: " + gpu_error()) }
         self.pass_active = true
+        self.record_render_pass()
         return RenderPass(self, handle, 0, 0)
     }
 
@@ -372,6 +373,16 @@ public class CommandBuffer {
     module func require_resource(owner:uint) { self.require_owner(owner) }
     module func native_handle() uint { return self.handle }
     module func native_device() uint { return self.device_handle }
+    module func record_render_pass() { if var device = self.device_owner { device.record_render_pass() } }
+    module func record_pipeline_binding(primitive:Types.Primitive) {
+        if var device = self.device_owner { device.record_pipeline_binding(primitive) }
+    }
+    module func record_uniform(byte_count:int) { if var device = self.device_owner { device.record_uniform(byte_count) } }
+    module func record_texture_binding() { if var device = self.device_owner { device.record_texture_binding() } }
+    module func record_draw(elements:int, instances:int, indexed:bool) {
+        if var device = self.device_owner { device.record_draw(elements, instances, indexed) }
+    }
+    module func record_indirect_draw(count:int) { if var device = self.device_owner { device.record_indirect_draw(count) } }
 
     private func begin_render(targets:uint, count:uint32, depth:uint, width:uint32, height:uint32) RenderPass {
         let handle = C.address_bits(sdl_begin_gpu_render_pass(
@@ -379,6 +390,7 @@ public class CommandBuffer {
         ))
         if handle == 0 as uint { panic("GFX.GPU could not begin a window render pass: " + gpu_error()) }
         self.pass_active = true
+        self.record_render_pass()
         return RenderPass(self, handle, width, height)
     }
 
@@ -425,11 +437,12 @@ public class RenderPass {
     func size() (width:uint32, height:uint32) { return (width:self.drawable_width, height:self.drawable_height) }
 
     func bind(pipeline:@GraphicsPipeline) {
-        self.bind_native(pipeline.native_handle(), pipeline.owner_handle())
+        self.bind_native(pipeline.native_handle(), pipeline.owner_handle(), pipeline.primitive())
     }
 
-    module func bind_native(pipeline:uint, owner:uint) {
+    module func bind_native(pipeline:uint, owner:uint, primitive:Types.Primitive = Types.Primitive.triangles) {
         self.require_owner(owner)
+        if var commands = self.commands { commands.record_pipeline_binding(primitive) }
         sdl_bind_gpu_graphics_pipeline(C.pointer_bits(self.handle), C.pointer_bits(pipeline))
     }
 
@@ -508,6 +521,7 @@ public class RenderPass {
             C.pointer_bits(address),
             count as uint32
         )
+        if var commands = self.commands { commands.record_uniform(count) }
     }
 
     module func fragment_uniform_packed(slot:int, address:uint, count:int) {
@@ -521,6 +535,7 @@ public class RenderPass {
             C.pointer_bits(address),
             count as uint32
         )
+        if var commands = self.commands { commands.record_uniform(count) }
     }
 
     func fragment_uniform(slot:int, bytes:@uint8[..]) {
@@ -584,20 +599,24 @@ public class RenderPass {
     func draw(vertices:int, instances:int = 1, first_vertex:int = 0, first_instance:int = 0) {
         require_draw_range(vertices, instances, first_vertex, first_instance)
         sdl_draw_gpu_primitives(C.pointer_bits(self.handle), vertices as uint32, instances as uint32, first_vertex as uint32, first_instance as uint32)
+        if var commands = self.commands { commands.record_draw(vertices, instances, false) }
     }
     func draw_indexed(indices:int, instances:int = 1, first_index:int = 0, vertex_offset:int = 0, first_instance:int = 0) {
         require_draw_range(indices, instances, first_index, first_instance)
         sdl_draw_gpu_indexed_primitives(C.pointer_bits(self.handle), indices as uint32, instances as uint32, first_index as uint32, vertex_offset as int32, first_instance as uint32)
+        if var commands = self.commands { commands.record_draw(indices, instances, true) }
     }
     func draw_indirect(buffer:@Buffer, offset:int = 0, count:int = 1) {
         self.require_owner(buffer.owner_handle())
         require_indirect_range(buffer.size(), offset, count, 16, "indirect draw")
         sdl_draw_gpu_primitives_indirect(C.pointer_bits(self.handle), C.pointer_bits(buffer.native_handle()), offset as uint32, count as uint32)
+        if var commands = self.commands { commands.record_indirect_draw(count) }
     }
     func draw_indexed_indirect(buffer:@Buffer, offset:int = 0, count:int = 1) {
         self.require_owner(buffer.owner_handle())
         require_indirect_range(buffer.size(), offset, count, 20, "indexed indirect draw")
         sdl_draw_gpu_indexed_primitives_indirect(C.pointer_bits(self.handle), C.pointer_bits(buffer.native_handle()), offset as uint32, count as uint32)
+        if var commands = self.commands { commands.record_indirect_draw(count) }
     }
 
     func finish() {
@@ -622,6 +641,7 @@ public class RenderPass {
         let address = self.scratch_address + 32 as uint
         let stored_texture = C.store<uint>(address, 0 as uint, texture)
         let stored_sampler = C.store<uint>(address, 8 as uint, sampler)
+        if var commands = self.commands { commands.record_texture_binding() }
         if stage == 0 { sdl_bind_gpu_vertex_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1); return }
         sdl_bind_gpu_fragment_samplers(C.pointer_bits(self.handle), slot as uint32, C.pointer_bits(address), 1)
     }
@@ -658,6 +678,7 @@ public class RenderPass {
                 C.pointer(compact),
                 bytes.count() as uint32
             )
+            if var commands = self.commands { commands.record_uniform(bytes.count()) }
             return
         }
         sdl_push_gpu_fragment_uniform_data(
@@ -666,6 +687,7 @@ public class RenderPass {
             C.pointer(compact),
             bytes.count() as uint32
         )
+        if var commands = self.commands { commands.record_uniform(bytes.count()) }
     }
 }
 

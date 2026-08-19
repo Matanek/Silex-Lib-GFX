@@ -62,6 +62,53 @@ writes. Texture transforms carry offset, scale, and rotation. The default
 sampler repeats, filters linearly, generates mipmaps, and uses anisotropic
 filtering.
 
+## Automatic batching
+
+The built-in renderer automatically instances compatible opaque and alpha-mask
+entities that share their mesh, material values, textures, and raster state.
+The same persistent instance buffers feed the forward and shadow passes, while
+their matrix contents are refreshed every frame. Blended entities remain
+individual draws so their far-to-near ordering stays correct.
+
+This optimization does not add a batching component or change normal ECS
+usage: applications keep spawning `Transform`, `Mesh`, `Material`, and optional
+`MaterialSettings` components. `Rendering.Stats` exposes the resulting draw,
+instance, triangle, pipeline, pass, uniform, and texture work for profiling.
+
+## Procedural scatter
+
+`Scatter` deterministically generates ordinary `Transform` values from a seed.
+Its horizontal spawn area can be a box or a circle; additional areas can be
+excluded. Position, Euler rotation, uniform or per-axis scale, soft edges, and
+center-to-edge scale variation can be configured independently:
+
+```silex
+var rocks = Scene3D.Scatter(
+    count:200,
+    area:Scene3D.ScatterArea.box(Math.Vec2(80.0)),
+    seed:42
+)
+rocks.exclude(Scene3D.ScatterArea.circle(5.0))
+rocks.vary_rotation(Math.Vec3(), Math.Vec3(0.2, Math.two_pi(), 0.2))
+rocks.vary_scale(Math.Vec3(0.3), Math.Vec3(1.8))
+rocks.soften_edges(0.2)
+
+for transform in rocks.generate() {
+    world.spawn(ECS.EntityRecipe()
+        ..with(transform)
+        ..with(Scene3D.Mesh(rock_mesh))
+        ..with(rock_material)
+    )
+}
+```
+
+Scatter stays independent from assets and ECS recipes: the same placements can
+instantiate a mesh, several entities forming one object, or another consumer's
+components. Compatible generated entities are picked up by automatic batching
+without another public rendering concept. A seed always reproduces the same
+placements and variations. An impossible exclusion can yield fewer transforms
+than requested after bounded placement attempts.
+
 ## Tone mapping
 
 Tone mapping is part of the Scene3D mesh shading contract rather than a

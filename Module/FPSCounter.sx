@@ -5,6 +5,7 @@ use GFX.Canvas
 use GFX.Color
 use GFX.ECS
 use GFX.Scene2D
+use GFX.Rendering
 use STD.Math
 use STD.Time.Clock
 
@@ -24,9 +25,23 @@ public struct Settings {
     var anchor:Anchor
     var margin:Math.Vec2
     var refresh_interval:float
+    module var detailed:bool
 
     init() {
         self.anchor = Anchor.bottom_right
+        self.margin = Math.Vec2(16.0)
+        self.refresh_interval = 0.25
+        self.detailed = false
+    }
+}
+
+public struct PerformanceSettings {
+    var anchor:Anchor
+    var margin:Math.Vec2
+    var refresh_interval:float
+
+    init() {
+        self.anchor = Anchor.top_left
         self.margin = Math.Vec2(16.0)
         self.refresh_interval = 0.25
     }
@@ -59,6 +74,21 @@ public struct Plugin:PluginProtocol {
             panic("GFX.FPSCounter refresh interval must be positive")
         }
         self.settings = settings
+    }
+
+    package init(settings:PerformanceSettings) {
+        var configured = Settings()
+        configured.anchor = settings.anchor
+        configured.margin = settings.margin
+        configured.refresh_interval = settings.refresh_interval
+        configured.detailed = true
+        if configured.margin.x < 0.0 || configured.margin.y < 0.0 {
+            panic("GFX performance panel margins must not be negative")
+        }
+        if configured.refresh_interval <= 0.0 {
+            panic("GFX performance panel refresh interval must be positive")
+        }
+        self.settings = configured
     }
 
     func id() str { return "GFX.FPSCounter.Plugin" }
@@ -115,9 +145,90 @@ func counter_canvas(fps:int) Canvas {
     return canvas
 }
 
-func create_counter(state:&State, world:&ECS.World) {
+func decimal_tenths(value:int) str {
+    return "$(value / 10).$(value % 10)"
+}
+
+func performance_canvas(fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas {
+    var labels:str[] = []
+    labels.append("FPS")
+    labels.append("FRAME")
+    labels.append("DRAW CALLS")
+    labels.append("TRIANGLES")
+    labels.append("PIPELINE BINDS")
+    labels.append("GPU PASSES")
+    labels.append("UNIFORMS")
+    labels.append("TEXTURES")
+
+    var values:str[] = []
+    values.append("$(fps)")
+    values.append(decimal_tenths(frame_tenths) + " ms")
+    values.append("$(stats.draw_calls())")
+    values.append("$(stats.triangles())")
+    values.append("$(stats.pipeline_bindings())")
+    values.append("$(stats.render_passes())")
+    values.append("$((stats.uniform_bytes() + 1023) / 1024) KiB")
+    values.append("$(stats.texture_bindings())")
+
+    var canvas = Canvas()
+    canvas.paint(func(painter:&Canvas.Painter) {
+        painter.fill(
+            Canvas.Rect(Math.Vec2(), Math.Vec2(252.0, 214.0), 9.0),
+            Canvas.Fill.solid(Color.black().with_alpha(0.82))
+        )
+        painter.stroke(
+            Canvas.Rect(Math.Vec2(0.5), Math.Vec2(251.0, 213.0), 9.0),
+            Canvas.Stroke(Color.cyan_400().with_alpha(0.48), 1.0)
+        )
+        painter.text(
+            "GFX PERFORMANCE",
+            Math.Vec2(16.0, 11.0),
+            Canvas.TextStyle(size:14.0, color:Color.cyan_300(), weight:Canvas.TextWeight.bold)
+        )
+        painter.stroke(
+            Canvas.Line(Math.Vec2(16.0, 38.0), Math.Vec2(236.0, 38.0)),
+            Canvas.Stroke(Color.slate_500().with_alpha(0.5), 1.0)
+        )
+        var index = 0
+        while index < labels.count() {
+            let y = 48.0 + index as float * 19.0
+            painter.text(
+                labels[index],
+                Math.Vec2(16.0, y),
+                Canvas.TextStyle(size:13.0, color:Color.slate_300())
+            )
+            painter.text(
+                values[index],
+                Math.Vec2(236.0, y),
+                Canvas.TextStyle(size:13.0, color:Color.white(), alignment:Canvas.TextAlignment.end)
+            )
+            index++
+        }
+    })
+    return canvas
+}
+
+func display_width(settings:Settings) int {
+    if settings.detailed { return 252 }
+    return 116
+}
+
+func display_height(settings:Settings) int {
+    if settings.detailed { return 214 }
+    return 34
+}
+func display_canvas(settings:Settings, fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas {
+    if settings.detailed { return performance_canvas(fps, frame_tenths, stats) }
+    return counter_canvas(fps)
+}
+
+func create_counter(state:&State, world:&ECS.World, renderer:@Rendering.Renderer) {
     state.display = world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Overlay(counter_canvas(0), 116, 34)
+        ..with(Scene2D.Overlay(
+            display_canvas(state.settings, 0, 0, renderer.stats()),
+            display_width(state.settings),
+            display_height(state.settings)
+        )
             ..anchor = anchor_point(state.settings.anchor)
             ..position = anchor_offset(state.settings.anchor, state.settings.margin)
             ..pivot = anchor_point(state.settings.anchor)
@@ -127,14 +238,15 @@ func create_counter(state:&State, world:&ECS.World) {
     state.clock.tick()
 }
 
-func update_counter(state:&State, world:&ECS.World) {
+func update_counter(state:&State, world:&ECS.World, renderer:@Rendering.Renderer) {
     state.elapsed += state.clock.tick()
     state.frames++
     if state.elapsed < state.settings.refresh_interval { return }
 
     let fps = Math.round(state.frames as float / state.elapsed) as int
+    let frame_tenths = Math.round(state.elapsed * 10000.0 / state.frames as float) as int
     world.update<Scene2D.Overlay>(state.display, func(display:&Scene2D.Overlay) {
-        var canvas = counter_canvas(fps)
+        var canvas = display_canvas(state.settings, fps, frame_tenths, renderer.stats())
         display.replace(canvas)
     })
     state.elapsed = 0.0
