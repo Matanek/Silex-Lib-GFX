@@ -1,0 +1,71 @@
+use GFX.Assets
+use GFX.Assets.GLTF
+use GFX.ECS
+use GFX.Scene3D
+
+test "load a textured PBR GLB asset through the direct API" {
+    let model = GLTF.load("Packages/GFX/Assets/Models/TestPBR.glb")
+    assert(model.mesh_count() == 52)
+    assert(model.material_count() == 40)
+    assert(model.image_count() == 13)
+    assert(model.node_count() == 120)
+    assert(model.root_count() == 1)
+    assert(model.material(12).value.metallic == 0.5)
+    assert(model.material(19).value.roughness > 0.29)
+}
+
+test "return structured GLTF failures through the expert API" {
+    match GLTF.try_load("Packages/GFX/Assets/Models/Missing.glb") {
+        success(model) => { panic("missing GLB asset was loaded") }
+        failure(error) => { assert(error.kind == GLTF.ErrorKind.file) }
+    }
+}
+
+test "round-trip textured PBR models through GLB and embedded glTF" {
+    let source = GLTF.load("Packages/GFX/Assets/Models/TestPBR.glb")
+
+    let glb = GLTF.encode(source, GLTF.Format.glb)
+    let binary_copy = GLTF.decode(glb, GLTF.Format.glb)
+    assert(binary_copy.mesh_count() == source.mesh_count())
+    assert(binary_copy.material_count() == source.material_count())
+    assert(binary_copy.image_count() == source.image_count())
+    assert(binary_copy.node_count() == source.node_count())
+
+    let gltf = GLTF.encode(source, GLTF.Format.gltf)
+    let textual_copy = GLTF.decode(gltf, GLTF.Format.gltf)
+    assert(textual_copy.mesh_count() == source.mesh_count())
+    assert(textual_copy.material_count() == source.material_count())
+    assert(textual_copy.image_count() == source.image_count())
+    assert(textual_copy.node_count() == source.node_count())
+}
+
+test "instantiate imported primitives and PBR materials into Scene3D" {
+    let model = GLTF.load("Packages/GFX/Assets/Models/TestPBR.glb")
+    var world = ECS.World()
+    var meshes = Scene3D.Meshes()
+    let instance = model.instantiate(world, meshes)
+
+    assert(instance.entities.count() == 52)
+    assert(world.has<Scene3D.Transform>(instance.entities[0]))
+    assert(world.has<Scene3D.Mesh>(instance.entities[0]))
+    assert(world.has<Scene3D.Material>(instance.entities[0]))
+}
+
+test "export a model created from Scene3D geometry" {
+    let source = Assets.Model.from_mesh(
+        Scene3D.Geometry.Cube.make(),
+        Assets.ModelMaterial(value:Scene3D.Material(metallic:0.7, roughness:0.2)),
+        "Exported cube"
+    )
+    let path = "/private/tmp/silex-gfx-exported-cube.glb"
+    match GLTF.try_save(path, source) {
+        failure(error) => { panic(error.detail) }
+        success => {}
+    }
+    let restored = GLTF.load(path)
+
+    assert(restored.mesh_count() == 1)
+    assert(restored.node_count() == 1)
+    assert(restored.material(0).value.metallic == 0.7)
+    assert(restored.material(0).value.roughness == 0.2)
+}

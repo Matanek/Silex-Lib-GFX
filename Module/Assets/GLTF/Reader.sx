@@ -1,0 +1,1011 @@
+use GFX.Assets.GLTF.Types.Error
+use GFX.Assets.GLTF.Types.ErrorKind
+use GFX.Assets.Image
+use GFX.Assets.Model
+use GFX.Color
+use GFX.Scene3D
+use Interop.C
+use JSON
+use STD.File
+use STD.Math
+use STD.Path
+use STD.Text.UTF8
+
+struct BufferData { let bytes:str }
+struct BufferView {
+    let buffer:int
+    let offset:int
+    let length:int
+    let stride:int
+}
+struct Accessor {
+    let view:int
+    let offset:int
+    let component:int
+    let count:int
+    let components:int
+    let normalized:bool
+}
+struct RawNode {
+    let name:str
+    var parent:int
+    let children:int[]
+    let mesh:int
+    let local_transform:Scene3D.Transform
+    var resolution:NodeResolution
+}
+struct NodeResolution {
+    var world:Scene3D.Transform
+    var resolved:bool
+    var resolving:bool
+}
+struct Document {
+    var root:JSON.Value
+    let buffers:BufferData[]
+    let views:BufferView[]
+    let accessors:Accessor[]
+    let subject:str?
+    let directory:str?
+}
+
+func decode_glb(bytes:uint8[], subject:str?) Result<Model.Model, Error> {
+    if bytes.count() < 20 {
+        return fail<Model.Model>(ErrorKind.invalid_container, subject, "glB container is shorter than its header")
+    }
+    if read_u32(bytes, 0) != 0x4654_6C67 as uint32 {
+        return fail<Model.Model>(ErrorKind.invalid_container, subject, "asset does not begin with the glTF binary signature")
+    }
+    if read_u32(bytes, 4) != 2 as uint32 {
+        return fail<Model.Model>(ErrorKind.unsupported_feature, subject, "GFX.Assets.GLTF supports glTF 2.x assets")
+    }
+    let declared = read_u32(bytes, 8) as int
+    if declared != bytes.count() {
+        return fail<Model.Model>(ErrorKind.invalid_container, subject, "GLB declared length does not match its byte count")
+    }
+    let json_length = read_u32(bytes, 12) as int
+    if read_u32(bytes, 16) != 0x4E4F_534A as uint32 || json_length < 2 || 20 + json_length > bytes.count() {
+        return fail<Model.Model>(ErrorKind.invalid_container, subject, "GLB does not contain a valid leading JSON chunk")
+    }
+    var json_bytes:uint8[] = []
+    var index = 20
+    while index < 20 + json_length { json_bytes.append(bytes[index]); index++ }
+    var text = ""
+    match UTF8.decode(@json_bytes[0:json_bytes.count()]) {
+        failure(error) => { return fail<Model.Model>(ErrorKind.invalid_document, subject, "GLB JSON chunk is not valid UTF-8") }
+        success(value) => { text = value }
+    }
+    var buffers:BufferData[] = []
+    let binary_header = 20 + json_length
+    if binary_header < bytes.count() {
+        if binary_header + 8 > bytes.count() || read_u32(bytes, binary_header + 4) != 0x004E_4942 as uint32 {
+            return fail<Model.Model>(ErrorKind.invalid_container, subject, "GLB trailing chunk is not binary data")
+        }
+        let binary_length = read_u32(bytes, binary_header) as int
+        if binary_header + 8 + binary_length > bytes.count() {
+            return fail<Model.Model>(ErrorKind.invalid_container, subject, "GLB binary chunk exceeds the container")
+        }
+        var binary:uint8[] = []
+        index = binary_header + 8
+        while index < binary_header + 8 + binary_length { binary.append(bytes[index]); index++ }
+        if binary.count() > 0 { buffers.append(BufferData(bytes:C.string(@binary[0:binary.count()]))) }
+    }
+    var root = try parse_json(text, subject)
+    return decode_document(root, buffers, subject, parent_directory(subject))
+}
+
+func decode_gltf(bytes:uint8[], subject:str?) Result<Model.Model, Error> {
+    if bytes.count() == 0 {
+        return fail<Model.Model>(ErrorKind.invalid_document, subject, "glTF document is empty")
+    }
+    var text = ""
+    match UTF8.decode(@bytes[0:bytes.count()]) {
+        failure(error) => { return fail<Model.Model>(ErrorKind.invalid_document, subject, "glTF document is not valid UTF-8") }
+        success(value) => { text = value }
+    }
+    var root = try parse_json(text, subject)
+    let directory = parent_directory(subject)
+    var descriptions = try required_array(root, "buffers", subject)
+    var buffers:BufferData[] = []
+    for var description in descriptions {
+        let uri = try required_string(description, "uri", subject)
+        if starts_with(uri, "data:") {
+            match GFX.Assets.GLTF.Base64.decode_data_uri(uri) {
+                failure(detail) => { return fail<Model.Model>(ErrorKind.invalid_document, subject, detail) }
+                success(buffer) => {
+                    if buffer.count() == 0 {
+                        return fail<Model.Model>(ErrorKind.invalid_document, subject, "glTF data URI buffer is empty")
+                    }
+                    buffers.append(BufferData(bytes:C.string(@buffer[0:buffer.count()])))
+                }
+            }
+            continue
+        } elif directory == null {
+            return fail<Model.Model>(ErrorKind.file, subject, "external glTF buffers require a source path")
+        }
+        var joined = ""
+        if let base = directory {
+            match Path.join(base, uri) {
+                failure(error) => { return fail<Model.Model>(ErrorKind.file, subject, error.detail) }
+                success(path) => { joined = path }
+            }
+        }
+        var buffer:uint8[] = []
+        match File.read_all(joined, 256 * 1024 * 1024) {
+            failure(error) => { return fail<Model.Model>(ErrorKind.file, joined, error.detail) }
+            success(value) => { buffer = value }
+        }
+        if buffer.count() == 0 {
+            return fail<Model.Model>(ErrorKind.invalid_document, joined, "glTF buffer is empty")
+        }
+        buffers.append(BufferData(bytes:C.string(@buffer[0:buffer.count()])))
+    }
+    return decode_document(root, buffers, subject, directory)
+}
+
+func decode_document(
+    root:JSON.Value,
+    buffers:BufferData[],
+    subject:str?,
+    directory:str?
+) Result<Model.Model, Error> {
+    try GFX.Assets.GLTF.Validation.validate(root, subject)
+    var asset = try required_object(root, "asset", subject)
+    let version = try required_string(asset, "version", subject)
+    if !starts_with(version, "2.") {
+        return fail<Model.Model>(ErrorKind.unsupported_feature, subject, "GFX.Assets.GLTF supports glTF 2.x assets")
+    }
+    let views = try parse_views(root, buffers, subject)
+    let accessors = try parse_accessors(root, views, subject)
+    var document = Document(
+        root:root,
+        buffers:buffers,
+        views:views,
+        accessors:accessors,
+        subject:subject,
+        directory:directory
+    )
+    let images = try parse_images(document)
+    let materials = try parse_materials(document)
+    var geometries:Scene3D.Geometry.Mesh[] = []
+    let model_meshes = try parse_meshes(document, geometries, materials.count())
+    var raw_nodes = try parse_nodes(document, model_meshes.count())
+    let roots = try resolve_nodes(document, raw_nodes)
+    var nodes:Model.ModelNode[] = []
+    for node in raw_nodes {
+        nodes.append(Model.ModelNode(
+            name:node.name,
+            parent:node.parent,
+            children:node.children,
+            mesh:node.mesh,
+            transform:node.local_transform,
+            world_transform:node.resolution.world
+        ))
+    }
+    let bounds = model_bounds(geometries, model_meshes, nodes)
+    return Result<Model.Model, Error>.success(Model.Model(
+        meshes:geometries,
+        materials:materials,
+        images:images,
+        model_meshes:model_meshes,
+        nodes:nodes,
+        roots:roots,
+        minimum:bounds[0],
+        maximum:bounds[1]
+    ))
+}
+
+func parse_json(text:str, subject:str?) Result<JSON.Value, Error> {
+    match JSON.try_parse(text, 256) {
+        failure(error) => {
+            return fail<JSON.Value>(
+                ErrorKind.invalid_document,
+                subject,
+                "$(error.line):$(error.column): " + error.detail
+            )
+        }
+        success(value) => { return Result<JSON.Value, Error>.success(value) }
+    }
+}
+
+func parse_views(root:JSON.Value, buffers:BufferData[], subject:str?) Result<BufferView[], Error> {
+    var values = try optional_array(root, "bufferViews", subject)
+    var result:BufferView[] = []
+    for var value in values {
+        let buffer = try required_integer(value, "buffer", subject)
+        let offset = try optional_integer(value, "byteOffset", 0, subject)
+        let length = try required_integer(value, "byteLength", subject)
+        let stride = try optional_integer(value, "byteStride", 0, subject)
+        if buffer < 0 || buffer >= buffers.count() || offset < 0 || length < 0 ||
+            offset + length > C.byte_count(buffers[buffer].bytes) as int
+        {
+            return fail<BufferView[]>(ErrorKind.invalid_document, subject, "glTF bufferView exceeds its buffer")
+        }
+        result.append(BufferView(buffer:buffer, offset:offset, length:length, stride:stride))
+    }
+    return Result<BufferView[], Error>.success(result)
+}
+
+func parse_accessors(root:JSON.Value, views:BufferView[], subject:str?) Result<Accessor[], Error> {
+    var values = try optional_array(root, "accessors", subject)
+    var result:Accessor[] = []
+    for var value in values {
+        if value.member("sparse") != null {
+            return fail<Accessor[]>(ErrorKind.unsupported_feature, subject, "sparse glTF accessors are not implemented yet")
+        }
+        let view = try required_integer(value, "bufferView", subject)
+        let offset = try optional_integer(value, "byteOffset", 0, subject)
+        let component = try required_integer(value, "componentType", subject)
+        let count = try required_integer(value, "count", subject)
+        let kind = try required_string(value, "type", subject)
+        let normalized = try optional_boolean(value, "normalized", false, subject)
+        if view < 0 || view >= views.count() || offset < 0 || count < 0 {
+            return fail<Accessor[]>(ErrorKind.invalid_document, subject, "glTF accessor references invalid storage")
+        }
+        let components = component_count(kind)
+        let size = component_size(component)
+        if components == 0 || size == 0 {
+            return fail<Accessor[]>(ErrorKind.unsupported_feature, subject, "glTF accessor uses an unsupported scalar or vector type")
+        }
+        let stride = resolved_stride(views[view], components * size)
+        if count > 0 && offset + (count - 1) * stride + components * size > views[view].length {
+            return fail<Accessor[]>(ErrorKind.invalid_document, subject, "glTF accessor exceeds its bufferView")
+        }
+        result.append(Accessor(
+            view:view,
+            offset:offset,
+            component:component,
+            count:count,
+            components:components,
+            normalized:normalized
+        ))
+    }
+    return Result<Accessor[], Error>.success(result)
+}
+
+func read_u32(bytes:uint8[], offset:int) uint32 {
+    return bytes[offset] as uint32 +
+        (bytes[offset + 1] as uint32 << 8) +
+        (bytes[offset + 2] as uint32 << 16) +
+        (bytes[offset + 3] as uint32 << 24)
+}
+
+func parent_directory(subject:str?) str? {
+    if let path = subject {
+        match Path.parent(path) {
+            failure(error) => { return null }
+            success(value) => { return value }
+        }
+    }
+    return null
+}
+
+func starts_with(value:str, prefix:str) bool {
+    let value_bytes = UTF8.bytes(value)
+    let prefix_bytes = UTF8.bytes(prefix)
+    if value_bytes.count() < prefix_bytes.count() { return false }
+    var index = 0
+    while index < prefix_bytes.count() {
+        if value_bytes[index] != prefix_bytes[index] { return false }
+        index++
+    }
+    return true
+}
+
+func required_object(value:JSON.Value, name:str, subject:str?) Result<JSON.Value, Error> {
+    if member = value.member(name) {
+        if member.as_object() != null { return Result<JSON.Value, Error>.success(member) }
+    }
+    return fail<JSON.Value>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be an object")
+}
+
+func required_array(value:JSON.Value, name:str, subject:str?) Result<JSON.Value[], Error> {
+    if member = value.member(name) {
+        if array = member.as_array() { return Result<JSON.Value[], Error>.success(array) }
+    }
+    return fail<JSON.Value[]>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be an array")
+}
+
+func optional_array(value:JSON.Value, name:str, subject:str?) Result<JSON.Value[], Error> {
+    if member = value.member(name) {
+        if array = member.as_array() { return Result<JSON.Value[], Error>.success(array) }
+        return fail<JSON.Value[]>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be an array")
+    }
+    return Result<JSON.Value[], Error>.success([])
+}
+
+func required_string(value:JSON.Value, name:str, subject:str?) Result<str, Error> {
+    if member = value.member(name) {
+        if text = member.as_string() { return Result<str, Error>.success(text) }
+    }
+    return fail<str>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be a string")
+}
+
+func optional_string(value:JSON.Value, name:str, fallback:str, subject:str?) Result<str, Error> {
+    if member = value.member(name) {
+        if text = member.as_string() { return Result<str, Error>.success(text) }
+        return fail<str>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be a string")
+    }
+    return Result<str, Error>.success(fallback)
+}
+
+func required_integer(value:JSON.Value, name:str, subject:str?) Result<int, Error> {
+    if member = value.member(name) {
+        if number = member.as_integer() { return Result<int, Error>.success(number) }
+    }
+    return fail<int>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be an integer")
+}
+
+func optional_integer(value:JSON.Value, name:str, fallback:int, subject:str?) Result<int, Error> {
+    if member = value.member(name) {
+        if number = member.as_integer() { return Result<int, Error>.success(number) }
+        return fail<int>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be an integer")
+    }
+    return Result<int, Error>.success(fallback)
+}
+
+func optional_boolean(value:JSON.Value, name:str, fallback:bool, subject:str?) Result<bool, Error> {
+    if member = value.member(name) {
+        if boolean = member.as_boolean() { return Result<bool, Error>.success(boolean) }
+        return fail<bool>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be a boolean")
+    }
+    return Result<bool, Error>.success(fallback)
+}
+
+func optional_float(value:JSON.Value, name:str, fallback:float, subject:str?) Result<float, Error> {
+    if member = value.member(name) {
+        if text = member.as_number_text() {
+            if number = decimal_float(text) { return Result<float, Error>.success(number) }
+        }
+        return fail<float>(ErrorKind.invalid_document, subject, "glTF member '$(name)' must be a finite number")
+    }
+    return Result<float, Error>.success(fallback)
+}
+
+func float_array(value:JSON.Value, expected:int, subject:str?) Result<float[], Error> {
+    if var values = value.as_array() {
+        if values.count() != expected {
+            return fail<float[]>(ErrorKind.invalid_document, subject, "glTF numeric array has an unexpected length")
+        }
+        var result:float[] = []
+        for var item in values {
+            if text = item.as_number_text() {
+                if number = decimal_float(text) { result.append(number); continue }
+            }
+            return fail<float[]>(ErrorKind.invalid_document, subject, "glTF numeric array contains a non-number")
+        }
+        return Result<float[], Error>.success(result)
+    }
+    return fail<float[]>(ErrorKind.invalid_document, subject, "glTF value must be a numeric array")
+}
+
+func integer_array(value:JSON.Value, subject:str?) Result<int[], Error> {
+    if var values = value.as_array() {
+        var result:int[] = []
+        for var item in values {
+            if number = item.as_integer() { result.append(number); continue }
+            return fail<int[]>(ErrorKind.invalid_document, subject, "glTF index array contains a non-integer")
+        }
+        return Result<int[], Error>.success(result)
+    }
+    return fail<int[]>(ErrorKind.invalid_document, subject, "glTF value must be an index array")
+}
+
+func decimal_float(text:str) float? {
+    let values = UTF8.bytes(text)
+    if values.count() == 0 { return null }
+    var index = 0
+    var negative = false
+    if values[index] == 45 { negative = true; index++ }
+    var result:float = 0.0
+    var digits = 0
+    while index < values.count() && values[index] >= 48 && values[index] <= 57 {
+        result = result * 10.0 + (values[index] - 48) as float
+        index++; digits++
+    }
+    if index < values.count() && values[index] == 46 {
+        index++
+        var place:float = 0.1
+        while index < values.count() && values[index] >= 48 && values[index] <= 57 {
+            result += (values[index] - 48) as float * place
+            place *= 0.1
+            index++; digits++
+        }
+    }
+    if digits == 0 { return null }
+    var exponent = 0
+    var exponent_negative = false
+    if index < values.count() && (values[index] == 101 || values[index] == 69) {
+        index++
+        if index < values.count() && values[index] == 45 { exponent_negative = true; index++ }
+        elif index < values.count() && values[index] == 43 { index++ }
+        let start = index
+        while index < values.count() && values[index] >= 48 && values[index] <= 57 {
+            exponent = exponent * 10 + (values[index] - 48) as int
+            if exponent > 400 { return null }
+            index++
+        }
+        if start == index { return null }
+    }
+    if index != values.count() { return null }
+    var factor:float = 1.0
+    var power = 0
+    while power < exponent { factor *= 10.0; power++ }
+    if exponent_negative { result /= factor } else { result *= factor }
+    if negative { result = -result }
+    if !Math.is_finite(result) { return null }
+    return result
+}
+
+func component_count(kind:str) int {
+    if kind == "SCALAR" { return 1 }
+    if kind == "VEC2" { return 2 }
+    if kind == "VEC3" { return 3 }
+    if kind == "VEC4" || kind == "MAT2" { return 4 }
+    if kind == "MAT3" { return 9 }
+    if kind == "MAT4" { return 16 }
+    return 0
+}
+
+func component_size(kind:int) int {
+    if kind == 5120 || kind == 5121 { return 1 }
+    if kind == 5122 || kind == 5123 { return 2 }
+    if kind == 5125 || kind == 5126 { return 4 }
+    return 0
+}
+
+func resolved_stride(view:BufferView, packed:int) int {
+    if view.stride > 0 { return view.stride }
+    return packed
+}
+
+func fail<T>(kind:ErrorKind, subject:str?, detail:str) Result<T, Error> {
+    return Result<T, Error>.failure(Error(kind:kind, subject:subject, detail:detail))
+}
+
+func parse_images(document:Document) Result<Image[], Error> {
+    var values = try optional_array(document.root, "images", document.subject)
+    var result:Image[] = []
+    for var value in values {
+        let mime = try optional_string(value, "mimeType", "", document.subject)
+        var encoded:uint8[] = []
+        if view_value = value.member("bufferView") {
+            if view_index = view_value.as_integer() {
+                encoded = try view_bytes(document, view_index)
+            } else {
+                return fail<Image[]>(ErrorKind.invalid_document, document.subject, "glTF image bufferView must be an integer")
+            }
+        } elif uri_value = value.member("uri") {
+            if uri = uri_value.as_string() {
+                if starts_with(uri, "data:") {
+                    match GFX.Assets.GLTF.Base64.decode_data_uri(uri) {
+                        failure(detail) => { return fail<Image[]>(ErrorKind.invalid_document, document.subject, detail) }
+                        success(bytes) => { encoded = bytes }
+                    }
+                } else {
+                    if document.directory == null {
+                        return fail<Image[]>(ErrorKind.file, document.subject, "external glTF images require a source path")
+                    }
+                    var path = ""
+                    if let directory = document.directory {
+                        match Path.join(directory, uri) {
+                            failure(error) => { return fail<Image[]>(ErrorKind.file, document.subject, error.detail) }
+                            success(joined_path) => { path = joined_path }
+                        }
+                    }
+                    match File.read_all(path, 128 * 1024 * 1024) {
+                        failure(error) => { return fail<Image[]>(ErrorKind.file, path, error.detail) }
+                        success(file_bytes) => { encoded = file_bytes }
+                    }
+                }
+            } else {
+                return fail<Image[]>(ErrorKind.invalid_document, document.subject, "glTF image URI must be a string")
+            }
+        } else {
+            return fail<Image[]>(ErrorKind.invalid_document, document.subject, "glTF image has no byte source")
+        }
+        if mime != "" && mime != "image/png" {
+            return fail<Image[]>(ErrorKind.unsupported_feature, document.subject, "only PNG glTF images are implemented yet")
+        }
+        match GFX.Assets.GLTF.ImageCodec.decode_png(encoded) {
+            failure(detail) => { return fail<Image[]>(ErrorKind.image, document.subject, detail) }
+            success(image) => { result.append(image) }
+        }
+    }
+    return Result<Image[], Error>.success(result)
+}
+
+func view_bytes(document:Document, index:int) Result<uint8[], Error> {
+    if index < 0 || index >= document.views.count() {
+        return fail<uint8[]>(ErrorKind.invalid_document, document.subject, "glTF references an unknown bufferView")
+    }
+    let view = document.views[index]
+    let source = document.buffers[view.buffer].bytes
+    var result:uint8[] = []
+    var offset = 0
+    while offset < view.length {
+        result.append(C.byte_at(source, (view.offset + offset) as uint))
+        offset++
+    }
+    return Result<uint8[], Error>.success(result)
+}
+
+func parse_materials(document:Document) Result<Model.ModelMaterial[], Error> {
+    var values = try optional_array(document.root, "materials", document.subject)
+    var result:Model.ModelMaterial[] = []
+    for var value in values {
+        let name = try optional_string(value, "name", "", document.subject)
+        var albedo = Color.white()
+        var metallic = 1.0
+        var roughness = 1.0
+        var albedo_texture:Model.TextureReference? = null
+        var metallic_roughness_texture:Model.TextureReference? = null
+        if pbr_value = value.member("pbrMetallicRoughness") {
+            if pbr_value.as_object() == null {
+                return fail<Model.ModelMaterial[]>(ErrorKind.invalid_document, document.subject, "glTF PBR material must be an object")
+            }
+            if factor = pbr_value.member("baseColorFactor") {
+                let channels = try float_array(factor, 4, document.subject)
+                albedo = Color.rgba(channels[0], channels[1], channels[2], channels[3])
+            }
+            metallic = try optional_float(pbr_value, "metallicFactor", 1.0, document.subject)
+            roughness = try optional_float(pbr_value, "roughnessFactor", 1.0, document.subject)
+            if texture = pbr_value.member("baseColorTexture") {
+                albedo_texture = try texture_reference(document, texture)
+            }
+            if texture = pbr_value.member("metallicRoughnessTexture") {
+                metallic_roughness_texture = try texture_reference(document, texture)
+            }
+        }
+        var emission = Color.black()
+        var emission_intensity = 0.0
+        if factor = value.member("emissiveFactor") {
+            let channels = try float_array(factor, 3, document.subject)
+            emission = Color.rgba(channels[0], channels[1], channels[2], 1.0)
+            if channels[0] > 0.0 || channels[1] > 0.0 || channels[2] > 0.0 {
+                emission_intensity = 1.0
+            }
+        }
+        if extensions = value.member("extensions") {
+            if strength = extensions.member("KHR_materials_emissive_strength") {
+                emission_intensity = try optional_float(strength, "emissiveStrength", emission_intensity, document.subject)
+            }
+        }
+        var alpha_mode = Model.AlphaMode.opaque
+        let alpha_name = try optional_string(value, "alphaMode", "OPAQUE", document.subject)
+        if alpha_name == "MASK" { alpha_mode = Model.AlphaMode.mask }
+        elif alpha_name == "BLEND" { alpha_mode = Model.AlphaMode.blend }
+        elif alpha_name != "OPAQUE" {
+            return fail<Model.ModelMaterial[]>(ErrorKind.invalid_document, document.subject, "glTF material has an unknown alpha mode")
+        }
+        var normal_texture:Model.TextureReference? = null
+        var normal_scale = 1.0
+        if texture = value.member("normalTexture") {
+            normal_texture = try texture_reference(document, texture)
+            normal_scale = try optional_float(texture, "scale", 1.0, document.subject)
+        }
+        var occlusion_texture:Model.TextureReference? = null
+        var occlusion_strength = 1.0
+        if texture = value.member("occlusionTexture") {
+            occlusion_texture = try texture_reference(document, texture)
+            occlusion_strength = try optional_float(texture, "strength", 1.0, document.subject)
+        }
+        var emission_texture:Model.TextureReference? = null
+        if texture = value.member("emissiveTexture") {
+            emission_texture = try texture_reference(document, texture)
+            if emission_intensity == 0.0 {
+                emission = Color.white()
+                emission_intensity = 1.0
+            }
+        }
+        result.append(Model.ModelMaterial(
+            name:name,
+            value:Scene3D.Material(
+                albedo:albedo,
+                metallic:metallic,
+                roughness:roughness,
+                occlusion:occlusion_strength,
+                emission:emission,
+                emission_intensity:emission_intensity
+            ),
+            alpha_mode:alpha_mode,
+            alpha_cutoff:try optional_float(value, "alphaCutoff", 0.5, document.subject),
+            double_sided:try optional_boolean(value, "doubleSided", false, document.subject),
+            textures:Model.ModelTextures(
+                albedo:albedo_texture,
+                normal:normal_texture,
+                metallic_roughness:metallic_roughness_texture,
+                occlusion:occlusion_texture,
+                emission:emission_texture,
+                normal_scale:normal_scale,
+                occlusion_strength:occlusion_strength
+            )
+        ))
+    }
+    return Result<Model.ModelMaterial[], Error>.success(result)
+}
+
+func texture_reference(document:Document, value:JSON.Value) Result<Model.TextureReference, Error> {
+    let texture_index = try required_integer(value, "index", document.subject)
+    var textures = try required_array(document.root, "textures", document.subject)
+    if texture_index < 0 || texture_index >= textures.count() {
+        return fail<Model.TextureReference>(ErrorKind.invalid_document, document.subject, "glTF material references an unknown texture")
+    }
+    let image = try required_integer(textures[texture_index], "source", document.subject)
+    var images = try required_array(document.root, "images", document.subject)
+    if image < 0 || image >= images.count() {
+        return fail<Model.TextureReference>(ErrorKind.invalid_document, document.subject, "glTF texture references an unknown image")
+    }
+    var coordinates = try optional_integer(value, "texCoord", 0, document.subject)
+    var offset = Math.Vec2()
+    var scale = Math.Vec2(1.0)
+    var rotation = 0.0
+    if extensions = value.member("extensions") {
+        if transform = extensions.member("KHR_texture_transform") {
+            if values = transform.member("offset") {
+                let pair = try float_array(values, 2, document.subject)
+                offset = Math.Vec2(pair[0], pair[1])
+            }
+            if values = transform.member("scale") {
+                let pair = try float_array(values, 2, document.subject)
+                scale = Math.Vec2(pair[0], pair[1])
+            }
+            rotation = try optional_float(transform, "rotation", 0.0, document.subject)
+            coordinates = try optional_integer(transform, "texCoord", coordinates, document.subject)
+        }
+    }
+    return Result<Model.TextureReference, Error>.success(Model.TextureReference(
+        image:image,
+        transform:Model.TextureTransform(
+            offset:offset,
+            scale:scale,
+            rotation:rotation,
+            coordinates:coordinates
+        )
+    ))
+}
+
+func parse_meshes(
+    document:Document,
+    geometries:&Scene3D.Geometry.Mesh[],
+    material_count:int
+) Result<Model.ModelMesh[], Error> {
+    var values = try optional_array(document.root, "meshes", document.subject)
+    var result:Model.ModelMesh[] = []
+    for var value in values {
+        let name = try optional_string(value, "name", "", document.subject)
+        var primitives = try required_array(value, "primitives", document.subject)
+        var converted:Model.ModelPrimitive[] = []
+        for var primitive in primitives {
+            let mode = try optional_integer(primitive, "mode", 4, document.subject)
+            if mode != 4 {
+                return fail<Model.ModelMesh[]>(ErrorKind.unsupported_feature, document.subject, "only glTF triangle primitives are implemented yet")
+            }
+            var attributes = try required_object(primitive, "attributes", document.subject)
+            let positions = try required_integer(attributes, "POSITION", document.subject)
+            let normals = try optional_integer(attributes, "NORMAL", -1, document.subject)
+            let uvs = try optional_integer(attributes, "TEXCOORD_0", -1, document.subject)
+            let colors = try optional_integer(attributes, "COLOR_0", -1, document.subject)
+            let indices = try optional_integer(primitive, "indices", -1, document.subject)
+            let material = try optional_integer(primitive, "material", -1, document.subject)
+            if material < -1 || material >= material_count {
+                return fail<Model.ModelMesh[]>(ErrorKind.invalid_document, document.subject, "glTF primitive references an unknown material")
+            }
+            let geometry = try build_geometry(document, positions, normals, uvs, colors, indices)
+            let geometry_index = geometries.count()
+            geometries.append(geometry)
+            converted.append(Model.ModelPrimitive(mesh:geometry_index, material:material))
+        }
+        result.append(Model.ModelMesh(name:name, primitives:converted))
+    }
+    return Result<Model.ModelMesh[], Error>.success(result)
+}
+
+func build_geometry(
+    document:Document,
+    positions_index:int,
+    normals_index:int,
+    uvs_index:int,
+    colors_index:int,
+    indices_index:int
+) Result<Scene3D.Geometry.Mesh, Error> {
+    let positions = try accessor(document, positions_index)
+    if positions.components != 3 {
+        return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF POSITION accessor must contain VEC3 values")
+    }
+    if normals_index >= 0 {
+        let normals = try accessor(document, normals_index)
+        if normals.count != positions.count || normals.components != 3 {
+            return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF NORMAL accessor does not match POSITION")
+        }
+    }
+    if uvs_index >= 0 {
+        let uvs = try accessor(document, uvs_index)
+        if uvs.count != positions.count || uvs.components != 2 {
+            return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF TEXCOORD_0 accessor does not match POSITION")
+        }
+    }
+    if colors_index >= 0 {
+        let colors = try accessor(document, colors_index)
+        if colors.count != positions.count || (colors.components != 3 && colors.components != 4) {
+            return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF COLOR_0 accessor does not match POSITION")
+        }
+    }
+    var vertices:Scene3D.Geometry.Vertex[] = []
+    var index = 0
+    while index < positions.count {
+        let position = try read_vec3(document, positions_index, index, Math.Vec3())
+        var normal = Math.Vec3.up()
+        if normals_index >= 0 { normal = (try read_vec3(document, normals_index, index, normal)).normalized() }
+        var uv = Math.Vec2()
+        if uvs_index >= 0 { uv = try read_vec2(document, uvs_index, index, uv) }
+        var color = Color.white()
+        if colors_index >= 0 { color = try read_color(document, colors_index, index) }
+        vertices.append(Scene3D.Geometry.Vertex(
+            position:position,
+            normal:normal,
+            uv:uv,
+            color:color
+        ))
+        index++
+    }
+    var indices:uint32[] = []
+    if indices_index >= 0 {
+        let source = try accessor(document, indices_index)
+        if source.components != 1 {
+            return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF index accessor must contain scalar values")
+        }
+        index = 0
+        while index < source.count {
+            let value = try read_index(document, indices_index, index)
+            if value as int >= vertices.count() {
+                return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF primitive index is out of bounds")
+            }
+            indices.append(value)
+            index++
+        }
+    } else {
+        index = 0
+        while index < vertices.count() { indices.append(index as uint32); index++ }
+    }
+    if indices.count() == 0 || indices.count() % 3 != 0 {
+        return fail<Scene3D.Geometry.Mesh>(ErrorKind.invalid_document, document.subject, "glTF triangle primitive has an invalid index count")
+    }
+    return Result<Scene3D.Geometry.Mesh, Error>.success(Scene3D.Geometry.Mesh(vertices, indices))
+}
+
+func accessor(document:Document, index:int) Result<Accessor, Error> {
+    if index < 0 || index >= document.accessors.count() {
+        return fail<Accessor>(ErrorKind.invalid_document, document.subject, "glTF references an unknown accessor")
+    }
+    return Result<Accessor, Error>.success(document.accessors[index])
+}
+
+func read_vec2(document:Document, accessor_index:int, index:int, fallback:Math.Vec2) Result<Math.Vec2, Error> {
+    let value = try accessor(document, accessor_index)
+    if index < 0 || index >= value.count || value.components < 2 { return Result<Math.Vec2, Error>.success(fallback) }
+    return Result<Math.Vec2, Error>.success(Math.Vec2(
+        read_component(document, value, index, 0),
+        read_component(document, value, index, 1)
+    ))
+}
+
+func read_vec3(document:Document, accessor_index:int, index:int, fallback:Math.Vec3) Result<Math.Vec3, Error> {
+    let value = try accessor(document, accessor_index)
+    if index < 0 || index >= value.count || value.components < 3 { return Result<Math.Vec3, Error>.success(fallback) }
+    return Result<Math.Vec3, Error>.success(Math.Vec3(
+        read_component(document, value, index, 0),
+        read_component(document, value, index, 1),
+        read_component(document, value, index, 2)
+    ))
+}
+
+func read_color(document:Document, accessor_index:int, index:int) Result<Color, Error> {
+    let value = try accessor(document, accessor_index)
+    var alpha = 1.0
+    if value.components > 3 { alpha = read_component(document, value, index, 3) }
+    return Result<Color, Error>.success(Color.rgba(
+        read_component(document, value, index, 0),
+        read_component(document, value, index, 1),
+        read_component(document, value, index, 2),
+        alpha
+    ))
+}
+
+func read_component(document:Document, accessor:Accessor, index:int, component:int) float {
+    let view = document.views[accessor.view]
+    let size = component_size(accessor.component)
+    let stride = resolved_stride(view, accessor.components * size)
+    let offset = view.offset + accessor.offset + index * stride + component * size
+    let address = C.address_bits(C.pointer(document.buffers[view.buffer].bytes))
+    if accessor.component == 5126 { return C.load<float32>(address, offset as uint) as float }
+    if accessor.component == 5125 { return normalized_unsigned(C.load<uint32>(address, offset as uint) as uint, 4, accessor.normalized) }
+    if accessor.component == 5123 { return normalized_unsigned(C.load<uint16>(address, offset as uint) as uint, 2, accessor.normalized) }
+    if accessor.component == 5121 { return normalized_unsigned(C.load<uint8>(address, offset as uint) as uint, 1, accessor.normalized) }
+    if accessor.component == 5122 { return normalized_signed(C.load<int16>(address, offset as uint) as int, 2, accessor.normalized) }
+    return normalized_signed(C.load<int8>(address, offset as uint) as int, 1, accessor.normalized)
+}
+
+func read_index(document:Document, accessor_index:int, index:int) Result<uint32, Error> {
+    let value = try accessor(document, accessor_index)
+    let view = document.views[value.view]
+    let size = component_size(value.component)
+    let offset = view.offset + value.offset + index * resolved_stride(view, size)
+    let address = C.address_bits(C.pointer(document.buffers[view.buffer].bytes))
+    if value.component == 5125 { return Result<uint32, Error>.success(C.load<uint32>(address, offset as uint)) }
+    if value.component == 5123 { return Result<uint32, Error>.success(C.load<uint16>(address, offset as uint) as uint32) }
+    if value.component == 5121 { return Result<uint32, Error>.success(C.load<uint8>(address, offset as uint) as uint32) }
+    return fail<uint32>(ErrorKind.unsupported_feature, document.subject, "glTF index accessor uses an unsupported component type")
+}
+
+func normalized_unsigned(value:uint, bytes:int, normalized:bool) float {
+    if !normalized { return value as float }
+    if bytes == 1 { return value as float / 255.0 }
+    if bytes == 2 { return value as float / 65_535.0 }
+    return value as float / 4_294_967_295.0
+}
+
+func normalized_signed(value:int, bytes:int, normalized:bool) float {
+    if !normalized { return value as float }
+    if bytes == 1 { return Math.max(value as float / 127.0, -1.0) }
+    return Math.max(value as float / 32_767.0, -1.0)
+}
+
+func parse_nodes(document:Document, mesh_count:int) Result<RawNode[], Error> {
+    var values = try optional_array(document.root, "nodes", document.subject)
+    var result:RawNode[] = []
+    for var value in values {
+        if value.member("matrix") != null {
+            return fail<RawNode[]>(ErrorKind.unsupported_feature, document.subject, "glTF matrix nodes are not implemented yet; use TRS transforms")
+        }
+        var translation = Math.Vec3()
+        if member = value.member("translation") {
+            let parts = try float_array(member, 3, document.subject)
+            translation = Math.Vec3(parts[0], parts[1], parts[2])
+        }
+        var rotation = Math.Quat()
+        if member = value.member("rotation") {
+            let parts = try float_array(member, 4, document.subject)
+            rotation = Math.Quat(parts[0], parts[1], parts[2], parts[3]).normalized()
+        }
+        var scale = Math.Vec3(1.0)
+        if member = value.member("scale") {
+            let parts = try float_array(member, 3, document.subject)
+            scale = Math.Vec3(parts[0], parts[1], parts[2])
+        }
+        var children:int[] = []
+        if member = value.member("children") { children = try integer_array(member, document.subject) }
+        let mesh = try optional_integer(value, "mesh", -1, document.subject)
+        if mesh < -1 || mesh >= mesh_count {
+            return fail<RawNode[]>(ErrorKind.invalid_document, document.subject, "glTF node references an unknown mesh")
+        }
+        let transform = Scene3D.Transform(position:translation, rotation:rotation, scale:scale)
+        result.append(RawNode(
+            name:try optional_string(value, "name", "", document.subject),
+            parent:-1,
+            children:children,
+            mesh:mesh,
+            local_transform:transform,
+            resolution:NodeResolution(world:transform, resolved:false, resolving:false)
+        ))
+    }
+    var parent = 0
+    while parent < result.count() {
+        for child in result[parent].children {
+            if child < 0 || child >= result.count() {
+                return fail<RawNode[]>(ErrorKind.invalid_document, document.subject, "glTF node references an unknown child")
+            }
+            if result[child].parent >= 0 {
+                return fail<RawNode[]>(ErrorKind.invalid_document, document.subject, "glTF node has more than one parent")
+            }
+            result[child].parent = parent
+        }
+        parent++
+    }
+    return Result<RawNode[], Error>.success(result)
+}
+
+func resolve_nodes(document:Document, nodes:&RawNode[]) Result<int[], Error> {
+    var index = 0
+    while index < nodes.count() { try resolve_node(document, nodes, index); index++ }
+    var roots:int[] = []
+    if scene_value = document.root.member("scene") {
+        if scene = scene_value.as_integer() {
+            var scenes = try required_array(document.root, "scenes", document.subject)
+            if scene < 0 || scene >= scenes.count() {
+                return fail<int[]>(ErrorKind.invalid_document, document.subject, "glTF default scene index is out of bounds")
+            }
+            if root_values = scenes[scene].member("nodes") {
+                roots = try integer_array(root_values, document.subject)
+            }
+        } else {
+            return fail<int[]>(ErrorKind.invalid_document, document.subject, "glTF default scene index must be an integer")
+        }
+    }
+    if roots.count() == 0 {
+        index = 0
+        while index < nodes.count() {
+            if nodes[index].parent < 0 { roots.append(index) }
+            index++
+        }
+    }
+    for root in roots {
+        if root < 0 || root >= nodes.count() {
+            return fail<int[]>(ErrorKind.invalid_document, document.subject, "glTF scene references an unknown root node")
+        }
+    }
+    return Result<int[], Error>.success(roots)
+}
+
+func resolve_node(document:Document, nodes:&RawNode[], index:int) Result<void, Error> {
+    if nodes[index].resolution.resolved { return Result<void, Error>.success() }
+    if nodes[index].resolution.resolving {
+        return Result<void, Error>.failure(Error(
+            kind:ErrorKind.invalid_document,
+            subject:document.subject,
+            detail:"glTF node hierarchy contains a cycle"
+        ))
+    }
+    nodes[index].resolution.resolving = true
+    if nodes[index].parent >= 0 {
+        try resolve_node(document, nodes, nodes[index].parent)
+        nodes[index].resolution.world = compose(
+            nodes[nodes[index].parent].resolution.world,
+            nodes[index].local_transform
+        )
+    } else {
+        nodes[index].resolution.world = nodes[index].local_transform
+    }
+    nodes[index].resolution.resolving = false
+    nodes[index].resolution.resolved = true
+    return Result<void, Error>.success()
+}
+
+func compose(parent:Scene3D.Transform, child:Scene3D.Transform) Scene3D.Transform {
+    let scaled = Math.Vec3(
+        child.position.x * parent.scale.x,
+        child.position.y * parent.scale.y,
+        child.position.z * parent.scale.z
+    )
+    return Scene3D.Transform(
+        position:parent.position.add(parent.rotation.rotate(scaled)),
+        rotation:parent.rotation.multiply(child.rotation).normalized(),
+        scale:Math.Vec3(
+            parent.scale.x * child.scale.x,
+            parent.scale.y * child.scale.y,
+            parent.scale.z * child.scale.z
+        )
+    )
+}
+
+func model_bounds(
+    geometries:Scene3D.Geometry.Mesh[],
+    meshes:Model.ModelMesh[],
+    nodes:Model.ModelNode[]
+) Math.Vec3[] {
+    var minimum = Math.Vec3(3.4028235e38)
+    var maximum = Math.Vec3(-3.4028235e38)
+    var found = false
+    for node in nodes {
+        if node.mesh < 0 { continue }
+        let matrix = node.world_transform.matrix()
+        for primitive in meshes[node.mesh].primitives {
+            for vertex in geometries[primitive.mesh].vertices() {
+                let transformed = matrix.multiply(Math.Vec4(vertex.position, 1.0))
+                let position = Math.Vec3(transformed.x, transformed.y, transformed.z)
+                minimum = Math.Vec3(
+                    Math.min(minimum.x, position.x),
+                    Math.min(minimum.y, position.y),
+                    Math.min(minimum.z, position.z)
+                )
+                maximum = Math.Vec3(
+                    Math.max(maximum.x, position.x),
+                    Math.max(maximum.y, position.y),
+                    Math.max(maximum.z, position.z)
+                )
+                found = true
+            }
+        }
+    }
+    if !found { minimum = Math.Vec3(); maximum = Math.Vec3() }
+    return [minimum, maximum]
+}

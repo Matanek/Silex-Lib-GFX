@@ -1,0 +1,18 @@
+public enum ErrorKind {
+    file
+    invalid_container
+    invalid_document
+    unsupported_feature
+    image
+}
+
+public struct Error {
+    let kind:ErrorKind
+    let subject:str?
+    let detail:str
+}
+
+public enum Format {
+    gltf
+    glb
+}

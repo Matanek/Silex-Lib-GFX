@@ -2,6 +2,16 @@ public use GFX.Assets.Image.Image
 public use GFX.Assets.ImageHandle.ImageHandle
 public use GFX.Assets.ImageRegion.ImageRegion
 public use GFX.Assets.Images.Images
+public use GFX.Assets.Model.AlphaMode
+public use GFX.Assets.Model.Model
+public use GFX.Assets.Model.ModelInstance
+public use GFX.Assets.Model.ModelMaterial
+public use GFX.Assets.Model.ModelTextures
+public use GFX.Assets.Model.ModelMesh
+public use GFX.Assets.Model.ModelNode
+public use GFX.Assets.Model.ModelPrimitive
+public use GFX.Assets.Model.TextureReference
+public use GFX.Assets.Model.TextureTransform
 public use GFX.Assets.SpriteSheet.SpriteClip
 public use GFX.Assets.SpriteSheet.SpriteSheet
 public use GFX.Assets.SpriteSheetHandle.SpriteSheetHandle

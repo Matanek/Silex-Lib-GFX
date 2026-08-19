@@ -1,0 +1,240 @@
+use GFX.Assets.Image
+use GFX.Color
+use GFX.ECS
+use GFX.Scene3D
+use STD.Math
+
+public struct TextureTransform {
+    let offset:Math.Vec2
+    let scale:Math.Vec2
+    let rotation:float
+    let coordinates:int
+
+    init(
+        offset:Math.Vec2 = Math.Vec2(),
+        scale:Math.Vec2 = Math.Vec2(1.0),
+        rotation:float = 0.0,
+        coordinates:int = 0
+    ) {
+        self.offset = offset
+        self.scale = scale
+        self.rotation = rotation
+        self.coordinates = coordinates
+    }
+}
+
+public struct TextureReference {
+    let image:int
+    let transform:TextureTransform
+
+    init(image:int, transform:TextureTransform = TextureTransform()) {
+        self.image = image
+        self.transform = transform
+    }
+}
+
+public enum AlphaMode {
+    opaque
+    mask
+    blend
+}
+
+public struct ModelTextures {
+    let albedo:TextureReference?
+    let normal:TextureReference?
+    let metallic_roughness:TextureReference?
+    let occlusion:TextureReference?
+    let emission:TextureReference?
+    let normal_scale:float
+    let occlusion_strength:float
+
+    init(
+        albedo:TextureReference? = null,
+        normal:TextureReference? = null,
+        metallic_roughness:TextureReference? = null,
+        occlusion:TextureReference? = null,
+        emission:TextureReference? = null,
+        normal_scale:float = 1.0,
+        occlusion_strength:float = 1.0
+    ) {
+        self.albedo = albedo
+        self.normal = normal
+        self.metallic_roughness = metallic_roughness
+        self.occlusion = occlusion
+        self.emission = emission
+        self.normal_scale = normal_scale
+        self.occlusion_strength = occlusion_strength
+    }
+}
+
+public struct ModelMaterial {
+    let name:str
+    let value:Scene3D.Material
+    let alpha_mode:AlphaMode
+    let alpha_cutoff:float
+    let double_sided:bool
+    let textures:ModelTextures
+
+    init(
+        name:str = "",
+        value:Scene3D.Material = Scene3D.Material(),
+        alpha_mode:AlphaMode = AlphaMode.opaque,
+        alpha_cutoff:float = 0.5,
+        double_sided:bool = false,
+        textures:ModelTextures = ModelTextures()
+    ) {
+        self.name = name
+        self.value = value
+        self.alpha_mode = alpha_mode
+        self.alpha_cutoff = alpha_cutoff
+        self.double_sided = double_sided
+        self.textures = textures
+    }
+}
+
+public struct ModelPrimitive {
+    let mesh:int
+    let material:int
+}
+
+public struct ModelMesh {
+    let name:str
+    let primitives:ModelPrimitive[]
+}
+
+public struct ModelNode {
+    let name:str
+    let parent:int
+    let children:int[]
+    let mesh:int
+    let transform:Scene3D.Transform
+    let world_transform:Scene3D.Transform
+}
+
+public struct ModelInstance {
+    let entities:ECS.Entity[]
+    let roots:ECS.Entity[]
+}
+
+public struct Model {
+    private let current_meshes:Scene3D.Geometry.Mesh[]
+    private let current_materials:ModelMaterial[]
+    private let current_images:Image[]
+    private let current_model_meshes:ModelMesh[]
+    private let current_nodes:ModelNode[]
+    private let current_roots:int[]
+    private let minimum:Math.Vec3
+    private let maximum:Math.Vec3
+
+    package init(
+        meshes:Scene3D.Geometry.Mesh[],
+        materials:ModelMaterial[],
+        images:Image[],
+        model_meshes:ModelMesh[],
+        nodes:ModelNode[],
+        roots:int[],
+        minimum:Math.Vec3,
+        maximum:Math.Vec3
+    ) {
+        self.current_meshes = meshes
+        self.current_materials = materials
+        self.current_images = images
+        self.current_model_meshes = model_meshes
+        self.current_nodes = nodes
+        self.current_roots = roots
+        self.minimum = minimum
+        self.maximum = maximum
+    }
+
+    static func from_mesh(
+        mesh:Scene3D.Geometry.Mesh,
+        material:ModelMaterial = ModelMaterial(),
+        name:str = "Model"
+    ) Model {
+        if mesh.is_empty() { panic("GFX.Assets model requires a non-empty mesh") }
+        let bounds = mesh_bounds(mesh)
+        let geometries:Scene3D.Geometry.Mesh[] = [mesh]
+        let materials:ModelMaterial[] = [material]
+        let model_meshes:ModelMesh[] = [ModelMesh(
+            name:name,
+            primitives:[ModelPrimitive(mesh:0, material:0)]
+        )]
+        let nodes:ModelNode[] = [ModelNode(
+            name:name,
+            parent:-1,
+            children:[],
+            mesh:0,
+            transform:Scene3D.Transform(),
+            world_transform:Scene3D.Transform()
+        )]
+        return Model(
+            meshes:geometries,
+            materials:materials,
+            images:[],
+            model_meshes:model_meshes,
+            nodes:nodes,
+            roots:[0],
+            minimum:bounds[0],
+            maximum:bounds[1]
+        )
+    }
+
+    func mesh_count() int { return self.current_meshes.count() }
+    func model_mesh_count() int { return self.current_model_meshes.count() }
+    func material_count() int { return self.current_materials.count() }
+    func image_count() int { return self.current_images.count() }
+    func node_count() int { return self.current_nodes.count() }
+    func root_count() int { return self.current_roots.count() }
+    func mesh(index:int) Scene3D.Geometry.Mesh { return self.current_meshes[index] }
+    func model_mesh(index:int) ModelMesh { return self.current_model_meshes[index] }
+    func material(index:int) ModelMaterial { return self.current_materials[index] }
+    func image(index:int) Image { return self.current_images[index] }
+    func node(index:int) ModelNode { return self.current_nodes[index] }
+    func root(index:int) int { return self.current_roots[index] }
+    func minimum_bounds() Math.Vec3 { return self.minimum }
+    func maximum_bounds() Math.Vec3 { return self.maximum }
+    func center() Math.Vec3 { return self.minimum.add(self.maximum).multiply(0.5) }
+    func radius() float { return Math.max(self.minimum.distance(self.maximum) * 0.5, 1.0) }
+
+    func instantiate(world:&ECS.World, meshes:&Scene3D.Meshes) ModelInstance {
+        var handles:Scene3D.MeshHandle[] = []
+        for geometry in self.current_meshes { handles.append(meshes.add(geometry)) }
+        var entities:ECS.Entity[] = []
+        var roots:ECS.Entity[] = []
+        var node_index = 0
+        while node_index < self.current_nodes.count() {
+            let node = self.current_nodes[node_index]
+            if node.mesh >= 0 {
+                let model_mesh = self.current_model_meshes[node.mesh]
+                for primitive in model_mesh.primitives {
+                    var material = Scene3D.Material()
+                    if primitive.material >= 0 {
+                        material = self.current_materials[primitive.material].value
+                    }
+                    let entity = world.spawn(ECS.EntityRecipe()
+                        ..with(node.world_transform)
+                        ..with(Scene3D.Mesh(handles[primitive.mesh]))
+                        ..with(material)
+                    )
+                    entities.append(entity)
+                    if node.parent < 0 { roots.append(entity) }
+                }
+            }
+            node_index++
+        }
+        return ModelInstance(entities:entities, roots:roots)
+    }
+}
+
+func mesh_bounds(mesh:Scene3D.Geometry.Mesh) Math.Vec3[] {
+    let vertices = mesh.vertices()
+    var minimum = vertices[0].position
+    var maximum = minimum
+    var index = 1
+    while index < vertices.count() {
+        minimum = minimum.minimum(vertices[index].position)
+        maximum = maximum.maximum(vertices[index].position)
+        index++
+    }
+    return [minimum, maximum]
+}

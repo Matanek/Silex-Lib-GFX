@@ -1,0 +1,48 @@
+use GFX.Application
+use GFX.Assets.GLTF
+use GFX.Components
+use GFX.ECS
+use GFX.Plugins
+use GFX.Resources
+use STD.Math
+
+func create_scene(world:&Resources.World, meshes:&Resources.Meshes3D) {
+    let model = GLTF.load("../../Assets/Models/TestPBR.glb")
+    let center = model.center()
+    let radius = model.radius()
+    let instance = model.instantiate(world, meshes)
+
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.AmbientLight3D(intensity:0.12))
+    )
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.SunLight3D(
+            direction:Math.Vec3(-0.5, -1.0, -0.4).normalized(),
+            intensity:4.0
+        ))
+    )
+
+    print("TestPBR.glb: $(instance.entities.count()) primitives instantiated")
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Scene3D — glTF PBR"
+            ..width = 1100
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Scene3D())
+        ..add_plugin(Plugins.ViewportCamera3D(Plugins.ViewportCamera3DSettings()
+            ..target = Math.Vec3(0.0, 0.55, 0.0)
+            ..distance = 8.0
+            ..min_distance = 2.0
+            ..max_distance = 12.0
+            ..pitch = Math.radians(-35.0)
+            ..vertical_fov = Math.radians(42.0)
+            ..near_plane = 0.05
+            ..far_plane = 80.0
+        ))
+        ..add_system(Application.Schedule.startup, create_scene)
+        ..run()
+}

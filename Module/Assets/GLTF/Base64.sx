@@ -1,0 +1,88 @@
+use Interop.C
+use STD.Math
+use STD.Text.UTF8
+
+func encode(bytes:uint8[]) str {
+    let alphabet = UTF8.bytes("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
+    var result:uint8[] = []
+    var index = 0
+    while index < bytes.count() {
+        let first = bytes[index] as uint
+        var second:uint = 0
+        var third:uint = 0
+        if index + 1 < bytes.count() { second = bytes[index + 1] as uint }
+        if index + 2 < bytes.count() { third = bytes[index + 2] as uint }
+        let packed = (first << 16) + (second << 8) + third
+        result.append(alphabet[((packed >> 18) & 63) as int])
+        result.append(alphabet[((packed >> 12) & 63) as int])
+        if index + 1 < bytes.count() { result.append(alphabet[((packed >> 6) & 63) as int]) }
+        else { result.append(61 as uint8) }
+        if index + 2 < bytes.count() { result.append(alphabet[(packed & 63) as int]) }
+        else { result.append(61 as uint8) }
+        index += 3
+    }
+    if result.count() == 0 { return "" }
+    return C.string(@result[0:result.count()])
+}
+
+func decode_data_uri(uri:str) Result<uint8[], str> {
+    let bytes = UTF8.bytes(uri)
+    var comma = -1
+    var index = 0
+    while index < bytes.count() {
+        if bytes[index] == 44 { comma = index; break }
+        index++
+    }
+    if comma < 6 {
+        return Result<uint8[], str>.failure("data URI has no media header")
+    }
+    let marker = UTF8.bytes(";base64")
+    if comma < marker.count() {
+        return Result<uint8[], str>.failure("data URI is not base64 encoded")
+    }
+    index = 0
+    while index < marker.count() {
+        if bytes[comma - marker.count() + index] != marker[index] {
+            return Result<uint8[], str>.failure("data URI is not base64 encoded")
+        }
+        index++
+    }
+    var result:uint8[] = []
+    index = comma + 1
+    while index < bytes.count() {
+        if index + 3 >= bytes.count() {
+            return Result<uint8[], str>.failure("base64 payload has an invalid length")
+        }
+        let a = value(bytes[index])
+        let b = value(bytes[index + 1])
+        let c = value(bytes[index + 2])
+        let d = value(bytes[index + 3])
+        if a < 0 || b < 0 || c < -1 || d < -1 {
+            return Result<uint8[], str>.failure("base64 payload contains an invalid character")
+        }
+        var third = c
+        var fourth = d
+        if third < 0 { third = 0 }
+        if fourth < 0 { fourth = 0 }
+        let packed = (a as uint << 18) + (b as uint << 12) +
+            (third as uint << 6) + fourth as uint
+        result.append(((packed >> 16) & 255) as uint8)
+        if c >= 0 { result.append(((packed >> 8) & 255) as uint8) }
+        if d >= 0 { result.append((packed & 255) as uint8) }
+        if (c < 0 || d < 0) && index + 4 != bytes.count() {
+            return Result<uint8[], str>.failure("base64 padding must end the payload")
+        }
+        index += 4
+    }
+    return Result<uint8[], str>.success(result)
+}
+
+func value(byte:uint8) int {
+    if byte >= 65 && byte <= 90 { return (byte - 65) as int }
+    if byte >= 97 && byte <= 122 { return (byte - 97 + 26) as int }
+    if byte >= 48 && byte <= 57 { return (byte - 48 + 52) as int }
+    if byte == 43 { return 62 }
+    if byte == 47 { return 63 }
+    if byte == 61 { return -1 }
+    return -2
+}

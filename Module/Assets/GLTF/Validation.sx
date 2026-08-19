@@ -1,0 +1,72 @@
+use GFX.Assets.GLTF.Types.Error
+use GFX.Assets.GLTF.Types.ErrorKind
+use JSON
+
+func validate(root:JSON.Value, subject:str?) Result<void, Error> {
+    if var required = root.member("extensionsRequired") {
+        if var values = required.as_array() {
+            for var value in values {
+                if name = value.as_string() {
+                    if name != "KHR_texture_transform" &&
+                        name != "KHR_materials_emissive_strength"
+                    {
+                        return unsupported(subject, "required glTF extension '$(name)' is not implemented")
+                    }
+                } else {
+                    return invalid(subject, "glTF extensionsRequired must contain strings")
+                }
+            }
+        } else {
+            return invalid(subject, "glTF extensionsRequired must be an array")
+        }
+    }
+    if has_items(root, "animations") {
+        return unsupported(subject, "glTF animation is not implemented yet")
+    }
+    if has_items(root, "skins") {
+        return unsupported(subject, "glTF skinning is not implemented yet")
+    }
+    if var meshes = root.member("meshes") {
+        if var values = meshes.as_array() {
+            for var mesh in values {
+                if mesh.member("weights") != null {
+                    return unsupported(subject, "glTF morph target weights are not implemented yet")
+                }
+                if var primitives = mesh.member("primitives") {
+                    if var items = primitives.as_array() {
+                        for var primitive in items {
+                            if primitive.member("targets") != null {
+                                return unsupported(subject, "glTF morph targets are not implemented yet")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Result<void, Error>.success()
+}
+
+func has_items(root:JSON.Value, name:str) bool {
+    if var value = root.member(name) {
+        if values = value.as_array() { return values.count() > 0 }
+        return true
+    }
+    return false
+}
+
+func unsupported(subject:str?, detail:str) Result<void, Error> {
+    return Result<void, Error>.failure(Error(
+        kind:ErrorKind.unsupported_feature,
+        subject:subject,
+        detail:detail
+    ))
+}
+
+func invalid(subject:str?, detail:str) Result<void, Error> {
+    return Result<void, Error>.failure(Error(
+        kind:ErrorKind.invalid_document,
+        subject:subject,
+        detail:detail
+    ))
+}

@@ -16,7 +16,7 @@ native artifacts. In source code, `GFX` is the namespace parent and
 ```text
 GFX
 ├── Application     loop, resources, systems, plugins, time, and pacing
-├── Assets          images, image regions, atlases, and asset identities
+├── Assets          images, models, glTF/GLB codecs, atlases, and asset identities
 ├── Audio           sound loading, playback, and spatialization
 ├── Canvas          vector drawing intentions, rasterization, and 2D geometry
 ├── ECS             world, entities, components, queries, and commands
