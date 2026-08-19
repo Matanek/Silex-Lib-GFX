@@ -26,7 +26,7 @@ public struct Settings {
     var refresh_interval:float
 
     init() {
-        self.anchor = Anchor.top_left
+        self.anchor = Anchor.bottom_right
         self.margin = Math.Vec2(16.0)
         self.refresh_interval = 0.25
     }
