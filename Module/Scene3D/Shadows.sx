@@ -17,28 +17,38 @@ struct CameraView {
 struct Face {
     let light_index:int
     let face_index:int
+    let projected_index:int
     let view_projection:Math.Mat4
     let atlas_rect:Math.Vec4
     let point:bool
     let light_position_range:Math.Vec4
+    let split_near:float
+    let split_far:float
 }
 
 class Frame {
     private var faces:Face[]
     private var first_faces:int[]
+    private var sample_bases:int[]
     private var face_counts:int[]
     private var atlas_grid:int
+    private var projected_face_count:int
+    private var camera_forward:Math.Vec3
 
     init() {
         self.faces = []
         self.first_faces = []
+        self.sample_bases = []
         self.face_counts = []
         self.atlas_grid = 1
+        self.projected_face_count = 0
+        self.camera_forward = Math.Vec3.front()
     }
 
     func all_faces() @Face[..] { return @self.faces[0:self.faces.count()] }
     func face_count() int { return self.faces.count() }
     func grid() int { return self.atlas_grid }
+    func forward() Math.Vec3 { return self.camera_forward }
 
     func first_face(light_index:int) int {
         if light_index < 0 || light_index >= self.first_faces.count() { return -1 }
@@ -50,17 +60,45 @@ class Frame {
         return self.face_counts[light_index]
     }
 
+    func sample_base(light_index:int) int {
+        if light_index < 0 || light_index >= self.sample_bases.count() { return -1 }
+        return self.sample_bases[light_index]
+    }
+
     func rebuild(lighting:@LightingFrame, camera:CameraView?) {
         self.faces.clear()
         self.first_faces.clear()
+        self.sample_bases.clear()
         self.face_counts.clear()
+        self.projected_face_count = 0
+        self.camera_forward = Math.Vec3.front()
+        if let view = camera {
+            self.camera_forward = view.rotation.rotate(Math.Vec3.front()).normalized()
+        }
+        var projected_baseline = 0
+        for light in lighting.all() {
+            if light.shadow.enabled && light.kind != LightKind.point {
+                projected_baseline++
+            }
+        }
+        var cascade_budget = 16 - projected_baseline
+        if cascade_budget < 0 { cascade_budget = 0 }
         var total = 0
         for light in lighting.all() {
             self.first_faces.append(-1)
+            self.sample_bases.append(-1)
             var count = 0
             if light.shadow.enabled {
                 count = 1
                 if light.kind == LightKind.point { count = 6 }
+                elif light.kind == LightKind.sun && light.shadow_follows_camera &&
+                    camera != null
+                {
+                    var extra = 3
+                    if cascade_budget < extra { extra = cascade_budget }
+                    count += extra
+                    cascade_budget -= extra
+                }
             }
             self.face_counts.append(count)
             total += count
@@ -73,30 +111,30 @@ class Frame {
             if count > 0 {
                 self.first_faces[light_index] = self.faces.count()
                 if light.kind == LightKind.point {
+                    self.sample_bases[light_index] = self.faces.count()
                     self.append_point_faces(light_index, light)
                 } else {
-                    self.append_projected_face(light_index, light, camera)
+                    self.sample_bases[light_index] = self.projected_face_count
+                    self.append_projected_faces(light_index, light, camera, count)
                 }
             }
             light_index++
         }
     }
 
-    private func append_projected_face(
+    private func append_projected_faces(
         light_index:int,
         light:Light,
-        camera:CameraView?
+        camera:CameraView?,
+        face_count:int
     ) {
         let direction = light.direction.normalized()
         var view_projection = Math.Mat4.identity()
         if light.kind == LightKind.sun {
             if light.shadow_follows_camera && camera != null {
                 if let view = camera {
-                    view_projection = camera_fitted_sun_projection(
-                        light,
-                        view,
-                        atlas_size() / self.atlas_grid
-                    )
+                    self.append_sun_cascades(light_index, light, view, face_count)
+                    return
                 }
             } else {
                 let center = light.shadow_center
@@ -151,7 +189,65 @@ class Frame {
             )
             view_projection = projection.multiply(view)
         }
-        self.append_face(light_index, 0, view_projection, false, Math.Vec4())
+        self.append_face(
+            light_index,
+            0,
+            view_projection,
+            false,
+            Math.Vec4(),
+            0.0,
+            0.0
+        )
+    }
+
+    private func append_sun_cascades(
+        light_index:int,
+        light:Light,
+        camera:CameraView,
+        cascade_count:int
+    ) {
+        let near_plane = Math.max(camera.near_plane, 0.001)
+        let far_plane = sun_shadow_distance(light, camera)
+        var splits:float[] = [near_plane]
+        var index = 1
+        while index <= cascade_count {
+            let ratio = index as float / cascade_count as float
+            let linear = Math.lerp(near_plane, far_plane, ratio)
+            let logarithmic = near_plane * Math.pow(far_plane / near_plane, ratio)
+            splits.append(Math.lerp(linear, logarithmic, 0.65))
+            index++
+        }
+        splits[cascade_count] = far_plane
+
+        let resolution = atlas_size() / self.atlas_grid
+        var cascade = 0
+        while cascade < cascade_count {
+            let split_near = splits[cascade]
+            let split_far = splits[cascade + 1]
+            var fitted_near = split_near
+            if cascade > 0 {
+                fitted_near = Math.max(
+                    near_plane,
+                    split_near - (split_far - split_near) * 0.08
+                )
+            }
+            self.append_face(
+                light_index,
+                cascade,
+                camera_fitted_sun_projection(
+                    light,
+                    camera,
+                    fitted_near,
+                    split_far,
+                    resolution
+                ),
+                false,
+                Math.Vec4(),
+                split_near,
+                split_far
+            )
+            cascade++
+        }
     }
 
     private func append_point_faces(light_index:int, light:Light) {
@@ -182,7 +278,9 @@ class Frame {
                 face,
                 projection.multiply(view),
                 true,
-                Math.Vec4(light.position, Math.max(light.reach, 0.001))
+                Math.Vec4(light.position, Math.max(light.reach, 0.001)),
+                0.0,
+                0.0
             )
             face++
         }
@@ -193,15 +291,20 @@ class Frame {
         face_index:int,
         view_projection:Math.Mat4,
         point:bool,
-        light_position_range:Math.Vec4
+        light_position_range:Math.Vec4,
+        split_near:float,
+        split_far:float
     ) {
         let slot = self.faces.count()
         let column = slot % self.atlas_grid
         let row = slot / self.atlas_grid
         let scale = 1.0 / self.atlas_grid as float
+        var projected_index = -1
+        if !point { projected_index = self.projected_face_count }
         self.faces.append(Face(
             light_index:light_index,
             face_index:face_index,
+            projected_index:projected_index,
             view_projection:view_projection,
             atlas_rect:Math.Vec4(
                 scale,
@@ -210,31 +313,23 @@ class Frame {
                 row as float * scale
             ),
             point:point,
-            light_position_range:light_position_range
+            light_position_range:light_position_range,
+            split_near:split_near,
+            split_far:split_far
         ))
+        if !point { self.projected_face_count++ }
     }
 }
 
 func camera_fitted_sun_projection(
     light:Light,
     camera:CameraView,
+    slice_near:float,
+    slice_far:float,
     shadow_resolution:int
 ) Math.Mat4 {
     let direction = light.direction.normalized()
-    let near_plane = Math.max(camera.near_plane, 0.001)
-    let legacy_distance = Math.max(
-        Math.max(light.shadow_size.x, light.shadow_size.y),
-        Math.max(light.shadow_depth, near_plane + 0.001)
-    )
-    var shadow_distance = legacy_distance
-    if light.shadow_distance > 0.0 {
-        shadow_distance = Math.max(light.shadow_distance, near_plane + 0.001)
-    }
-    shadow_distance = Math.min(
-        Math.max(camera.far_plane, near_plane),
-        shadow_distance
-    )
-    let corners = camera_frustum_corners(camera, shadow_distance)
+    let corners = camera_frustum_corners(camera, slice_near, slice_far)
     var center = Math.Vec3()
     for corner in corners { center = center.add(corner) }
     center = center.divide(corners.count() as float)
@@ -242,7 +337,7 @@ func camera_fitted_sun_projection(
     for corner in corners {
         radius = Math.max(radius, corner.subtract(center).length())
     }
-    radius += light.shadow_center.length() + 1.0
+    radius += light.shadow_center.length() + 0.25
     radius = Math.ceil(radius * 16.0) / 16.0
     center = center.add(light.shadow_center)
     let caster_padding = Math.max(light.shadow_depth * 0.5, 1.0)
@@ -275,9 +370,26 @@ func camera_fitted_sun_projection(
     ).multiply(view)
 }
 
-func camera_frustum_corners(camera:CameraView, far_plane:float) Math.Vec3[] {
+func sun_shadow_distance(light:Light, camera:CameraView) float {
     let near_plane = Math.max(camera.near_plane, 0.001)
-    let clamped_far = Math.max(far_plane, near_plane + 0.001)
+    let legacy_distance = Math.max(
+        Math.max(light.shadow_size.x, light.shadow_size.y),
+        Math.max(light.shadow_depth, near_plane + 0.001)
+    )
+    var distance = legacy_distance
+    if light.shadow_distance > 0.0 {
+        distance = Math.max(light.shadow_distance, near_plane + 0.001)
+    }
+    return Math.min(Math.max(camera.far_plane, near_plane), distance)
+}
+
+func camera_frustum_corners(
+    camera:CameraView,
+    near_distance:float,
+    far_distance:float
+) Math.Vec3[] {
+    let near_plane = Math.max(near_distance, 0.001)
+    let clamped_far = Math.max(far_distance, near_plane + 0.001)
     let tangent = Math.tan(camera.vertical_fov * 0.5)
     let aspect = Math.max(camera.aspect_ratio, 0.001)
     let near_height = tangent * near_plane

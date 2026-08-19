@@ -1,5 +1,6 @@
 use GFX.Application
 use GFX.Assets
+use GFX.Assets.GLTF
 use GFX.Assets.PNG
 use GFX.Color
 use GFX.Components
@@ -157,6 +158,65 @@ func add_trees(
     }
 }
 
+func compose_transform(
+    parent:Components.Transform3D,
+    child:Components.Transform3D
+) Components.Transform3D {
+    let scaled_position = child.position.multiply(parent.scale)
+    return Components.Transform3D(
+        position:parent.position.add(parent.rotation.rotate(scaled_position)),
+        rotation:parent.rotation.multiply(child.rotation).normalized(),
+        scale:parent.scale.multiply(child.scale)
+    )
+}
+
+func spawn_imported_tree(
+    world:&Resources.World,
+    sources:ECS.Entity[],
+    placement:Components.Transform3D
+) {
+    for source in sources {
+        var recipe = ECS.EntityRecipe()
+            ..with(compose_transform(
+                placement,
+                world.get<Components.Transform3D>(source)
+            ))
+            ..with(world.get<Components.Mesh3D>(source))
+            ..with(world.get<Components.Material3D>(source))
+        if world.has<Components.MaterialSettings3D>(source) {
+            let settings = world.get<Components.MaterialSettings3D>(source)
+            recipe.with(Components.MaterialSettings3D(
+                textures:settings.textures,
+                alpha:settings.alpha,
+                alpha_cutoff:settings.alpha_cutoff,
+                double_sided:settings.double_sided,
+                unlit:settings.unlit
+            ))
+        }
+        world.spawn(recipe)
+    }
+}
+
+func add_blender_trees(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    images:&Resources.Images
+) {
+    let model = GLTF.load("../../Assets/Models/Tree.glb")
+    let source = model.instantiate(world, meshes, images)
+    var trees = world_scatter(18, 0x51_1E_80_21)
+    trees.vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
+    trees.vary_uniform_scale(0.22, 0.32)
+    trees.soften_edges(0.32)
+
+    for generated in trees.generate() {
+        var placement = generated
+        placement.position.y = -model.minimum_bounds().y * placement.scale.y
+        spawn_imported_tree(world, source.entities, placement)
+    }
+    for entity in source.entities { world.destroy(entity) }
+}
+
 func add_grass(
     world:&Resources.World,
     cube:Scene3D.MeshHandle,
@@ -214,6 +274,7 @@ func create_world(
     add_ground(world, meshes, grid)
     add_rocks(world, cube, grid)
     add_trees(world, cube, grid)
+    add_blender_trees(world, meshes, images)
     add_grass(world, cube, grid)
     add_lighting(world)
 }

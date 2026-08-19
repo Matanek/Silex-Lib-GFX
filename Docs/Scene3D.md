@@ -62,6 +62,20 @@ writes. Texture transforms carry offset, scale, and rotation. The default
 sampler repeats, filters linearly, generates mipmaps, and uses anisotropic
 filtering.
 
+## Camera-fitted sun shadows
+
+A `SunLight` whose `shadow_follows_camera` value is enabled distributes its
+shadow atlas space across four stabilized cascades fitted to the active camera
+frustum. The split distribution favors the first meters around the camera and
+progressively reduces precision toward `shadow_distance`. This keeps nearby
+contact shadows sharp without requiring a larger atlas. Setting
+`shadow_follows_camera` to `false` preserves the fixed orthographic projection
+defined by `shadow_center`, `shadow_size`, and `shadow_depth`.
+
+`shadow_distance` is the intended world-space quality boundary for a moving
+camera. A zero value retains the legacy range derived from `shadow_size` and
+`shadow_depth`; an explicit positive value is preferable for world scenes.
+
 ## Automatic batching
 
 The built-in renderer automatically instances compatible opaque and alpha-mask

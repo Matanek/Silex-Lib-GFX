@@ -258,7 +258,7 @@ class Renderer {
             var tone_mapping = self.tone_mapping_uniform
             pass.fragment_uniform(1, lighting, 1488)
             pass.fragment_uniform(2, tone_mapping, 32)
-            pass.fragment_uniform(3, shadows, 3328)
+            pass.fragment_uniform(3, shadows, 3600)
             if let texture = self.shadow_texture {
                 if let sampler = self.shadow_sampler {
                     pass.fragment_sampler(0, texture, sampler)

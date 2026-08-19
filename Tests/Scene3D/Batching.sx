@@ -125,7 +125,7 @@ func test_application(title:str) Application {
         ..add_after_system(Application.Schedule.render, inspect_batches)
 }
 
-test "batch identical opaque meshes in color and shadow passes" {
+test "batch identical opaque meshes across four sun shadow cascades" {
     var application = test_application("Scene3D opaque batching")
         ..add_system(Application.Schedule.startup, create_opaque_scene)
     var resources = application.resources()
@@ -134,10 +134,10 @@ test "batch identical opaque meshes in color and shadow passes" {
     assert(application.run() == 0)
     let probe = resources.get<Probe>()
     assert(probe.frames == 2)
-    assert(probe.draw_calls == 2)
+    assert(probe.draw_calls == 5)
     assert(probe.render_passes == 2)
-    assert(probe.instances == 64)
-    assert(probe.triangles == 768)
+    assert(probe.instances == 160)
+    assert(probe.triangles == 1920)
 }
 
 test "preserve transparent ordering with singleton batches" {
@@ -155,7 +155,7 @@ test "preserve transparent ordering with singleton batches" {
     assert(probe.triangles == 24)
 }
 
-test "keep a world-sized repeated field below eight draw calls" {
+test "keep a world-sized repeated field below fourteen cascaded draw calls" {
     var application = test_application("Scene3D world batching")
         ..add_plugin(Plugins.PerformancePanel())
         ..add_system(Application.Schedule.startup, create_world_sized_scene)
@@ -165,8 +165,8 @@ test "keep a world-sized repeated field below eight draw calls" {
     assert(application.run() == 0)
     let probe = resources.get<Probe>()
     assert(probe.frames == 2)
-    assert(probe.draw_calls <= 8)
+    assert(probe.draw_calls <= 14)
     assert(probe.render_passes == 2)
-    assert(probe.instances >= 282)
-    assert(probe.triangles >= 3364)
+    assert(probe.instances >= 705)
+    assert(probe.triangles >= 8410)
 }

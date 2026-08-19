@@ -59,6 +59,8 @@ cbuffer ShadowUniforms : register(b3, space3) {
     float4x4 shadowMatrices[16];
     float4 shadowAtlasRects[16];
     float4 pointShadowAtlasRects[96];
+    float4 shadowProjectedDepths[16];
+    float4 shadowCameraForward;
 };
 
 cbuffer ToneMappingUniforms : register(b2, space3) {
@@ -475,11 +477,29 @@ float shadow_visibility(
         }
         return visibility;
     }
-    const float4 clip = mul(shadowMatrices[lightIndex], float4(offsetPosition, 1.0));
+    int projectedFace = firstFace;
+    const int faceCount = (int)shadowSlots[lightIndex].y;
+    if (shadowSlots[lightIndex].z < 0.5 && faceCount > 1) {
+        const float viewDepth = dot(
+            offsetPosition - cameraPosition.xyz,
+            shadowCameraForward.xyz
+        );
+        [unroll]
+        for (int cascade = 0; cascade < 3; ++cascade) {
+            if (cascade + 1 < faceCount
+                && viewDepth > shadowProjectedDepths[projectedFace].y) {
+                projectedFace++;
+            }
+        }
+    }
+    const float4 clip = mul(
+        shadowMatrices[projectedFace],
+        float4(offsetPosition, 1.0)
+    );
     if (clip.w <= 0.0001) return 1.0;
     const float3 ndc = clip.xyz / clip.w;
     const float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-    const float4 rect = shadowAtlasRects[lightIndex];
+    const float4 rect = shadowAtlasRects[projectedFace];
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
         || ndc.z < 0.0 || ndc.z > 1.0) return 1.0;
     const float bias = settings.y * (0.25 + slope * 0.75);
