@@ -6,6 +6,7 @@ use GFX.Canvas.Snapshot
 use GFX.ECS
 use GFX.GPU
 use GFX.Scene2D.Camera
+use GFX.Scene2D.Canvas as SceneCanvas
 use GFX.Scene2D.Drawing as SceneDrawing
 use GFX.Scene2D.Grid
 use GFX.Scene2D.Overlay
@@ -86,6 +87,7 @@ struct SceneDraw {
     let layer:int
     let depth:float
     let order:int
+    let viewport:bool
 }
 
 struct SpriteDraw {
@@ -99,6 +101,7 @@ struct SpriteDraw {
     let layer:int
     let depth:float
     let order:int
+    let viewport:bool
 }
 
 struct SceneEntry {
@@ -255,11 +258,68 @@ class Renderer {
         var archetype = 0
         while archetype < world.query_archetype_count() {
             let has_transform = world.query_archetype_has<Transform>(archetype)
+            let has_canvas = world.query_archetype_has<SceneCanvas>(archetype)
             let has_drawing = world.query_archetype_has<SceneDrawing>(archetype)
             let has_sprite = world.query_archetype_has<Sprite>(archetype)
             var row = 0
             while row < world.query_entity_count(archetype) {
                 let entity = world.query_entity(archetype, row)
+                if has_transform && has_canvas {
+                    let transform = world.query_get<Transform>(entity)
+                    let canvas = world.query_get<SceneCanvas>(entity)
+                    if canvas.visible {
+                        let cache_index = self.scene_drawing_cache_index(canvas.snapshot_id())
+                        var cache = self.scene_drawing_cache[cache_index]
+                        if cache.vertices == null {
+                            var snapshot = canvas.snapshot()
+                            self.refresh_scene_geometry(device, cache, snapshot)
+                        }
+                        let model = canvas.affine_model(transform, viewport)
+                        self.scene_draws.append(SceneDraw(
+                            cache:cache_index,
+                            model_x:model.x,
+                            model_y:model.y,
+                            model_translation:model.translation,
+                            color:canvas.color,
+                            layer:canvas.layer,
+                            depth:canvas.depth,
+                            order:scene_order,
+                            viewport:canvas.uses_viewport()
+                        ))
+                        scene_order++
+                        if canvas.has_text() {
+                            var snapshot = canvas.snapshot()
+                            let text = snapshot.text_layer(scale)
+                            let scale_key = Math.round(scale * 1000.0) as int
+                            var image_cache = self.cache_for_image(
+                                1,
+                                snapshot.id(),
+                                scale_key
+                            )
+                            self.refresh_image(
+                                device,
+                                image_cache,
+                                canvas.revision(),
+                                text.image,
+                                "GFX.Scene2D canvas text"
+                            )
+                            self.sprite_draws.append(SpriteDraw(
+                                cache:self.image_index(image_cache),
+                                model:canvas.text_model(transform, viewport),
+                                size:canvas.text_size(text.size),
+                                pivot:canvas.text_pivot(text.origin, text.size),
+                                color:canvas.color,
+                                region:Math.Vec4(0.0, 0.0, 1.0, 1.0),
+                                sampling:0,
+                                layer:canvas.layer,
+                                depth:canvas.depth,
+                                order:scene_order,
+                                viewport:canvas.uses_viewport()
+                            ))
+                            scene_order++
+                        }
+                    }
+                }
                 if has_transform && has_drawing {
                     let transform = world.query_get<Transform>(entity)
                     let drawing = world.query_get<SceneDrawing>(entity)
@@ -279,7 +339,8 @@ class Renderer {
                             color:drawing.color,
                             layer:drawing.layer,
                             depth:drawing.depth,
-                            order:scene_order
+                            order:scene_order,
+                            viewport:false
                         ))
                         scene_order++
                         if drawing.has_text() {
@@ -308,7 +369,8 @@ class Renderer {
                                 sampling:0,
                                 layer:drawing.layer,
                                 depth:drawing.depth,
-                                order:scene_order
+                                order:scene_order,
+                                viewport:false
                             ))
                             scene_order++
                         }
@@ -342,7 +404,8 @@ class Renderer {
                             sampling:sprite.sampling_mode(),
                             layer:sprite.render_layer(),
                             depth:sprite.render_depth(),
-                            order:scene_order
+                            order:scene_order,
+                            viewport:false
                         ))
                         scene_order++
                     }
@@ -431,7 +494,9 @@ class Renderer {
     func set_grid(value:Grid) { self.grid = value }
 
     private func find_camera(world:@ECS.World, viewport:Math.Vec2) {
-        self.camera_ready = false
+        var default_camera = Camera()
+        self.scene_view_projection = default_camera.projection(viewport)
+        self.camera_ready = true
         var selected = false
         var selected_order = 0
         var archetype = 0
@@ -487,7 +552,8 @@ class Renderer {
                 while end < self.scene_entries.count() {
                     let next = self.scene_entries[end]
                     if next.kind != 0 || next.index != entry.index + end - cursor ||
-                        self.scene_draws[next.index].cache != draw.cache
+                        self.scene_draws[next.index].cache != draw.cache ||
+                        self.scene_draws[next.index].viewport != draw.viewport
                     {
                         break
                     }
@@ -497,9 +563,9 @@ class Renderer {
                     if let pipeline = self.drawing_pipeline {
                         if let vertices = cache.vertices {
                             if let instances = self.drawing_instances {
-                                var projection = Packing.view_projection(
-                                    self.scene_view_projection
-                                )
+                                var selected_projection = self.scene_view_projection
+                                if draw.viewport { selected_projection = self.projection }
+                                var projection = Packing.view_projection(selected_projection)
                                 pass.bind(pipeline)
                                 pass.vertex_uniform(0, projection, 64)
                                 pass.vertex_buffer(0, vertices)
@@ -531,9 +597,11 @@ class Renderer {
                 if let sampler = selected_sampler {
                     if let vertices = self.quad_vertices {
                         if let indices = self.quad_indices {
+                            var selected_projection = self.scene_view_projection
+                            if draw.viewport { selected_projection = self.projection }
                             var uniform = Packing.scene_sprite_uniform(
                                 draw.model,
-                                self.scene_view_projection,
+                                selected_projection,
                                 draw.size,
                                 draw.pivot,
                                 draw.color,

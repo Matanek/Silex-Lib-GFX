@@ -2,6 +2,7 @@ use GFX.Application
 use GFX.Assets
 use GFX.Color
 use GFX.Canvas
+use GFX.Components
 use GFX.ECS
 use GFX.Rendering
 use GFX.Scene2D
@@ -32,12 +33,15 @@ func create_scene(world:&ECS.World, images:&Assets.Images) {
         )
     )
     world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Transform())
-        ..with(Scene2D.Camera())
+        ..with(Components.Transform2D(position:Math.Vec2(-12.0, 0.0)))
+        ..with(Components.Canvas(drawing, 32, 32))
     )
     world.spawn(ECS.EntityRecipe()
-        ..with(Scene2D.Transform(position:Math.Vec2(-12.0, 0.0)))
-        ..with(Scene2D.Drawing(drawing, 32, 32))
+        ..with(Components.Transform2D(position:Math.Vec2(-16.0, -16.0)))
+        ..with(Components.Canvas(drawing, 32, 32)
+            ..space = Components.CanvasSpace.viewport
+            ..anchor = Math.Vec2(1.0)
+        )
     )
     var transformed = Scene2D.Drawing(drawing, 32, 32)
     transformed.size = Math.Vec2(24.0, 18.0)

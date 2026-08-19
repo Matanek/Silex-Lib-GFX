@@ -1,6 +1,8 @@
 // Scene components grouped for systems and entity recipes. The scene domains
 // remain their owners; dimensional suffixes disambiguate this cross-domain view.
 public use GFX.Scene2D.Camera as Camera2D
+public use GFX.Scene2D.Canvas.Canvas
+public use GFX.Scene2D.Canvas.Space as CanvasSpace
 public use GFX.Scene2D.Drawing as Drawing2D
 public use GFX.Scene2D.Overlay as Overlay2D
 public use GFX.Scene2D.Sprite as Sprite2D

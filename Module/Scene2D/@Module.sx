@@ -1,4 +1,6 @@
 public use GFX.Scene2D.Camera.Camera
+public use GFX.Scene2D.Canvas.Canvas
+public use GFX.Scene2D.Canvas.Space as CanvasSpace
 public use GFX.Scene2D.Drawing.Drawing
 public use GFX.Scene2D.Grid.Grid
 public use GFX.Scene2D.Overlay.Overlay
