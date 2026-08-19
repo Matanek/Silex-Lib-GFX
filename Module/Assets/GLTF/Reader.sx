@@ -618,10 +618,18 @@ func parse_materials(document:Document) Result<Model.ModelMaterial[], Error> {
                 emission:emission_texture,
                 normal_scale:normal_scale,
                 occlusion_strength:occlusion_strength
-            )
+            ),
+            unlit:is_unlit(value)
         ))
     }
     return Result<Model.ModelMaterial[], Error>.success(result)
+}
+
+func is_unlit(value:JSON.Value) bool {
+    if extensions = value.member("extensions") {
+        return extensions.member("KHR_materials_unlit") != null
+    }
+    return false
 }
 
 func texture_reference(document:Document, value:JSON.Value) Result<Model.TextureReference, Error> {

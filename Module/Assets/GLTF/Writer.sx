@@ -156,7 +156,7 @@ func add_accessor(
 
 func build_json(model:Model.Model, data:ExportData, embedded:bool) str {
     var result = "{\"asset\":{\"version\":\"2.0\",\"generator\":\"GFX.Assets.GLTF\"}"
-    result += ",\"extensionsUsed\":[\"KHR_texture_transform\",\"KHR_materials_emissive_strength\"]"
+    result += ",\"extensionsUsed\":[\"KHR_texture_transform\",\"KHR_materials_emissive_strength\",\"KHR_materials_unlit\"]"
     result += ",\"buffers\":[{\"byteLength\":$(data.binary.count())"
     if embedded {
         result += ",\"uri\":\"data:application/octet-stream;base64," +
@@ -256,7 +256,6 @@ func material_json(material:Model.ModelMaterial) str {
     result += "}"
     if value.emission_intensity > 0.0 {
         result += ",\"emissiveFactor\":[$(value.emission.r),$(value.emission.g),$(value.emission.b)]"
-        result += ",\"extensions\":{\"KHR_materials_emissive_strength\":{\"emissiveStrength\":$(value.emission_intensity)}}"
     }
     if let texture = material.textures.normal {
         result += ",\"normalTexture\":" + scaled_texture_json(texture, "scale", material.textures.normal_scale)
@@ -270,6 +269,23 @@ func material_json(material:Model.ModelMaterial) str {
     result += ",\"alphaMode\":\"" + alpha_name(material.alpha_mode) + "\""
     if material.alpha_mode == Model.AlphaMode.mask { result += ",\"alphaCutoff\":$(material.alpha_cutoff)" }
     if material.double_sided { result += ",\"doubleSided\":true" }
+    result += material_extensions(material)
+    return result + "}"
+}
+
+func material_extensions(material:Model.ModelMaterial) str {
+    let strength = material.value.emission_intensity > 0.0
+    if !strength && !material.unlit { return "" }
+    var result = ",\"extensions\":{"
+    var separator = false
+    if strength {
+        result += "\"KHR_materials_emissive_strength\":{\"emissiveStrength\":$(material.value.emission_intensity)}"
+        separator = true
+    }
+    if material.unlit {
+        if separator { result += "," }
+        result += "\"KHR_materials_unlit\":{}"
+    }
     return result + "}"
 }
 

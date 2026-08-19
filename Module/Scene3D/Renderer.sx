@@ -1,3 +1,7 @@
+use GFX.Assets.Image
+use GFX.Assets.ImageHandle
+use GFX.Assets.Images
+use GFX.Color
 use GFX.ECS
 use GFX.GPU
 use GFX.Scene3D.Camera
@@ -5,6 +9,9 @@ use GFX.Scene3D.Gizmos
 use GFX.Scene3D.Grid
 use GFX.Scene3D.Lighting
 use GFX.Scene3D.Material
+use GFX.Scene3D.Material.MaterialSettings
+use GFX.Scene3D.Material.MaterialTexture
+use GFX.Scene3D.Material.MaterialTextures
 use GFX.Scene3D.Mesh
 use GFX.Scene3D.MeshHandle
 use GFX.Scene3D.Meshes
@@ -36,19 +43,70 @@ class CachedMesh {
     }
 }
 
+class CachedImage {
+    let index:int
+    let generation:int
+    let srgb:bool
+    var revision:int
+    var texture:GPU.Texture? = null
+
+    init(handle:ImageHandle, srgb:bool) {
+        self.index = handle.index()
+        self.generation = handle.generation()
+        self.srgb = srgb
+        self.revision = 0
+    }
+}
+
+struct DrawTextures {
+    let albedo:ImageHandle
+    let normal:ImageHandle
+    let metallic_roughness:ImageHandle
+    let occlusion:ImageHandle
+    let emission:ImageHandle
+}
+
+struct DrawSettings {
+    let alpha:GFX.Scene3D.Material.AlphaMode
+    let alpha_cutoff:float
+    let double_sided:bool
+    let unlit:bool
+
+    init(
+        alpha:GFX.Scene3D.Material.AlphaMode =
+            GFX.Scene3D.Material.AlphaMode.opaque,
+        alpha_cutoff:float = 0.5,
+        double_sided:bool = false,
+        unlit:bool = false
+    ) {
+        self.alpha = alpha
+        self.alpha_cutoff = alpha_cutoff
+        self.double_sided = double_sided
+        self.unlit = unlit
+    }
+}
+
 struct Draw {
     let cache:int
     let model:Math.Mat4
     let material:Material
+    let settings:DrawSettings
+    let distance:float
+    let material_uniform:str
+    let textures:DrawTextures
 }
 
 class Renderer {
     private var pipeline:GPU.GraphicsPipeline? = null
+    private var double_sided_pipeline:GPU.GraphicsPipeline? = null
+    private var transparent_pipeline:GPU.GraphicsPipeline? = null
+    private var transparent_double_sided_pipeline:GPU.GraphicsPipeline? = null
     private var shadow_pipeline:GPU.GraphicsPipeline? = null
     private var point_shadow_pipeline:GPU.GraphicsPipeline? = null
     private var gizmo_pipeline:GPU.GraphicsPipeline? = null
     private var grid_pipeline:GPU.GraphicsPipeline? = null
     private var meshes:CachedMesh[]
+    private var images:CachedImage[]
     private var draws:Draw[]
     private var lighting:Lighting.Frame
     private var shadows:Shadows.Frame
@@ -64,6 +122,10 @@ class Renderer {
     private var tone_mapping_uniform:str
     private var shadow_texture:GPU.Texture? = null
     private var shadow_sampler:GPU.Sampler? = null
+    private var material_sampler:GPU.Sampler? = null
+    private var white_srgb:GPU.Texture? = null
+    private var white_linear:GPU.Texture? = null
+    private var normal_default:GPU.Texture? = null
     private var shadow_atlas_size:int
     private var gizmo_vertices:GPU.Buffer? = null
     private var gizmo_upload:GPU.TransferBuffer? = null
@@ -73,6 +135,7 @@ class Renderer {
 
     init() {
         self.meshes = []
+        self.images = []
         self.draws = []
         self.lighting = Lighting.Frame()
         self.shadows = Shadows.Frame()
@@ -91,127 +154,56 @@ class Renderer {
     }
 
     func start(device:@GPU.Device, surface:@GPU.Surface) {
-        var buffers:GPU.VertexBufferLayout[] = []
-        buffers.append(GPU.VertexBufferLayout(slot:0, pitch:48))
-        var attributes:GPU.VertexAttribute[] = []
-        attributes.append(GPU.VertexAttribute(location:0, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:0))
-        attributes.append(GPU.VertexAttribute(location:1, buffer_slot:0, format:GPU.VertexFormat.float_32x3, offset:12))
-        attributes.append(GPU.VertexAttribute(location:2, buffer_slot:0, format:GPU.VertexFormat.float_32x2, offset:24))
-        attributes.append(GPU.VertexAttribute(location:3, buffer_slot:0, format:GPU.VertexFormat.float_32x4, offset:32))
-        var targets:GPU.ColorTargetFormat[] = []
-        targets.append(GPU.ColorTargetFormat(format:surface.format()))
-        self.pipeline = device.graphics_pipeline(
-            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Forward.hlsl"),
-            GPU.GraphicsPipelineSettings(
-                vertex_buffers:buffers,
-                attributes:attributes,
-                rasterizer:GPU.RasterizerState(cull:GPU.Cull.back),
-                depth_stencil:GPU.DepthStencilState(
-                    depth_compare:GPU.Compare.less_or_equal,
-                    depth_test:true,
-                    depth_write:true
-                ),
-                color_targets:targets,
-                depth_stencil_format:GPU.TextureFormat.depth16,
-                name:"GFX.Scene3D forward meshes"
-            )
+        self.pipeline = forward_pipeline(device, surface, false, false)
+        self.double_sided_pipeline = forward_pipeline(device, surface, true, false)
+        self.transparent_pipeline = forward_pipeline(device, surface, false, true)
+        self.transparent_double_sided_pipeline = forward_pipeline(
+            device,
+            surface,
+            true,
+            true
         )
-        self.shadow_pipeline = device.graphics_pipeline(
-            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Shadow.hlsl"),
-            GPU.GraphicsPipelineSettings(
-                vertex_buffers:buffers,
-                attributes:attributes,
-                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
-                depth_stencil:GPU.DepthStencilState(
-                    depth_compare:GPU.Compare.less,
-                    depth_test:true,
-                    depth_write:true
-                ),
-                depth_stencil_format:GPU.TextureFormat.depth32_float,
-                name:"GFX.Scene3D projected shadows"
-            )
-        )
-        self.point_shadow_pipeline = device.graphics_pipeline(
-            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/PointShadow.hlsl"),
-            GPU.GraphicsPipelineSettings(
-                vertex_buffers:buffers,
-                attributes:attributes,
-                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
-                depth_stencil:GPU.DepthStencilState(
-                    depth_compare:GPU.Compare.less,
-                    depth_test:true,
-                    depth_write:true
-                ),
-                depth_stencil_format:GPU.TextureFormat.depth32_float,
-                name:"GFX.Scene3D point shadows"
-            )
-        )
-        var gizmo_buffers:GPU.VertexBufferLayout[] = []
-        gizmo_buffers.append(GPU.VertexBufferLayout(slot:0, pitch:28))
-        var gizmo_attributes:GPU.VertexAttribute[] = []
-        gizmo_attributes.append(GPU.VertexAttribute(
-            location:0,
-            buffer_slot:0,
-            format:GPU.VertexFormat.float_32x3,
-            offset:0
-        ))
-        gizmo_attributes.append(GPU.VertexAttribute(
-            location:1,
-            buffer_slot:0,
-            format:GPU.VertexFormat.float_32x4,
-            offset:12
-        ))
-        self.gizmo_pipeline = device.graphics_pipeline(
-            GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/LightGizmos.hlsl"),
-            GPU.GraphicsPipelineSettings(
-                vertex_buffers:gizmo_buffers,
-                attributes:gizmo_attributes,
-                primitive:GPU.Primitive.lines,
-                rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
-                depth_stencil:GPU.DepthStencilState(
-                    depth_compare:GPU.Compare.less_or_equal,
-                    depth_test:true,
-                    depth_write:false
-                ),
-                color_targets:targets,
-                depth_stencil_format:GPU.TextureFormat.depth16,
-                name:"GFX.Scene3D light gizmos"
-            )
-        )
-        if self.grid != null {
-            var grid_targets:GPU.ColorTargetFormat[] = []
-            grid_targets.append(GPU.ColorTargetFormat(
-                format:surface.format(),
-                blend:GPU.BlendState(
-                    source_color:GPU.BlendFactor.source_alpha,
-                    destination_color:GPU.BlendFactor.one_minus_source_alpha,
-                    source_alpha:GPU.BlendFactor.one,
-                    destination_alpha:GPU.BlendFactor.one_minus_source_alpha,
-                    enabled:true
-                )
-            ))
-            self.grid_pipeline = device.graphics_pipeline(
-                GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Grid.hlsl"),
-                GPU.GraphicsPipelineSettings(
-                    rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
-                    depth_stencil:GPU.DepthStencilState(
-                        depth_compare:GPU.Compare.less_or_equal,
-                        depth_test:true,
-                        depth_write:false
-                    ),
-                    color_targets:grid_targets,
-                    depth_stencil_format:GPU.TextureFormat.depth16,
-                    name:"GFX.Scene3D viewport grid"
-                )
-            )
-        }
+        self.shadow_pipeline = shadow_pipeline(device, false)
+        self.point_shadow_pipeline = shadow_pipeline(device, true)
+        self.gizmo_pipeline = gizmo_pipeline(device, surface)
+        if self.grid != null { self.grid_pipeline = grid_pipeline(device, surface) }
         self.ensure_shadow_resources(device, 1)
+        self.material_sampler = device.sampler(GPU.SamplerSettings(
+            min_filter:GPU.Filter.linear,
+            mag_filter:GPU.Filter.linear,
+            mipmap_filter:GPU.MipmapFilter.linear,
+            address_u:GPU.AddressMode.repeat,
+            address_v:GPU.AddressMode.repeat,
+            max_anisotropy:8.0,
+            anisotropic:true,
+            name:"GFX.Scene3D material sampler"
+        ))
+        self.white_srgb = upload_texture(
+            device,
+            Image.solid(Color.white()),
+            true,
+            "GFX.Scene3D default color texture"
+        )
+        self.white_linear = upload_texture(
+            device,
+            Image.solid(Color.white()),
+            false,
+            "GFX.Scene3D default data texture"
+        )
+        let normal_pixels:uint8[] = [128 as uint8, 128 as uint8, 255 as uint8, 255 as uint8]
+        self.normal_default = upload_texture(
+            device,
+            Image.rgba8(1, 1, normal_pixels),
+            false,
+            "GFX.Scene3D default normal texture"
+        )
     }
 
     func prepare(
         device:@GPU.Device,
         world:@ECS.World,
-        catalog:@Meshes
+        catalog:@Meshes,
+        images:@Images
     ) {
         self.draws.clear()
         self.camera_ready = false
@@ -227,14 +219,41 @@ class Renderer {
                     self.refresh(device, cache, catalog, mesh.asset)
                     var material = Material()
                     if world.has<Material>(entity) { material = world.get<Material>(entity) }
+                    var textures = MaterialTextures()
+                    var settings = DrawSettings()
+                    if world.has<MaterialSettings>(entity) {
+                        let configured = world.get<MaterialSettings>(entity)
+                        textures = configured.textures
+                        settings = DrawSettings(
+                            alpha:configured.alpha,
+                            alpha_cutoff:configured.alpha_cutoff,
+                            double_sided:configured.double_sided,
+                            unlit:configured.unlit
+                        )
+                    }
+                    self.refresh_material_textures(device, images, textures)
+                    let position = world.get<Transform>(entity).position
                     self.draws.append(Draw(
                         cache:self.index_of(cache),
                         model:world.get<Transform>(entity).matrix(),
-                        material:material
+                        material:material,
+                        settings:settings,
+                        distance:position.subtract(self.camera_position).length_squared(),
+                        material_uniform:Packing.material(
+                            material,
+                            textures,
+                            settings.alpha,
+                            settings.alpha_cutoff,
+                            settings.double_sided,
+                            settings.unlit,
+                            self.camera_position
+                        ),
+                        textures:draw_textures(textures)
                     ))
                 }
             }
         }
+        sort_draws(self.draws)
         self.shadows.rebuild(self.lighting, self.camera_view)
         self.lighting_uniform = Packing.lighting(self.lighting)
         self.shadow_uniform = Packing.shadows(self.lighting, self.shadows)
@@ -255,20 +274,21 @@ class Renderer {
 
     func draw(pass:@GPU.RenderPass) {
         if !self.camera_ready { return }
-        if let pipeline = self.pipeline {
-            pass.bind(pipeline)
-            var lighting = self.lighting_uniform
-            var shadows = self.shadow_uniform
-            var tone_mapping = self.tone_mapping_uniform
-            pass.fragment_uniform(1, lighting, 1312)
-            pass.fragment_uniform(2, tone_mapping, 32)
-            pass.fragment_uniform(3, shadows, 3328)
-            if let texture = self.shadow_texture {
-                if let sampler = self.shadow_sampler {
-                    pass.fragment_sampler(0, texture, sampler)
+        for draw in self.draws {
+            if let pipeline = self.pipeline_for(draw.settings) {
+                pass.bind(pipeline)
+                var lighting = self.lighting_uniform
+                var shadows = self.shadow_uniform
+                var tone_mapping = self.tone_mapping_uniform
+                pass.fragment_uniform(1, lighting, 1312)
+                pass.fragment_uniform(2, tone_mapping, 32)
+                pass.fragment_uniform(3, shadows, 3328)
+                if let texture = self.shadow_texture {
+                    if let sampler = self.shadow_sampler {
+                        pass.fragment_sampler(0, texture, sampler)
+                    }
                 }
-            }
-            for draw in self.draws {
+                self.bind_material_textures(pass, draw.textures)
                 var cache = self.meshes[draw.cache]
                 if let vertices = cache.vertices {
                     if let indices = cache.indices {
@@ -277,12 +297,9 @@ class Renderer {
                             self.view_projection,
                             draw.material.albedo
                         )
-                        var material_uniform = Packing.material(
-                            draw.material,
-                            self.camera_position
-                        )
+                        var material_uniform = draw.material_uniform
                         pass.vertex_uniform(0, vertex_uniform, 144)
-                        pass.fragment_uniform(0, material_uniform, 48)
+                        pass.fragment_uniform(0, material_uniform, 176)
                         pass.vertex_buffer(0, vertices)
                         pass.index_buffer(indices, GPU.IndexType.thirty_two_bits)
                         pass.draw_indexed(cache.index_count)
@@ -399,6 +416,9 @@ class Renderer {
                 pass.viewport(x as float, y as float, tile as float, tile as float)
                 pass.scissor(x, y, tile, tile)
                 for draw in self.draws {
+                    if draw.settings.alpha != GFX.Scene3D.Material.AlphaMode.opaque {
+                        continue
+                    }
                     var cache = self.meshes[draw.cache]
                     if let vertices = cache.vertices {
                         if let indices = cache.indices {
@@ -473,6 +493,146 @@ class Renderer {
         return created
     }
 
+    private func pipeline_for(settings:DrawSettings) GPU.GraphicsPipeline? {
+        if settings.alpha == GFX.Scene3D.Material.AlphaMode.blend {
+            if settings.double_sided {
+                return self.transparent_double_sided_pipeline
+            }
+            return self.transparent_pipeline
+        }
+        if settings.double_sided { return self.double_sided_pipeline }
+        return self.pipeline
+    }
+
+    private func bind_material_textures(pass:@GPU.RenderPass, textures:DrawTextures) {
+        self.bind_material_texture(
+            pass,
+            1,
+            textures.albedo,
+            true,
+            self.white_srgb
+        )
+        self.bind_material_texture(
+            pass,
+            2,
+            textures.normal,
+            false,
+            self.normal_default
+        )
+        self.bind_material_texture(
+            pass,
+            3,
+            textures.metallic_roughness,
+            false,
+            self.white_linear
+        )
+        self.bind_material_texture(
+            pass,
+            4,
+            textures.occlusion,
+            false,
+            self.white_linear
+        )
+        self.bind_material_texture(
+            pass,
+            5,
+            textures.emission,
+            true,
+            self.white_srgb
+        )
+    }
+
+    private func bind_material_texture(
+        pass:@GPU.RenderPass,
+        slot:int,
+        selected:ImageHandle,
+        srgb:bool,
+        fallback:GPU.Texture?
+    ) {
+        if let sampler = self.material_sampler {
+            if selected.is_valid() {
+                if let texture = self.texture_for(selected, srgb) {
+                    pass.fragment_sampler(slot, texture, sampler)
+                    return
+                }
+            }
+            if let texture = fallback { pass.fragment_sampler(slot, texture, sampler) }
+        }
+    }
+
+    private func refresh_material_textures(
+        device:@GPU.Device,
+        catalog:@Images,
+        textures:MaterialTextures
+    ) {
+        self.refresh_material_texture(device, catalog, textures.albedo, true)
+        self.refresh_material_texture(device, catalog, textures.normal, false)
+        self.refresh_material_texture(
+            device,
+            catalog,
+            textures.metallic_roughness,
+            false
+        )
+        self.refresh_material_texture(device, catalog, textures.occlusion, false)
+        self.refresh_material_texture(device, catalog, textures.emission, true)
+    }
+
+    private func refresh_material_texture(
+        device:@GPU.Device,
+        catalog:@Images,
+        selected:MaterialTexture?,
+        srgb:bool
+    ) {
+        if let reference = selected {
+            if catalog.contains(reference.image) {
+                var cache = self.cache_for_image(reference.image, srgb)
+                let revision = catalog.revision(reference.image)
+                if cache.texture == null || cache.revision != revision {
+                    let image = catalog.get(reference.image)
+                    cache.texture = upload_texture(
+                        device,
+                        image,
+                        srgb,
+                        "GFX.Scene3D material texture"
+                    )
+                    cache.revision = revision
+                }
+            }
+        }
+    }
+
+    private func cache_for_image(handle:ImageHandle, srgb:bool) CachedImage {
+        var index = 0
+        while index < self.images.count() {
+            var cache = self.images[index]
+            if cache.index == handle.index() &&
+                cache.generation == handle.generation() &&
+                cache.srgb == srgb
+            {
+                return cache
+            }
+            index++
+        }
+        var created = CachedImage(handle, srgb)
+        self.images.append(created)
+        return created
+    }
+
+    private func texture_for(handle:ImageHandle, srgb:bool) GPU.Texture? {
+        var index = 0
+        while index < self.images.count() {
+            var cache = self.images[index]
+            if cache.index == handle.index() &&
+                cache.generation == handle.generation() &&
+                cache.srgb == srgb
+            {
+                return cache.texture
+            }
+            index++
+        }
+        return null
+    }
+
     private func index_of(cache:@CachedMesh) int {
         var index = 0
         while index < self.meshes.count() {
@@ -534,6 +694,179 @@ class Renderer {
     }
 }
 
+local func mesh_buffers() GPU.VertexBufferLayout[] {
+    let result:GPU.VertexBufferLayout[] = [GPU.VertexBufferLayout(slot:0, pitch:48)]
+    return result
+}
+
+local func mesh_attributes() GPU.VertexAttribute[] {
+    return [
+        GPU.VertexAttribute(
+            location:0,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x3,
+            offset:0
+        ),
+        GPU.VertexAttribute(
+            location:1,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x3,
+            offset:12
+        ),
+        GPU.VertexAttribute(
+            location:2,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x2,
+            offset:24
+        ),
+        GPU.VertexAttribute(
+            location:3,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x4,
+            offset:32
+        )
+    ]
+}
+
+local func forward_pipeline(
+    device:@GPU.Device,
+    surface:@GPU.Surface,
+    double_sided:bool,
+    transparent:bool
+) GPU.GraphicsPipeline {
+    var cull = GPU.Cull.back
+    if double_sided { cull = GPU.Cull.none }
+    var targets:GPU.ColorTargetFormat[] = []
+    if transparent {
+        targets.append(GPU.ColorTargetFormat(
+            format:surface.format(),
+            blend:GPU.BlendState(
+                source_color:GPU.BlendFactor.source_alpha,
+                destination_color:GPU.BlendFactor.one_minus_source_alpha,
+                source_alpha:GPU.BlendFactor.one,
+                destination_alpha:GPU.BlendFactor.one_minus_source_alpha,
+                enabled:true
+            )
+        ))
+    } else {
+        targets.append(GPU.ColorTargetFormat(format:surface.format()))
+    }
+    var name = "GFX.Scene3D forward meshes"
+    if double_sided { name = "GFX.Scene3D double-sided meshes" }
+    if transparent { name = "GFX.Scene3D transparent meshes" }
+    if transparent && double_sided {
+        name = "GFX.Scene3D transparent double-sided meshes"
+    }
+    return device.graphics_pipeline(
+        GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Forward.hlsl"),
+        GPU.GraphicsPipelineSettings(
+            vertex_buffers:mesh_buffers(),
+            attributes:mesh_attributes(),
+            rasterizer:GPU.RasterizerState(cull:cull),
+            depth_stencil:GPU.DepthStencilState(
+                depth_compare:GPU.Compare.less_or_equal,
+                depth_test:true,
+                depth_write:!transparent
+            ),
+            color_targets:targets,
+            depth_stencil_format:GPU.TextureFormat.depth16,
+            name:name
+        )
+    )
+}
+
+local func shadow_pipeline(device:@GPU.Device, point:bool) GPU.GraphicsPipeline {
+    var shader = GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Shadow.hlsl")
+    var name = "GFX.Scene3D projected shadows"
+    if point {
+        shader = GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/PointShadow.hlsl")
+        name = "GFX.Scene3D point shadows"
+    }
+    return device.graphics_pipeline(shader, GPU.GraphicsPipelineSettings(
+        vertex_buffers:mesh_buffers(),
+        attributes:mesh_attributes(),
+        rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+        depth_stencil:GPU.DepthStencilState(
+            depth_compare:GPU.Compare.less,
+            depth_test:true,
+            depth_write:true
+        ),
+        depth_stencil_format:GPU.TextureFormat.depth32_float,
+        name:name
+    ))
+}
+
+local func gizmo_pipeline(
+    device:@GPU.Device,
+    surface:@GPU.Surface
+) GPU.GraphicsPipeline {
+    let buffers:GPU.VertexBufferLayout[] = [GPU.VertexBufferLayout(slot:0, pitch:28)]
+    let attributes:GPU.VertexAttribute[] = [
+        GPU.VertexAttribute(
+            location:0,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x3,
+            offset:0
+        ),
+        GPU.VertexAttribute(
+            location:1,
+            buffer_slot:0,
+            format:GPU.VertexFormat.float_32x4,
+            offset:12
+        )
+    ]
+    let targets:GPU.ColorTargetFormat[] = [
+        GPU.ColorTargetFormat(format:surface.format())
+    ]
+    return device.graphics_pipeline(
+        GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/LightGizmos.hlsl"),
+        GPU.GraphicsPipelineSettings(
+            vertex_buffers:buffers,
+            attributes:attributes,
+            primitive:GPU.Primitive.lines,
+            rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            depth_stencil:GPU.DepthStencilState(
+                depth_compare:GPU.Compare.less_or_equal,
+                depth_test:true,
+                depth_write:false
+            ),
+            color_targets:targets,
+            depth_stencil_format:GPU.TextureFormat.depth16,
+            name:"GFX.Scene3D light gizmos"
+        )
+    )
+}
+
+local func grid_pipeline(
+    device:@GPU.Device,
+    surface:@GPU.Surface
+) GPU.GraphicsPipeline {
+    let targets:GPU.ColorTargetFormat[] = [GPU.ColorTargetFormat(
+        format:surface.format(),
+        blend:GPU.BlendState(
+            source_color:GPU.BlendFactor.source_alpha,
+            destination_color:GPU.BlendFactor.one_minus_source_alpha,
+            source_alpha:GPU.BlendFactor.one,
+            destination_alpha:GPU.BlendFactor.one_minus_source_alpha,
+            enabled:true
+        )
+    )]
+    return device.graphics_pipeline(
+        GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Grid.hlsl"),
+        GPU.GraphicsPipelineSettings(
+            rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            depth_stencil:GPU.DepthStencilState(
+                depth_compare:GPU.Compare.less_or_equal,
+                depth_test:true,
+                depth_write:false
+            ),
+            color_targets:targets,
+            depth_stencil_format:GPU.TextureFormat.depth16,
+            name:"GFX.Scene3D viewport grid"
+        )
+    )
+}
+
 local func copy_buffer(
     device:@GPU.Device,
     upload:@GPU.TransferBuffer,
@@ -545,4 +878,86 @@ local func copy_buffer(
     pass.upload(upload, destination, count)
     pass.finish()
     commands.submit()
+}
+
+local func upload_texture(
+    device:@GPU.Device,
+    image:@Image,
+    srgb:bool,
+    name:str
+) GPU.Texture {
+    var format = GPU.TextureFormat.rgba8_unorm
+    if srgb { format = GPU.TextureFormat.rgba8_srgb }
+    let levels = mip_levels(image.width(), image.height())
+    var texture = device.texture(GPU.TextureSettings(
+        format:format,
+        width:image.width(),
+        height:image.height(),
+        mip_levels:levels,
+        usage:GPU.TextureUsage(sampled:true, color_target:true),
+        name:name
+    ))
+    var pixels = image.pixels()
+    var upload = device.upload_buffer(pixels.count(), name + " upload")
+    upload.write(@pixels[0:pixels.count()])
+    var commands = device.commands()
+    var transfer = commands.copy()
+    transfer.upload(
+        upload,
+        GPU.TextureRegion(texture:texture, width:image.width(), height:image.height()),
+        image.width(),
+        image.height()
+    )
+    transfer.finish()
+    if levels > 1 { commands.generate_mipmaps(texture) }
+    commands.submit()
+    return texture
+}
+
+local func mip_levels(width:int, height:int) int {
+    var size = width
+    if height > size { size = height }
+    var levels = 1
+    while size > 1 {
+        size = size / 2
+        levels++
+    }
+    return levels
+}
+
+local func draw_textures(textures:MaterialTextures) DrawTextures {
+    return DrawTextures(
+        albedo:texture_handle(textures.albedo),
+        normal:texture_handle(textures.normal),
+        metallic_roughness:texture_handle(textures.metallic_roughness),
+        occlusion:texture_handle(textures.occlusion),
+        emission:texture_handle(textures.emission)
+    )
+}
+
+local func texture_handle(texture:MaterialTexture?) ImageHandle {
+    if let reference = texture { return reference.image }
+    return ImageHandle()
+}
+
+local func sort_draws(draws:&Draw[]) {
+    var index = 1
+    while index < draws.count() {
+        var cursor = index
+        while cursor > 0 && draw_before(draws[cursor], draws[cursor - 1]) {
+            draws.swap(cursor, cursor - 1)
+            cursor--
+        }
+        index++
+    }
+}
+
+local func draw_before(left:@Draw, right:@Draw) bool {
+    let left_blend = left.settings.alpha ==
+        GFX.Scene3D.Material.AlphaMode.blend
+    let right_blend = right.settings.alpha ==
+        GFX.Scene3D.Material.AlphaMode.blend
+    if left_blend != right_blend { return !left_blend }
+    if left_blend { return left.distance > right.distance }
+    return false
 }

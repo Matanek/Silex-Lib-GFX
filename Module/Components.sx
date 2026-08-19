@@ -12,7 +12,11 @@ public use GFX.Scene3D.AmbientLight as AmbientLight3D
 public use GFX.Scene3D.Camera as Camera3D
 public use GFX.Scene3D.CubeProjectorLight as CubeProjectorLight3D
 public use GFX.Scene3D.CubeProjectorLightGizmo as CubeProjectorLightGizmo3D
+public use GFX.Scene3D.AlphaMode as AlphaMode3D
 public use GFX.Scene3D.Material as Material3D
+public use GFX.Scene3D.MaterialSettings as MaterialSettings3D
+public use GFX.Scene3D.MaterialTexture as MaterialTexture3D
+public use GFX.Scene3D.MaterialTextures as MaterialTextures3D
 public use GFX.Scene3D.Mesh as Mesh3D
 public use GFX.Scene3D.PointLight as PointLight3D
 public use GFX.Scene3D.PointLightGizmo as PointLightGizmo3D

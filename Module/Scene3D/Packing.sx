@@ -59,8 +59,16 @@ func matrix(value:Math.Mat4) str {
     return bytes
 }
 
-func material(value:Material, camera_position:Math.Vec3) str {
-    var bytes = storage(48)
+func material(
+    value:Material,
+    textures:GFX.Scene3D.Material.MaterialTextures,
+    alpha:GFX.Scene3D.Material.AlphaMode,
+    alpha_cutoff:float,
+    double_sided:bool,
+    unlit:bool,
+    camera_position:Math.Vec3
+) str {
+    var bytes = storage(176)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_vec4(address, 0, Math.Vec4(
         value.metallic,
@@ -70,7 +78,59 @@ func material(value:Material, camera_position:Math.Vec3) str {
     ))
     write_color(address, 16, value.emission)
     write_vec4(address, 32, Math.Vec4(camera_position, 1.0))
+    var flags = 0.0
+    if double_sided { flags += 1.0 }
+    if unlit { flags += 2.0 }
+    write_vec4(address, 48, Math.Vec4(
+        alpha_mode(alpha),
+        alpha_cutoff,
+        textures.normal_scale,
+        flags
+    ))
+    write_texture_transform(address, 64, textures.albedo)
+    write_texture_transform(address, 80, textures.normal)
+    write_texture_transform(address, 96, textures.metallic_roughness)
+    write_texture_transform(address, 112, textures.occlusion)
+    write_texture_transform(address, 128, textures.emission)
+    write_vec4(address, 144, Math.Vec4(
+        texture_rotation(textures.albedo),
+        texture_rotation(textures.normal),
+        texture_rotation(textures.metallic_roughness),
+        texture_rotation(textures.occlusion)
+    ))
+    write_vec4(address, 160, Math.Vec4(
+        texture_rotation(textures.emission),
+        0.0,
+        0.0,
+        0.0
+    ))
     return bytes
+}
+
+func write_texture_transform(
+    address:uint,
+    offset:int,
+    texture:GFX.Scene3D.Material.MaterialTexture?
+) {
+    if let value = texture {
+        write_vec4(address, offset, Math.Vec4(
+            value.offset.x,
+            value.offset.y,
+            value.scale.x,
+            value.scale.y
+        ))
+    } else {
+        write_vec4(address, offset, Math.Vec4(0.0, 0.0, 1.0, 1.0))
+    }
+}
+
+func texture_rotation(texture:GFX.Scene3D.Material.MaterialTexture?) float {
+    if let value = texture { return value.rotation }
+    return 0.0
+}
+
+func alpha_mode(value:GFX.Scene3D.Material.AlphaMode) float {
+    return match value { opaque => 0.0; mask => 1.0; blend => 2.0 }
 }
 
 func lighting(frame:@LightingFrame) str {

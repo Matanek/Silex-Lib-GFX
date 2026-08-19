@@ -4,6 +4,10 @@ public use GFX.Scene3D.CubeProjectorLight.CubeProjectorLight
 public use GFX.Scene3D.CubeProjectorLightGizmo.CubeProjectorLightGizmo
 public use GFX.Scene3D.Grid.Grid
 public use GFX.Scene3D.Material.Material
+public use GFX.Scene3D.Material.AlphaMode
+public use GFX.Scene3D.Material.MaterialSettings
+public use GFX.Scene3D.Material.MaterialTexture
+public use GFX.Scene3D.Material.MaterialTextures
 public use GFX.Scene3D.Mesh.Mesh
 public use GFX.Scene3D.MeshHandle.MeshHandle
 public use GFX.Scene3D.Meshes.Meshes

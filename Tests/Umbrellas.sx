@@ -60,11 +60,15 @@ test "expose components resources and plugins through intentional umbrellas" {
     let transform_3d = Components.Transform3D(position:Math.Vec3(1.0, 2.0, 3.0))
     let camera_2d = Components.Camera2D(zoom:2.0)
     let light_3d = Components.PointLight3D(radius:6.0)
+    var material_settings = Components.MaterialSettings3D(
+        alpha:Components.AlphaMode3D.blend
+    )
 
     assert(transform_2d.position == Math.Vec2(12.0, 8.0))
     assert(transform_3d.position == Math.Vec3(1.0, 2.0, 3.0))
     assert(camera_2d.zoom == 2.0)
     assert(light_3d.radius == 6.0)
+    assert(material_settings.alpha == Components.AlphaMode3D.blend)
 
     let time = Plugins.Time()
     let animation = Plugins.Animation()

@@ -53,18 +53,24 @@ mode, and double-sided state. It is independent from ECS storage. Instantiation
 is an explicit bridge:
 
 ```silex
-func create_scene(world:&Resources.World, meshes:&Resources.Meshes3D) {
+func create_scene(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    images:&Resources.Images
+) {
     let model = GLTF.load("Assets/Models/Robot.glb")
-    let instance = model.instantiate(world, meshes)
+    let instance = model.instantiate(world, meshes, images)
     print("$(instance.entities.count()) primitives")
 }
 ```
 
-The built-in Scene3D material currently consumes the scalar metallic,
-roughness, occlusion, albedo, and emission factors. Texture references remain
-available on `ModelMaterial.textures` and survive GLB/glTF export; a textured
-Scene3D material path can consume them without moving format ownership into
-`GFX.Scene3D`.
+Instantiation registers decoded images in the supplied catalog and produces
+`Scene3D.Material` plus `Scene3D.MaterialSettings` components. The built-in
+renderer consumes base-color, normal, metallic-roughness, occlusion, and
+emissive maps, including `KHR_texture_transform`. It also honors opaque, mask,
+and blended alpha modes, alpha cutoff, double-sided materials, vertex colors,
+and `KHR_materials_unlit`. Color and emissive maps use sRGB sampling; data and
+normal maps remain linear.
 
 The current codec accepts triangle primitives, indexed or non-indexed geometry,
 TRS node hierarchies, PNG images, embedded GLB buffers, external `.gltf`

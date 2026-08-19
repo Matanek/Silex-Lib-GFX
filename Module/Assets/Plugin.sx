@@ -7,8 +7,12 @@ public struct Plugin:PluginProtocol {
     func id() str { return "GFX.Assets.Plugin" }
 
     func build(application:&Application) {
-        application.add_resource(AssetStore.Images())
-        application.add_resource(AssetStore.SpriteSheets())
+        if !application.resources().has<AssetStore.Images>() {
+            application.add_resource(AssetStore.Images())
+        }
+        if !application.resources().has<AssetStore.SpriteSheets>() {
+            application.add_resource(AssetStore.SpriteSheets())
+        }
         application.add_system(Schedule.shutdown, stop_assets)
     }
 }

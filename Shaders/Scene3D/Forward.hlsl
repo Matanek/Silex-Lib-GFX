@@ -15,6 +15,14 @@ cbuffer MaterialUniforms : register(b0, space3) {
     float4 materialSurface;
     float4 materialEmission;
     float4 cameraPosition;
+    float4 materialSettings;
+    float4 albedoTransform;
+    float4 normalTransform;
+    float4 metallicRoughnessTransform;
+    float4 occlusionTransform;
+    float4 emissionTransform;
+    float4 textureRotationsA;
+    float4 textureRotationsB;
 };
 
 struct LightData {
@@ -46,10 +54,21 @@ cbuffer ToneMappingUniforms : register(b2, space3) {
 
 Texture2D<float> shadowAtlas : register(t0, space2);
 SamplerState shadowSampler : register(s0, space2);
+Texture2D<float4> albedoMap : register(t1, space2);
+SamplerState albedoSampler : register(s1, space2);
+Texture2D<float4> normalMap : register(t2, space2);
+SamplerState normalSampler : register(s2, space2);
+Texture2D<float4> metallicRoughnessMap : register(t3, space2);
+SamplerState metallicRoughnessSampler : register(s3, space2);
+Texture2D<float4> occlusionMap : register(t4, space2);
+SamplerState occlusionSampler : register(s4, space2);
+Texture2D<float4> emissionMap : register(t5, space2);
+SamplerState emissionSampler : register(s5, space2);
 
 struct VertexOutput {
     float3 worldPosition : TEXCOORD0;
     float3 worldNormal : TEXCOORD1;
+    float2 uv : TEXCOORD2;
     float4 color : COLOR0;
     float4 position : SV_Position;
 };
@@ -60,11 +79,48 @@ VertexOutput vertex_main(VertexInput input) {
     output.position = mul(viewProjection, world);
     output.worldPosition = world.xyz;
     output.worldNormal = normalize(mul((float3x3)model, input.normal));
+    output.uv = input.uv;
     output.color = input.color * materialAlbedo;
     return output;
 }
 
 static const float pbrPi = 3.14159265;
+
+float2 transformed_uv(float2 uv, float4 transform, float rotation) {
+    const float2 scaled = uv * transform.zw;
+    const float cosine = cos(rotation);
+    const float sine = sin(rotation);
+    return transform.xy + float2(
+        cosine * scaled.x - sine * scaled.y,
+        sine * scaled.x + cosine * scaled.y
+    );
+}
+
+float3 mapped_normal(
+    float3 position,
+    float3 geometryNormal,
+    float2 uv,
+    float normalScale
+) {
+    float3 sampled = normalMap.Sample(normalSampler, uv).xyz * 2.0 - 1.0;
+    sampled.xy *= normalScale;
+    const float3 positionX = ddx(position);
+    const float3 positionY = ddy(position);
+    const float2 uvX = ddx(uv);
+    const float2 uvY = ddy(uv);
+    const float determinant = uvX.x * uvY.y - uvX.y * uvY.x;
+    if (abs(determinant) < 0.000001) return geometryNormal;
+    const float inverseDeterminant = 1.0 / determinant;
+    const float3 tangent = normalize(
+        (positionX * uvY.y - positionY * uvX.y) * inverseDeterminant
+    );
+    const float3 bitangent = normalize(
+        (positionY * uvX.x - positionX * uvY.x) * inverseDeterminant
+    );
+    return normalize(
+        tangent * sampled.x + bitangent * sampled.y + geometryNormal * sampled.z
+    );
+}
 
 float distribution_ggx(float3 normal, float3 halfDirection, float roughness) {
     const float alpha = roughness * roughness;
@@ -372,14 +428,69 @@ float3 tone_map(float3 color) {
     );
 }
 
-float4 fragment_main(VertexOutput input) : SV_Target0 {
-    const float3 normal = normalize(input.worldNormal);
+float4 fragment_main(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_Target0 {
+    const float2 albedoUv = transformed_uv(
+        input.uv,
+        albedoTransform,
+        textureRotationsA.x
+    );
+    const float4 sampledAlbedo = albedoMap.Sample(albedoSampler, albedoUv);
+    const float4 surfaceColor = input.color * sampledAlbedo;
+    const float alphaMode = materialSettings.x;
+    if (alphaMode > 0.5 && alphaMode < 1.5) {
+        clip(surfaceColor.a - materialSettings.y);
+    }
+    float alpha = surfaceColor.a;
+    if (alphaMode < 1.5) alpha = 1.0;
+    float3 geometryNormal = normalize(input.worldNormal);
+    const bool doubleSided = fmod(materialSettings.w, 2.0) > 0.5;
+    if (doubleSided && !frontFace) geometryNormal = -geometryNormal;
+    const float2 normalUv = transformed_uv(
+        input.uv,
+        normalTransform,
+        textureRotationsA.y
+    );
+    const float3 normal = mapped_normal(
+        input.worldPosition,
+        geometryNormal,
+        normalUv,
+        materialSettings.z
+    );
     const float3 viewDirection = normalize(cameraPosition.xyz - input.worldPosition);
-    const float metallic = saturate(materialSurface.x);
-    const float roughness = clamp(materialSurface.y, 0.04, 1.0);
-    const float occlusion = saturate(materialSurface.z);
-    const float3 albedo = input.color.rgb;
-    float3 color = albedo * ambientLight.rgb * ambientLight.a * occlusion;
+    const float2 metallicRoughnessUv = transformed_uv(
+        input.uv,
+        metallicRoughnessTransform,
+        textureRotationsA.z
+    );
+    const float4 sampledMetallicRoughness = metallicRoughnessMap.Sample(
+        metallicRoughnessSampler,
+        metallicRoughnessUv
+    );
+    const float metallic = saturate(materialSurface.x * sampledMetallicRoughness.b);
+    const float roughness = clamp(
+        materialSurface.y * sampledMetallicRoughness.g,
+        0.04,
+        1.0
+    );
+    const float2 occlusionUv = transformed_uv(
+        input.uv,
+        occlusionTransform,
+        textureRotationsA.w
+    );
+    const float sampledOcclusion = occlusionMap.Sample(
+        occlusionSampler,
+        occlusionUv
+    ).r;
+    const float occlusion = saturate(
+        1.0 + materialSurface.z * (sampledOcclusion - 1.0)
+    );
+    const float3 albedo = surfaceColor.rgb;
+    const bool unlit = materialSettings.w > 1.5;
+    if (unlit) return float4(tone_map(albedo), alpha);
+    const float3 reflectance = lerp(0.04, albedo, metallic);
+    const float3 ambientMaterial = albedo * (1.0 - metallic) +
+        reflectance * (1.0 - roughness * 0.5);
+    float3 color = ambientMaterial * ambientLight.rgb * ambientLight.a * occlusion;
     const int count = min((int)lightingSettings.x, 16);
     for (int index = 0; index < count; ++index) {
         color += evaluate_light(
@@ -393,6 +504,12 @@ float4 fragment_main(VertexOutput input) : SV_Target0 {
             roughness
         );
     }
-    color += materialEmission.rgb * materialSurface.w;
-    return float4(tone_map(color), input.color.a);
+    const float2 emissionUv = transformed_uv(
+        input.uv,
+        emissionTransform,
+        textureRotationsB.x
+    );
+    const float3 sampledEmission = emissionMap.Sample(emissionSampler, emissionUv).rgb;
+    color += materialEmission.rgb * sampledEmission * materialSurface.w;
+    return float4(tone_map(color), alpha);
 }

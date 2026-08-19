@@ -25,6 +25,43 @@ light values from an alternative renderer.
 application.add_plugin(Scene3D.Plugin())
 ```
 
+## PBR materials
+
+`Material` describes scalar surface properties. Optional image maps and raster
+state live in the `MaterialSettings` ECS component; `MaterialTextures` groups
+its texture inputs without becoming another component:
+
+```silex
+use GFX.Assets
+use GFX.Color
+use GFX.ECS
+use GFX.Scene3D
+
+let albedo = images.add(Assets.Image.solid(Color.white()))
+world.spawn(ECS.EntityRecipe()
+    ..with(Scene3D.Transform())
+    ..with(Scene3D.Mesh(mesh))
+    ..with(Scene3D.Material(
+        metallic:0.2,
+        roughness:0.6
+    ))
+    ..with(Scene3D.MaterialSettings(
+        textures:Scene3D.MaterialTextures(
+            albedo:Scene3D.MaterialTexture(image:albedo)
+        ),
+        alpha:Scene3D.AlphaMode.blend,
+        double_sided:true
+    ))
+)
+```
+
+The forward renderer supports base-color, normal, metallic-roughness,
+occlusion, and emission textures. Alpha masks discard below `alpha_cutoff`;
+blended surfaces render after opaque surfaces, from far to near, without depth
+writes. Texture transforms carry offset, scale, and rotation. The default
+sampler repeats, filters linearly, generates mipmaps, and uses anisotropic
+filtering.
+
 ## Tone mapping
 
 Tone mapping is part of the Scene3D mesh shading contract rather than a

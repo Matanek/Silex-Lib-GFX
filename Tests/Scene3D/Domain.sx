@@ -1,8 +1,13 @@
+use GFX.Assets
 use GFX.Color
 use GFX.Scene3D.Camera
 use GFX.Scene3D.Geometry
 use GFX.Scene3D.Grid
 use GFX.Scene3D.Material
+use GFX.Scene3D.Material.AlphaMode
+use GFX.Scene3D.Material.MaterialSettings
+use GFX.Scene3D.Material.MaterialTexture
+use GFX.Scene3D.Material.MaterialTextures
 use GFX.Scene3D.Mesh
 use GFX.Scene3D.Meshes
 use GFX.Scene3D.PointLight
@@ -17,6 +22,16 @@ test "name 3D concepts through their domain instead of their declarations" {
     let handle = meshes.add(Geometry.Cube.make(Math.Vec3(2.0)))
     let mesh = Mesh(asset:handle)
     let material = Material(albedo:Color.red_500(), metallic:0.8)
+    var images = Assets.Images()
+    let albedo = images.add(Assets.Image.solid(Color.white()))
+    var transparent = MaterialSettings(
+        textures:MaterialTextures(albedo:MaterialTexture(
+            image:albedo,
+            scale:Math.Vec2(2.0)
+        )),
+        alpha:AlphaMode.blend,
+        double_sided:true
+    )
     let transform = Transform(position:Math.Vec3(0.0, 1.0, 2.0))
     let camera = Camera()
     let grid = Grid(spacing:2.0, fade_distance:80.0)
@@ -26,6 +41,10 @@ test "name 3D concepts through their domain instead of their declarations" {
 
     assert(mesh.asset == handle)
     assert(material.metallic == 0.8)
+    if let texture = transparent.textures.albedo { assert(texture.image == albedo) }
+    else { panic("albedo texture is missing") }
+    assert(transparent.alpha == AlphaMode.blend)
+    assert(transparent.double_sided)
     assert(transform.position == Math.Vec3(0.0, 1.0, 2.0))
     assert(camera.is_active())
     assert(grid.fade_distance == 80.0)

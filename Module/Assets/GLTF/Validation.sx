@@ -8,7 +8,8 @@ func validate(root:JSON.Value, subject:str?) Result<void, Error> {
             for var value in values {
                 if name = value.as_string() {
                     if name != "KHR_texture_transform" &&
-                        name != "KHR_materials_emissive_strength"
+                        name != "KHR_materials_emissive_strength" &&
+                        name != "KHR_materials_unlit"
                     {
                         return unsupported(subject, "required glTF extension '$(name)' is not implemented")
                     }

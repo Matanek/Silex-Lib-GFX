@@ -6,11 +6,15 @@ use GFX.Plugins
 use GFX.Resources
 use STD.Math
 
-func create_scene(world:&Resources.World, meshes:&Resources.Meshes3D) {
+func create_scene(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    images:&Resources.Images
+) {
     let model = GLTF.load("../../Assets/Models/TestPBR.glb")
     let center = model.center()
     let radius = model.radius()
-    let instance = model.instantiate(world, meshes)
+    let instance = model.instantiate(world, meshes, images)
 
     world.spawn(ECS.EntityRecipe()
         ..with(Components.AmbientLight3D(intensity:0.12))

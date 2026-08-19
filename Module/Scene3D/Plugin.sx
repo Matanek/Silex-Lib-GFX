@@ -1,6 +1,7 @@
 use GFX.Application
 use GFX.Application.Plugin as PluginProtocol
 use GFX.Application.Schedule
+use GFX.Assets.Images
 use GFX.ECS
 use GFX.GPU
 use GFX.Rendering
@@ -16,6 +17,7 @@ public struct Plugin:PluginProtocol {
         application.add_plugin(ECS.Plugin())
         application.add_plugin(Rendering.Plugin())
         if !application.resources().has<Meshes>() { application.add_resource(Meshes()) }
+        if !application.resources().has<Images>() { application.add_resource(Images()) }
         if !application.resources().has<ToneMapping>() { application.add_resource(ToneMapping.aces()) }
         application.add_resource(Renderer())
         {
@@ -47,9 +49,10 @@ func prepare_scene(
     device:@GPU.Device,
     world:@ECS.World,
     meshes:@Meshes,
+    images:@Images,
     renderer:&Renderer
 ) {
-    renderer.prepare(device, world, meshes)
+    renderer.prepare(device, world, meshes, images)
 }
 
 func render_scene(pass:@GPU.RenderPass, application:@Application) {

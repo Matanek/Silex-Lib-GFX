@@ -1,4 +1,6 @@
 use GFX.Assets.Image
+use GFX.Assets.ImageHandle
+use GFX.Assets.Images
 use GFX.Color
 use GFX.ECS
 use GFX.Scene3D
@@ -74,6 +76,7 @@ public struct ModelMaterial {
     let alpha_cutoff:float
     let double_sided:bool
     let textures:ModelTextures
+    let unlit:bool
 
     init(
         name:str = "",
@@ -81,7 +84,8 @@ public struct ModelMaterial {
         alpha_mode:AlphaMode = AlphaMode.opaque,
         alpha_cutoff:float = 0.5,
         double_sided:bool = false,
-        textures:ModelTextures = ModelTextures()
+        textures:ModelTextures = ModelTextures(),
+        unlit:bool = false
     ) {
         self.name = name
         self.value = value
@@ -89,6 +93,7 @@ public struct ModelMaterial {
         self.alpha_cutoff = alpha_cutoff
         self.double_sided = double_sided
         self.textures = textures
+        self.unlit = unlit
     }
 }
 
@@ -196,9 +201,11 @@ public struct Model {
     func center() Math.Vec3 { return self.minimum.add(self.maximum).multiply(0.5) }
     func radius() float { return Math.max(self.minimum.distance(self.maximum) * 0.5, 1.0) }
 
-    func instantiate(world:&ECS.World, meshes:&Scene3D.Meshes) ModelInstance {
+    func instantiate(world:&ECS.World, meshes:&Scene3D.Meshes, images:&Images) ModelInstance {
         var handles:Scene3D.MeshHandle[] = []
         for geometry in self.current_meshes { handles.append(meshes.add(geometry)) }
+        var image_handles:ImageHandle[] = []
+        for image in self.current_images { image_handles.append(images.add(image)) }
         var entities:ECS.Entity[] = []
         var roots:ECS.Entity[] = []
         var node_index = 0
@@ -208,14 +215,47 @@ public struct Model {
                 let model_mesh = self.current_model_meshes[node.mesh]
                 for primitive in model_mesh.primitives {
                     var material = Scene3D.Material()
+                    var textures = Scene3D.MaterialTextures()
+                    var alpha = Scene3D.AlphaMode.opaque
+                    var alpha_cutoff = 0.5
+                    var double_sided = false
+                    var unlit = false
                     if primitive.material >= 0 {
-                        material = self.current_materials[primitive.material].value
+                        let source = self.current_materials[primitive.material]
+                        material = source.value
+                        material.occlusion *= source.textures.occlusion_strength
+                        textures = Scene3D.MaterialTextures(
+                            albedo:material_texture(source.textures.albedo, image_handles),
+                            normal:material_texture(source.textures.normal, image_handles),
+                            metallic_roughness:material_texture(
+                                source.textures.metallic_roughness,
+                                image_handles
+                            ),
+                            occlusion:material_texture(source.textures.occlusion, image_handles),
+                            emission:material_texture(source.textures.emission, image_handles),
+                            normal_scale:source.textures.normal_scale
+                        )
+                        alpha = scene_alpha(source.alpha_mode)
+                        alpha_cutoff = source.alpha_cutoff
+                        double_sided = source.double_sided
+                        unlit = source.unlit
                     }
-                    let entity = world.spawn(ECS.EntityRecipe()
+                    var recipe = ECS.EntityRecipe()
                         ..with(node.world_transform)
                         ..with(Scene3D.Mesh(handles[primitive.mesh]))
                         ..with(material)
-                    )
+                    if has_textures(textures) || alpha != Scene3D.AlphaMode.opaque ||
+                        double_sided || unlit
+                    {
+                        recipe.with(Scene3D.MaterialSettings(
+                            textures:textures,
+                            alpha:alpha,
+                            alpha_cutoff:alpha_cutoff,
+                            double_sided:double_sided,
+                            unlit:unlit
+                        ))
+                    }
+                    let entity = world.spawn(recipe)
                     entities.append(entity)
                     if node.parent < 0 { roots.append(entity) }
                 }
@@ -223,6 +263,35 @@ public struct Model {
             node_index++
         }
         return ModelInstance(entities:entities, roots:roots)
+    }
+}
+
+func material_texture(value:TextureReference?, images:ImageHandle[]) Scene3D.MaterialTexture? {
+    if let reference = value {
+        if reference.transform.coordinates != 0 {
+            panic("GFX.Scene3D materials currently support texture coordinate set 0")
+        }
+        return Scene3D.MaterialTexture(
+            image:images[reference.image],
+            offset:reference.transform.offset,
+            scale:reference.transform.scale,
+            rotation:reference.transform.rotation
+        )
+    }
+    return null
+}
+
+func has_textures(value:Scene3D.MaterialTextures) bool {
+    return value.albedo != null || value.normal != null ||
+        value.metallic_roughness != null || value.occlusion != null ||
+        value.emission != null
+}
+
+func scene_alpha(value:AlphaMode) Scene3D.AlphaMode {
+    return match value {
+        opaque => Scene3D.AlphaMode.opaque
+        mask => Scene3D.AlphaMode.mask
+        blend => Scene3D.AlphaMode.blend
     }
 }
 

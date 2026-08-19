@@ -12,6 +12,21 @@ test "load a textured PBR GLB asset through the direct API" {
     assert(model.root_count() == 1)
     assert(model.material(12).value.metallic == 0.5)
     assert(model.material(19).value.roughness > 0.29)
+    assert(model.material(0).alpha_mode == Assets.AlphaMode.blend)
+    assert(model.material(2).alpha_mode == Assets.AlphaMode.mask)
+    assert(model.material(2).double_sided)
+    if let ground = model.material(10).textures.albedo {
+        assert(ground.transform.scale.x == 3.0)
+        assert(ground.transform.scale.y == 2.0)
+    } else {
+        panic("ground albedo texture was not imported")
+    }
+    if let normal = model.material(35).textures.normal {
+        assert(model.material(35).textures.normal_scale > 0.19)
+        assert(normal.transform.scale.x == 2.0)
+    } else {
+        panic("normal texture was not imported")
+    }
 }
 
 test "return structured GLTF failures through the expert API" {
@@ -43,12 +58,29 @@ test "instantiate imported primitives and PBR materials into Scene3D" {
     let model = GLTF.load("Packages/GFX/Assets/Models/TestPBR.glb")
     var world = ECS.World()
     var meshes = Scene3D.Meshes()
-    let instance = model.instantiate(world, meshes)
+    var images = Assets.Images()
+    let instance = model.instantiate(world, meshes, images)
 
     assert(instance.entities.count() == 52)
     assert(world.has<Scene3D.Transform>(instance.entities[0]))
     assert(world.has<Scene3D.Mesh>(instance.entities[0]))
     assert(world.has<Scene3D.Material>(instance.entities[0]))
+    var textured = 0
+    var transparent = 0
+    for entity in instance.entities {
+        if world.has<Scene3D.MaterialSettings>(entity) {
+            let settings = world.get<Scene3D.MaterialSettings>(entity)
+            if settings.textures.albedo != null || settings.textures.normal != null ||
+                settings.textures.metallic_roughness != null ||
+                settings.textures.occlusion != null || settings.textures.emission != null
+            {
+                textured++
+            }
+            if settings.alpha != Scene3D.AlphaMode.opaque { transparent++ }
+        }
+    }
+    assert(textured > 0)
+    assert(transparent > 0)
 }
 
 test "export a model created from Scene3D geometry" {
