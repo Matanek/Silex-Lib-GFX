@@ -48,7 +48,6 @@ func main() {
             ..width = 640
             ..height = 360
         ))
-        ..add_plugin(Plugins.Input())
         ..add_system(Application.Schedule.startup, begin_demo)
         ..add_system(Application.Schedule.update, update_demo)
         ..run()

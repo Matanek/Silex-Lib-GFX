@@ -380,7 +380,6 @@ func main() {
             ..width = Constants.canvas_width + 40
             ..height = Constants.canvas_height + 40
         ))
-        ..add_plugin(Plugins.Input())
         ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
             ..clear = Color.black()
         ))

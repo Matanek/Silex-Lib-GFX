@@ -3,6 +3,8 @@ use Interop.Boundary
 use GFX.Application.Plugin as PluginProtocol
 use GFX.Application
 use GFX.Application.Schedule
+use GFX.Input.Plugin as InputPlugin
+use GFX.Input.State as InputState
 use GFX.Window as WindowApi
 
 public enum CloseBehavior {
@@ -10,9 +12,7 @@ public enum CloseBehavior {
     manual
 }
 
-// Shared with input integrations so close behavior remains independent from
-// the concrete event backend.
-public struct ClosePolicy {
+struct ClosePolicy {
     let behavior:CloseBehavior
 
     init(behavior:CloseBehavior) {
@@ -88,6 +88,7 @@ public struct Plugin:PluginProtocol {
     func id() str { return "GFX.Window.Plugin" }
 
     func build(application:&Application) {
+        application.add_plugin(InputPlugin())
         application.add_resource(Configuration(
             settings:WindowApi.Settings(
                 title:self.settings.title,
@@ -111,6 +112,7 @@ public struct Plugin:PluginProtocol {
         application.add_system(Schedule.startup, start_window)
         application.add_after_system(Schedule.startup, present_without_renderer)
         application.add_system(Schedule.pre_update, pump_window_events)
+        application.add_after_system(Schedule.pre_update, handle_close_request)
         application.add_system(Schedule.shutdown, stop_window)
     }
 }
@@ -146,6 +148,29 @@ func present_without_renderer(application:Application) {
 
 func pump_window_events() {
     sdl_pump_events()
+}
+
+func handle_close_request(application:Application) {
+    var resources = application.resources()
+    let policy = resources.get<ClosePolicy>()
+    if policy.behavior != CloseBehavior.automatic { return }
+    let input = resources.get<InputState>()
+    let window = resources.get<WindowApi>()
+    for event in input.events() {
+        match event {
+            quit(meta) => {
+                application.stop()
+                return
+            }
+            window_close_requested(request) => {
+                if request.window == window.id() {
+                    application.stop()
+                    return
+                }
+            }
+            else => {}
+        }
+    }
 }
 
 func stop_window(application:Application) {

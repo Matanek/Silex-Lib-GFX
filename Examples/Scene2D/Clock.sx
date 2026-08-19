@@ -220,7 +220,6 @@ func main() {
             ..width = Constants.canvas_size
             ..height = Constants.canvas_size
         ))
-        ..add_plugin(Plugins.Input())
         ..add_plugin(Plugins.Time())
         ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
             ..clear = Constants.background_color()

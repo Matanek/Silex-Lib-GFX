@@ -15,6 +15,8 @@ for event in input.events() {
 }
 ```
 
-`Input.Plugin` publishes the state in `Application`. Transitions, motion,
-scrolling, and text belong to one frame; continuous key, button, and device
-state survives the next update.
+`Input.Plugin` publishes the state in `Application` and remains installable on
+its own. `Window.Plugin` installs it automatically because window lifecycle
+events use the same portable event stream. Transitions, motion, scrolling, and
+text belong to one frame; continuous key, button, and device state survives the
+next update.

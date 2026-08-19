@@ -304,7 +304,6 @@ func main() {
             ..width = Constants.canvas_width
             ..height = Constants.canvas_height
         ))
-        ..add_plugin(Plugins.Input())
         ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
             ..clear = Color.slate_950()
         ))

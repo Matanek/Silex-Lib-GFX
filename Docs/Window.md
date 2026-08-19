@@ -14,8 +14,13 @@ var window = Window(Window.Settings(
 ))
 ```
 
-`Window.Plugin` manages the same capability within `Application`. The
-`presentation_handle()` is a deliberate escape hatch for an extension that
+`Window.Plugin` manages the same capability within `Application`. It installs
+`Input.Plugin`, so window events and the configured close behavior work without
+additional application wiring. The default automatic behavior stops the
+application when its window requests closure; manual mode keeps the request
+observable through `GFX.Input.State`.
+
+The `presentation_handle()` is a deliberate escape hatch for an extension that
 must attach a system surface, such as `GFX.WebView`; the window retains
 ownership and the handle is valid only during its lifetime.
 

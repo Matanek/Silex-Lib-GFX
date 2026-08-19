@@ -131,7 +131,6 @@ func main() {
             ..width = 1280
             ..height = 720
         ))
-        ..add_plugin(Plugins.Input())
         ..add_plugin(Plugins.Scene3D())
         ..add_plugin(Plugins.ViewportCamera3D(Plugins.ViewportCamera3DSettings()
             ..target = Math.Vec3(0.0, 0.0, 0.0)

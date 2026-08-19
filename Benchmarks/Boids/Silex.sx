@@ -331,7 +331,6 @@ func main() {
             ..resizable = false
             ..high_pixel_density = true
         ))
-        ..add_plugin(Plugins.Input())
         ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
             ..clear = Color.black()
         ))

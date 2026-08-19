@@ -1,7 +1,6 @@
 use GFX.Application.Plugin as PluginProtocol
 use GFX.Application
 use GFX.Application.Schedule
-use GFX.Input.Plugin as InputPlugin
 use GFX.Window.Plugin as WindowPlugin
 use GFX.WebView.Site
 use GFX.WebView.Settings
@@ -26,7 +25,6 @@ public struct Plugin:PluginProtocol {
 
     func build(application:&Application) {
         application.add_plugin(WindowPlugin())
-        application.add_plugin(InputPlugin())
         if let site = self.site {
             application.add_resource(Configuration(
                 site:site,

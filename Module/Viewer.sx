@@ -7,7 +7,6 @@ use GFX.Color
 use GFX.ECS
 use GFX.GPU
 use GFX.GPU.Plugin as GPUPlugin
-use GFX.Input.Plugin as InputPlugin
 use GFX.Rendering.Plugin as RenderingPlugin
 use GFX.Rendering.Plugin.Settings as RenderingSettings
 use GFX.Scene2D
@@ -235,7 +234,6 @@ public struct Plugin:PluginProtocol {
             ..width = width
             ..height = height
         ))
-        application.add_plugin(InputPlugin())
         application.add_plugin(GPUPlugin(GPUPlugin.Settings()
             ..present_on_start = false
         ))
@@ -266,7 +264,6 @@ public struct Plugin:PluginProtocol {
             ..width = width
             ..height = height
         ))
-        application.add_plugin(InputPlugin())
         application.add_plugin(RenderingPlugin(RenderingSettings()
             ..clear = self.settings.background
         ))
