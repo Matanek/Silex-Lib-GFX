@@ -1,0 +1,52 @@
+use GFX.Animation.Timeline.Timeline
+use GFX.Color
+use STD.Math
+
+public struct Playback {
+    private let timeline:Timeline
+    private var elapsed:float
+    private var initial_position:Math.Vec2?
+    private var initial_rotation:float?
+    private var initial_scale:Math.Vec2?
+    private var initial_color:Color?
+
+    module init(timeline:Timeline) {
+        self.timeline = timeline
+        self.elapsed = 0.0
+        self.initial_position = null
+        self.initial_rotation = null
+        self.initial_scale = null
+        self.initial_color = null
+    }
+
+    module func advance(delta:float) {
+        if delta < 0.0 {
+            panic("GFX.Animation.Playback requires a non-negative delta")
+        }
+        self.elapsed += delta
+    }
+
+    module func position(current:Math.Vec2) Math.Vec2? {
+        if !self.timeline.has_position() { return null }
+        if self.initial_position == null { self.initial_position = current }
+        return self.timeline.position_at(self.elapsed, self.initial_position!)
+    }
+
+    module func rotation(current:float) float? {
+        if !self.timeline.has_rotation() { return null }
+        if self.initial_rotation == null { self.initial_rotation = current }
+        return self.timeline.rotation_at(self.elapsed, self.initial_rotation!)
+    }
+
+    module func scale(current:Math.Vec2) Math.Vec2? {
+        if !self.timeline.has_scale() { return null }
+        if self.initial_scale == null { self.initial_scale = current }
+        return self.timeline.scale_at(self.elapsed, self.initial_scale!)
+    }
+
+    module func color(current:Color) Color? {
+        if !self.timeline.has_color() { return null }
+        if self.initial_color == null { self.initial_color = current }
+        return self.timeline.color_at(self.elapsed, self.initial_color!)
+    }
+}

@@ -1,0 +1,90 @@
+use GFX.Animation
+use GFX.Application
+use GFX.Canvas
+use GFX.Color
+use GFX.ECS
+use GFX.Resources
+use GFX.Scene2D.Canvas as Canvas2D
+use GFX.Scene2D.Transform as Transform2D
+use STD.Math
+
+struct IntegrationState {
+    var entity:ECS.Entity?
+    var frames:int
+
+    init() {
+        self.entity = null
+        self.frames = 0
+    }
+}
+
+func create_animated_entity(
+    world:&Resources.World,
+    state:&IntegrationState
+) {
+    let timeline = Animation.parallel([
+        Animation.move_to(Math.Vec2(10.0, 0.0), 1.0),
+        Animation.rotate_to(1.0, 1.0),
+        Animation.scale_to(2.0, 1.0),
+        Animation.color_to(Color.black(), 1.0),
+    ])
+    state.entity = world.spawn(ECS.EntityRecipe()
+        ..with(Transform2D())
+        ..with(Canvas2D(Canvas(), 1, 1))
+        ..with(timeline.play())
+    )
+}
+
+func verify_animation(
+    world:@Resources.World,
+    state:&IntegrationState,
+    controller:&Application.Controller
+) {
+    state.frames++
+    if state.frames < 3 { return }
+
+    if let entity = state.entity {
+        let transform = world.get<Transform2D>(entity)
+        let canvas = world.get<Canvas2D>(entity)
+        assert(transform.position.x > 0.0)
+        assert(transform.rotation > 0.0)
+        assert(transform.scale.x > 1.0)
+        assert(transform.scale.y > 1.0)
+        assert(canvas.color.r < 1.0)
+    } else {
+        assert(false)
+    }
+    controller.stop()
+}
+
+test "compose timeline actions through GFX.Animation" {
+    let scale_pulse = Animation.sequence([
+        Animation.scale_to(1.25, 0.5, easing:Animation.Easing.in_out),
+        Animation.scale_to(Math.Vec2(1.0), 0.5,
+            easing:Animation.Easing.in_out),
+    ])
+    let route = Animation.sequence([
+        Animation.move_to(Math.Vec2(10.0, 0.0), 2.0),
+        Animation.wait(1.0),
+        Animation.move_to(Math.Vec2(10.0, 10.0), 2.0),
+    ])
+    let timeline = Animation.parallel([
+        route,
+        Animation.rotate_to(10.0, 4.0, easing:Animation.Easing.out),
+        Animation.color_to(Color.black(), 3.0),
+    ])
+
+    assert(Math.nearly_equal(scale_pulse.duration(), 1.0))
+    assert(Math.nearly_equal(route.duration(), 5.0))
+    assert(Math.nearly_equal(timeline.duration(), 5.0))
+}
+
+test "animate Scene2D transform scale and canvas color through the plugin" {
+    var application = Application()
+        ..add_resource(IntegrationState())
+        ..add_plugin(Animation.Plugin())
+        ..add_system(Application.Schedule.startup, create_animated_entity)
+        ..add_after_system(Application.Schedule.update, verify_animation)
+
+    assert(application.run() == 0)
+}

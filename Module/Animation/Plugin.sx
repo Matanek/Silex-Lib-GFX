@@ -1,0 +1,50 @@
+use GFX.Animation.Playback.Playback
+use GFX.Application
+use GFX.Application.Plugin as PluginProtocol
+use GFX.Application.Schedule
+use GFX.Application.Time
+use GFX.ECS
+use GFX.Resources
+use GFX.Scene2D.Canvas as Canvas2D
+use GFX.Scene2D.Transform as Transform2D
+
+public struct Plugin:PluginProtocol {
+    func id() str { return "GFX.Animation.Plugin" }
+
+    func build(application:&Application) {
+        application.add_plugin(ECS.Plugin())
+        application.add_plugin(Time())
+        application.add_after_system(Schedule.pre_update, advance_playback)
+        application.add_system(Schedule.update, apply_transform_2d)
+        application.add_system(Schedule.update, apply_canvas_color)
+    }
+}
+
+func advance_playback(
+    time:@Resources.FrameTime,
+    query:ECS.Query<(ECS.Entity, &Playback)>
+) {
+    for (entity, playback) in query {
+        playback.advance(time.delta)
+    }
+}
+
+func apply_transform_2d(query:ECS.Query<(&Playback, &Transform2D)>) {
+    for (playback, transform) in query {
+        if let position = playback.position(transform.position) {
+            transform.position = position
+        }
+        if let rotation = playback.rotation(transform.rotation) {
+            transform.rotation = rotation
+        }
+        if let scale = playback.scale(transform.scale) {
+            transform.scale = scale
+        }
+    }
+}
+
+func apply_canvas_color(query:ECS.Query<(&Playback, &Canvas2D)>) {
+    for (playback, canvas) in query {
+        if let color = playback.color(canvas.color) { canvas.color = color }
+    }
+}

@@ -2,6 +2,7 @@
 // their plugin because a re-exported declaration does not carry its module.
 public use GFX.Application.FramePacing as FramePacing
 public use GFX.Application.Time as Time
+public use GFX.Animation.Plugin as Animation
 public use GFX.Assets.Plugin as Assets
 public use GFX.Audio.Plugin as Audio
 public use GFX.ECS.Plugin as ECS

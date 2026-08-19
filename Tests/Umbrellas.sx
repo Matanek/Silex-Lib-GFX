@@ -67,6 +67,7 @@ test "expose components resources and plugins through intentional umbrellas" {
     assert(light_3d.radius == 6.0)
 
     let time = Plugins.Time()
+    let animation = Plugins.Animation()
     let pacing = Plugins.FramePacing(60)
     let scene_2d = Plugins.Scene2D()
     let scene_3d = Plugins.Scene3D()

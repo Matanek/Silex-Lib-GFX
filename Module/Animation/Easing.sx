@@ -1,0 +1,14 @@
+public enum Easing {
+    linear
+    out
+    in_out
+}
+
+func sample(easing:Easing, amount:float) float {
+    if easing == Easing.linear { return amount }
+    if easing == Easing.out {
+        let inverse = 1.0 - amount
+        return 1.0 - inverse * inverse
+    }
+    return amount * amount * (3.0 - 2.0 * amount)
+}
