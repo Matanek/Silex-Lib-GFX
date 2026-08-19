@@ -18,6 +18,8 @@ public use GFX.Scene3D.Rotator.Rotator
 public use GFX.Scene3D.Sampling.Sampling
 public use GFX.Scene3D.Selectable.Selectable
 public use GFX.Scene3D.Shadow.Shadow
+public use GFX.Scene3D.Skybox.ProceduralSky
+public use GFX.Scene3D.Skybox.Skybox
 public use GFX.Scene3D.Sprite.Billboard
 public use GFX.Scene3D.Sprite.Sprite
 public use GFX.Scene3D.SpotProjectorLight.SpotProjectorLight

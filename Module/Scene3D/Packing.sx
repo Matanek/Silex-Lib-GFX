@@ -6,6 +6,7 @@ use GFX.Scene3D.Lighting.Frame as LightingFrame
 use GFX.Scene3D.Lighting.Kind as LightKind
 use GFX.Scene3D.Material
 use GFX.Scene3D.Shadows.Frame as ShadowFrame
+use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
 use Interop.C
 use STD.Math
@@ -133,8 +134,8 @@ func alpha_mode(value:GFX.Scene3D.Material.AlphaMode) float {
     return match value { opaque => 0.0; mask => 1.0; blend => 2.0 }
 }
 
-func lighting(frame:@LightingFrame) str {
-    var bytes = storage(1312)
+func lighting(frame:@LightingFrame, skybox:Skybox) str {
+    var bytes = storage(1488)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_color(address, 0, frame.ambient())
     write_vec4(address, 16, Math.Vec4(frame.count() as float, 0.0, 0.0, 0.0))
@@ -163,6 +164,7 @@ func lighting(frame:@LightingFrame) str {
         ))
         index++
     }
+    write_skybox(address, 1312, skybox)
     return bytes
 }
 
@@ -274,6 +276,95 @@ func tone_mapping(value:ToneMapping) str {
         split
     ))
     return bytes
+}
+
+func skybox_background(
+    inverse_view_projection:Math.Mat4,
+    camera_position:Math.Vec3,
+    skybox:Skybox,
+    tone_mapping:ToneMapping
+) str {
+    var bytes = storage(288)
+    let address = C.address_bits(C.mutable_string_pointer(bytes))
+    write_mat4(address, 0, inverse_view_projection)
+    write_vec4(address, 64, Math.Vec4(camera_position, 1.0))
+    write_skybox(address, 80, skybox)
+    write_tone_mapping(address, 256, tone_mapping)
+    return bytes
+}
+
+local func write_skybox(address:uint, offset:int, value:Skybox) {
+    var enabled = 0.0
+    var background = 0.0
+    if value.enabled { enabled = 1.0 }
+    if value.visible { background = 1.0 }
+    let sky = value.sky()
+    let sun_direction = sky.sun_direction.normalized()
+    write_color_vec4(address, offset, sky.day_zenith(), sky.sky_intensity)
+    write_color_vec4(address, offset + 16, sky.day_horizon(), background)
+    write_color_vec4(
+        address,
+        offset + 32,
+        sky.night_zenith(),
+        value.diffuse_intensity
+    )
+    write_color_vec4(address, offset + 48, sky.night_horizon(), -1.0)
+    write_vec4(address, offset + 64, Math.Vec4(
+        sun_direction,
+        sky.sun_intensity
+    ))
+    write_color_vec4(address, offset + 80, sky.sun_color(), value.specular_intensity)
+    write_vec4(address, offset + 96, Math.Vec4(
+        sky.sun_angular_radius(),
+        sky.sun_softness(),
+        enabled,
+        2.0
+    ))
+    write_vec4(address, offset + 112, Math.Vec4(
+        sky.sun_halo_intensity(),
+        sky.sun_halo_angular_radius(),
+        sky.sun_halo_softness(),
+        0.0
+    ))
+    write_vec4(address, offset + 128, Math.Vec4(
+        sky.sun_glow_intensity(),
+        sky.sun_glow_angular_radius(),
+        sky.sun_glow_softness(),
+        0.0
+    ))
+    write_color_vec4(address, offset + 144, sky.horizon_glow_color(), 1.0)
+    write_vec4(address, offset + 160, Math.Vec4(
+        sky.horizon_glow_intensity(),
+        sky.horizon_glow_height(),
+        sky.horizon_glow_falloff(),
+        0.18
+    ))
+}
+
+local func write_color_vec4(
+    address:uint,
+    offset:int,
+    color:Color,
+    value:float
+) {
+    write_vec4(address, offset, Math.Vec4(color.r, color.g, color.b, value))
+}
+
+local func write_tone_mapping(address:uint, offset:int, value:ToneMapping) {
+    write_vec4(address, offset, Math.Vec4(
+        value.method.raw_value as float,
+        value.exposure,
+        value.white_point,
+        value.normalization.raw_value as float
+    ))
+    var split = 0.0
+    if value.split_comparison { split = 1.0 }
+    write_vec4(address, offset + 16, Math.Vec4(
+        value.filmic_look.raw_value as float,
+        value.agx_look.raw_value as float,
+        value.split_position,
+        split
+    ))
 }
 
 local func storage(minimum:int) str {

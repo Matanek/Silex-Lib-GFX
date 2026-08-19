@@ -7,6 +7,7 @@ use GFX.GPU
 use GFX.Rendering
 use GFX.Scene3D.Meshes
 use GFX.Scene3D.Renderer
+use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
 use GFX.Window
 
@@ -18,6 +19,9 @@ public struct Plugin:PluginProtocol {
         application.add_plugin(Rendering.Plugin())
         if !application.resources().has<Meshes>() { application.add_resource(Meshes()) }
         if !application.resources().has<Images>() { application.add_resource(Images()) }
+        if !application.resources().has<Skybox>() {
+            application.add_resource(Skybox.none())
+        }
         if !application.resources().has<ToneMapping>() { application.add_resource(ToneMapping.aces()) }
         application.add_resource(Renderer())
         {
@@ -27,6 +31,7 @@ public struct Plugin:PluginProtocol {
         }
         application.add_system(Schedule.startup, start_scene)
         application.add_system(Schedule.render, update_viewport)
+        application.add_system(Schedule.render, update_skybox)
         application.add_system(Schedule.render, update_tone_mapping)
         application.add_system(Schedule.render, prepare_scene)
         application.add_system(Schedule.shutdown, stop_scene)
@@ -43,6 +48,10 @@ func update_viewport(window:@Window, renderer:&Renderer) {
 
 func update_tone_mapping(tone_mapping:@ToneMapping, renderer:&Renderer) {
     renderer.set_tone_mapping(tone_mapping)
+}
+
+func update_skybox(skybox:@Skybox, renderer:&Renderer) {
+    renderer.set_skybox(skybox)
 }
 
 func prepare_scene(

@@ -13,6 +13,8 @@ use GFX.Scene3D.Meshes
 use GFX.Scene3D.PointLight
 use GFX.Scene3D.Rotator
 use GFX.Scene3D.Shadow
+use GFX.Scene3D.Skybox.ProceduralSky
+use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
 use GFX.Scene3D.Transform
 use STD.Math
@@ -35,6 +37,7 @@ test "name 3D concepts through their domain instead of their declarations" {
     let transform = Transform(position:Math.Vec3(0.0, 1.0, 2.0))
     let camera = Camera()
     let grid = Grid(spacing:2.0, fade_distance:80.0)
+    let skybox = Skybox.procedural(ProceduralSky.golden_hour())
     let rotator = Rotator(x_speed:0.1, y_speed:0.2, z_speed:0.3)
     let light = PointLight(shadow:Shadow(softness:0.5))
     let tone_mapping = ToneMapping.aces(exposure:1.0)
@@ -48,6 +51,9 @@ test "name 3D concepts through their domain instead of their declarations" {
     assert(transform.position == Math.Vec3(0.0, 1.0, 2.0))
     assert(camera.is_active())
     assert(grid.fade_distance == 80.0)
+    assert(skybox.enabled)
+    assert(skybox.visible)
+    assert(skybox.diffuse_intensity == 0.35)
     assert(rotator.y_speed == 0.2)
     assert(light.shadow.softness == 0.5)
     assert(tone_mapping.exposure == 1.0)

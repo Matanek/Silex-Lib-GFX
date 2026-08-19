@@ -42,6 +42,9 @@ test "render imported PBR textures, alpha modes, and material maps" {
         ..hidden = true
     ))
     application.add_plugin(Scene3D.Plugin())
+    application.add_resource(
+        Scene3D.Skybox.procedural(Scene3D.ProceduralSky.day())
+    )
     application.add_system(Application.Schedule.startup, create_textured_scene)
     application.add_after_system(Application.Schedule.render, stop_after_pbr_render)
     assert(application.run() == 0)

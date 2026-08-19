@@ -17,6 +17,7 @@ use GFX.Scene3D.MeshHandle
 use GFX.Scene3D.Meshes
 use GFX.Scene3D.Packing
 use GFX.Scene3D.Shadows
+use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
 use GFX.Scene3D.Transform
 use STD.Math
@@ -105,6 +106,7 @@ class Renderer {
     private var point_shadow_pipeline:GPU.GraphicsPipeline? = null
     private var gizmo_pipeline:GPU.GraphicsPipeline? = null
     private var grid_pipeline:GPU.GraphicsPipeline? = null
+    private var skybox_pipeline:GPU.GraphicsPipeline? = null
     private var meshes:CachedMesh[]
     private var images:CachedImage[]
     private var draws:Draw[]
@@ -117,9 +119,11 @@ class Renderer {
     private var camera_ready:bool
     private var viewport:Math.Vec2
     private var tone_mapping:ToneMapping
+    private var skybox:Skybox
     private var lighting_uniform:str
     private var shadow_uniform:str
     private var tone_mapping_uniform:str
+    private var skybox_background_uniform:str
     private var shadow_texture:GPU.Texture? = null
     private var shadow_sampler:GPU.Sampler? = null
     private var material_sampler:GPU.Sampler? = null
@@ -145,9 +149,11 @@ class Renderer {
         self.camera_ready = false
         self.viewport = Math.Vec2(1.0)
         self.tone_mapping = ToneMapping.aces()
+        self.skybox = Skybox.none()
         self.lighting_uniform = "\0"
         self.shadow_uniform = "\0"
         self.tone_mapping_uniform = "\0"
+        self.skybox_background_uniform = "\0"
         self.shadow_atlas_size = 0
         self.gizmo_capacity = 0
         self.gizmo_count = 0
@@ -166,6 +172,7 @@ class Renderer {
         self.shadow_pipeline = shadow_pipeline(device, false)
         self.point_shadow_pipeline = shadow_pipeline(device, true)
         self.gizmo_pipeline = gizmo_pipeline(device, surface)
+        self.skybox_pipeline = skybox_pipeline(device, surface)
         if self.grid != null { self.grid_pipeline = grid_pipeline(device, surface) }
         self.ensure_shadow_resources(device, 1)
         self.material_sampler = device.sampler(GPU.SamplerSettings(
@@ -255,9 +262,15 @@ class Renderer {
         }
         sort_draws(self.draws)
         self.shadows.rebuild(self.lighting, self.camera_view)
-        self.lighting_uniform = Packing.lighting(self.lighting)
+        self.lighting_uniform = Packing.lighting(self.lighting, self.skybox)
         self.shadow_uniform = Packing.shadows(self.lighting, self.shadows)
         self.tone_mapping_uniform = Packing.tone_mapping(self.tone_mapping)
+        self.skybox_background_uniform = Packing.skybox_background(
+            self.view_projection.inverted(),
+            self.camera_position,
+            self.skybox,
+            self.tone_mapping
+        )
         self.prepare_gizmos(device)
         self.render_shadows(device)
     }
@@ -270,17 +283,22 @@ class Renderer {
         self.tone_mapping = value
     }
 
+    func set_skybox(value:Skybox) {
+        self.skybox = value
+    }
+
     func set_grid(value:Grid) { self.grid = value }
 
     func draw(pass:@GPU.RenderPass) {
         if !self.camera_ready { return }
+        self.draw_skybox(pass)
         for draw in self.draws {
             if let pipeline = self.pipeline_for(draw.settings) {
                 pass.bind(pipeline)
                 var lighting = self.lighting_uniform
                 var shadows = self.shadow_uniform
                 var tone_mapping = self.tone_mapping_uniform
-                pass.fragment_uniform(1, lighting, 1312)
+                pass.fragment_uniform(1, lighting, 1488)
                 pass.fragment_uniform(2, tone_mapping, 32)
                 pass.fragment_uniform(3, shadows, 3328)
                 if let texture = self.shadow_texture {
@@ -309,6 +327,16 @@ class Renderer {
         }
         self.draw_grid(pass)
         self.draw_gizmos(pass)
+    }
+
+    private func draw_skybox(pass:@GPU.RenderPass) {
+        if !self.skybox.enabled || !self.skybox.visible { return }
+        if let pipeline = self.skybox_pipeline {
+            pass.bind(pipeline)
+            var uniform = self.skybox_background_uniform
+            pass.fragment_uniform(0, uniform, 288)
+            pass.draw(3)
+        }
     }
 
     private func find_camera(world:@ECS.World) {
@@ -863,6 +891,28 @@ local func grid_pipeline(
             color_targets:targets,
             depth_stencil_format:GPU.TextureFormat.depth16,
             name:"GFX.Scene3D viewport grid"
+        )
+    )
+}
+
+local func skybox_pipeline(
+    device:@GPU.Device,
+    surface:@GPU.Surface
+) GPU.GraphicsPipeline {
+    let targets:GPU.ColorTargetFormat[] = [
+        GPU.ColorTargetFormat(format:surface.format())
+    ]
+    return device.graphics_pipeline(
+        GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Skybox.hlsl"),
+        GPU.GraphicsPipelineSettings(
+            rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            depth_stencil:GPU.DepthStencilState(
+                depth_test:false,
+                depth_write:false
+            ),
+            color_targets:targets,
+            depth_stencil_format:GPU.TextureFormat.depth16,
+            name:"GFX.Scene3D skybox"
         )
     )
 }

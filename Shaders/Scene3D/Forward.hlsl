@@ -37,6 +37,17 @@ cbuffer LightingUniforms : register(b1, space3) {
     float4 ambientLight;
     float4 lightingSettings;
     LightData lights[16];
+    float4 environmentDayZenith;
+    float4 environmentDayHorizon;
+    float4 environmentNightZenith;
+    float4 environmentNightHorizon;
+    float4 environmentSunDirectionIntensity;
+    float4 environmentSunColor;
+    float4 environmentSunShape;
+    float4 environmentSunHalo;
+    float4 environmentSunGlow;
+    float4 environmentHorizonGlowColor;
+    float4 environmentHorizonGlow;
 };
 
 cbuffer ShadowUniforms : register(b3, space3) {
@@ -139,6 +150,126 @@ float geometry_schlick(float amount, float roughness) {
 
 float3 fresnel_schlick(float amount, float3 reflectance) {
     return reflectance + (1.0 - reflectance) * pow(1.0 - amount, 5.0);
+}
+
+float3 fresnel_schlick_roughness(
+    float amount,
+    float3 reflectance,
+    float roughness
+) {
+    return reflectance + (max(1.0 - roughness, reflectance) - reflectance) *
+        pow(1.0 - amount, 5.0);
+}
+
+float3 environment_radiance(float3 direction, float roughness) {
+    direction = normalize(direction);
+    const float upperElevation = pow(saturate(direction.y), 0.72);
+    const float lowerElevation = pow(saturate(-direction.y), 0.55);
+    const float horizonSoftness = max(environmentHorizonGlow.w * 0.25, 0.0001);
+    const float upperHemisphere = smoothstep(
+        -horizonSoftness,
+        horizonSoftness,
+        direction.y
+    );
+    const float3 dayUpper = lerp(
+        environmentDayHorizon.rgb,
+        environmentDayZenith.rgb,
+        upperElevation
+    );
+    const float3 dayLower = lerp(
+        environmentDayHorizon.rgb * 0.55,
+        environmentDayZenith.rgb * 0.08,
+        lowerElevation
+    );
+    const float3 nightUpper = lerp(
+        environmentNightHorizon.rgb,
+        environmentNightZenith.rgb,
+        upperElevation
+    );
+    const float3 nightLower = lerp(
+        environmentNightHorizon.rgb * 0.45,
+        environmentNightZenith.rgb * 0.05,
+        lowerElevation
+    );
+    const float3 daySky = lerp(dayLower, dayUpper, upperHemisphere) *
+        environmentDayZenith.a;
+    const float3 nightSky = lerp(nightLower, nightUpper, upperHemisphere) *
+        environmentDayZenith.a;
+    const float automaticNight = smoothstep(
+        -0.18,
+        0.08,
+        -environmentSunDirectionIntensity.y
+    );
+    const float nightBlend = environmentNightHorizon.a >= 0.0
+        ? environmentNightHorizon.a
+        : automaticNight;
+    float3 color = lerp(daySky, nightSky, nightBlend);
+
+    const float blur = roughness * roughness;
+    const float sunDot = dot(direction, normalize(environmentSunDirectionIntensity.xyz));
+    const float sunDisc = smoothstep(
+        cos(environmentSunShape.x + environmentSunShape.y + blur * 0.45),
+        cos(environmentSunShape.x),
+        sunDot
+    ) * environmentSunDirectionIntensity.w * (1.0 - blur * 0.75);
+    const float sunHalo = smoothstep(
+        cos(environmentSunHalo.y + environmentSunHalo.z + blur * 0.65),
+        cos(environmentSunHalo.y),
+        sunDot
+    ) * environmentSunHalo.x * (1.0 - blur * 0.6);
+    const float sunGlow = smoothstep(
+        cos(environmentSunGlow.y + environmentSunGlow.z + blur * 0.8),
+        cos(environmentSunGlow.y),
+        sunDot
+    ) * environmentSunGlow.x;
+    color += environmentSunColor.rgb * (sunDisc + sunHalo + sunGlow);
+
+    const float horizonBand = pow(
+        saturate(1.0 - abs(direction.y) / max(environmentHorizonGlow.y, 0.0001)),
+        max(environmentHorizonGlow.z, 0.0001)
+    );
+    const float2 sunFlat = environmentSunDirectionIntensity.xz;
+    const float2 directionFlat = direction.xz;
+    float horizonFacing = 0.0;
+    if (length(sunFlat) > 0.0001 && length(directionFlat) > 0.0001) {
+        horizonFacing = pow(
+            saturate(dot(normalize(sunFlat), normalize(directionFlat)) * 0.5 + 0.5),
+            max(environmentSunShape.w, 0.0001)
+        );
+    }
+    color += environmentHorizonGlowColor.rgb * environmentHorizonGlow.x *
+        horizonBand * horizonFacing;
+
+    const float3 averageSky = lerp(
+        environmentDayHorizon.rgb,
+        environmentDayZenith.rgb,
+        0.45
+    ) * environmentDayZenith.a;
+    return max(lerp(color, averageSky, blur * 0.55), 0.0);
+}
+
+float3 evaluate_environment(
+    float3 normal,
+    float3 viewDirection,
+    float3 albedo,
+    float metallic,
+    float roughness
+) {
+    if (environmentSunShape.z < 0.5) return 0.0;
+    const float normalView = saturate(dot(normal, viewDirection));
+    const float3 reflectance = lerp(0.04, albedo, metallic);
+    const float3 fresnel = fresnel_schlick_roughness(
+        normalView,
+        reflectance,
+        roughness
+    );
+    const float3 diffuseWeight = (1.0 - fresnel) * (1.0 - metallic);
+    const float3 diffuse = environment_radiance(normal, 1.0) * albedo *
+        diffuseWeight * environmentNightZenith.a;
+    const float3 reflection = reflect(-viewDirection, normal);
+    const float3 specular = environment_radiance(reflection, roughness) *
+        fresnel * environmentSunColor.a;
+    return diffuse + specular;
 }
 
 void projector_basis(float3 forward, out float3 right, out float3 up) {
@@ -491,6 +622,13 @@ float4 fragment_main(VertexOutput input, bool frontFace : SV_IsFrontFace) : SV_T
     const float3 ambientMaterial = albedo * (1.0 - metallic) +
         reflectance * (1.0 - roughness * 0.5);
     float3 color = ambientMaterial * ambientLight.rgb * ambientLight.a * occlusion;
+    color += evaluate_environment(
+        normal,
+        viewDirection,
+        albedo,
+        metallic,
+        roughness
+    ) * occlusion;
     const int count = min((int)lightingSettings.x, 16);
     for (int index = 0; index < count; ++index) {
         color += evaluate_light(

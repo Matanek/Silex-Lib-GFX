@@ -4,6 +4,7 @@ use GFX.Components
 use GFX.ECS
 use GFX.Plugins
 use GFX.Resources
+use GFX.Scene3D
 use STD.Math
 
 func create_scene(
@@ -17,11 +18,8 @@ func create_scene(
     let instance = model.instantiate(world, meshes, images)
 
     world.spawn(ECS.EntityRecipe()
-        ..with(Components.AmbientLight3D(intensity:0.12))
-    )
-    world.spawn(ECS.EntityRecipe()
         ..with(Components.SunLight3D(
-            direction:Math.Vec3(-0.5, -1.0, -0.4).normalized(),
+            direction:Math.Vec3(-0.25, -0.75, 0.4).normalized(),
             intensity:4.0
         ))
     )
@@ -47,6 +45,8 @@ func main() {
             ..near_plane = 0.05
             ..far_plane = 80.0
         ))
+        ..add_resource(Resources.Skybox3D.procedural(Scene3D.ProceduralSky.day()))
+        ..add_resource(Resources.ToneMapping3D.aces(exposure:0.35))
         ..add_system(Application.Schedule.startup, create_scene)
         ..run()
 }
