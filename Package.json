@@ -1,8 +1,8 @@
 {
   "name": "GFX",
-  "version": "0.32.7",
+  "version": "0.32.8",
   "extensions": [],
-  "requires": { "silex": ">=0.38.22" },
+  "requires": { "silex": ">=0.38.30" },
   "dependencies": {
     "JSON": "^0.1.0",
     "STD": "^0.16.0"
