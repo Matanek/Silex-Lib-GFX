@@ -1,0 +1,192 @@
+use GFX.Animation
+use GFX.Application
+use GFX.Color
+use GFX.Components
+use GFX.ECS
+use GFX.Plugins
+use GFX.Resources
+use GFX.Scene3D
+use STD.Math
+
+func corner_route(height:float, duration:float) Animation.Timeline {
+    let inset_corner = 1.45
+    return Animation.sequence([
+        Animation.move_to(
+            Math.Vec3(inset_corner, height, -inset_corner),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.move_to(
+            Math.Vec3(inset_corner, height, inset_corner),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.move_to(
+            Math.Vec3(-inset_corner, height, inset_corner),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.move_to(
+            Math.Vec3(-inset_corner, height, -inset_corner),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+    ])
+}
+
+func create_scene(world:&Resources.World, meshes:&Resources.Meshes3D) {
+    let ground = meshes.add(
+        Scene3D.Geometry.Cube.make().translated(Math.Vec3(0.0, -0.5, 0.0))
+    )
+    let cube = meshes.add(
+        Scene3D.Geometry.Cube.make().translated(Math.Vec3(0.0, 0.5, 0.0))
+    )
+    let centered_cube = meshes.add(Scene3D.Geometry.Cube.make())
+    let height = 0.25
+    let inset_corner = 1.45
+    let corners:Math.Vec3[] = [
+        Math.Vec3(-inset_corner, height, -inset_corner),
+        Math.Vec3(inset_corner, height, -inset_corner),
+        Math.Vec3(inset_corner, height, inset_corner),
+        Math.Vec3(-inset_corner, height, inset_corner),
+    ]
+    let duration = 1.2
+    let route = corner_route(height, duration)
+    let rotations = Animation.sequence([
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi() * 0.5, Math.Vec3.up()),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi(), Math.Vec3.up()),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi() * 1.5, Math.Vec3.up()),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi() * 2.0, Math.Vec3.up()),
+            duration,
+            easing:Animation.Easing.back_in_out
+        ),
+    ])
+    let tilt = Math.Quat.angle_axis(Math.radians(45.0), Math.Vec3.right())
+        .multiply(Math.Quat.angle_axis(Math.radians(45.0), Math.Vec3.front()))
+    let center_rotation = Animation.sequence([
+        Animation.rotate_to(Math.Quat.angle_axis(Math.pi() * 0.5, Math.Vec3.up()).multiply(tilt), duration),
+        Animation.rotate_to(Math.Quat.angle_axis(Math.pi(), Math.Vec3.up()).multiply(tilt), duration),
+        Animation.rotate_to(Math.Quat.angle_axis(Math.pi() * 1.5, Math.Vec3.up()).multiply(tilt), duration),
+        Animation.rotate_to(Math.Quat.angle_axis(Math.pi() * 2.0, Math.Vec3.up()).multiply(tilt), duration),
+    ])
+        ..loop()
+
+    let timeline = Animation.parallel([route, rotations])..loop()
+
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(scale:Math.Vec3(4.0, 0.3, 4.0)))
+        ..with(Components.Mesh3D(ground))
+        ..with(Components.Material3D(
+            albedo:Color.bytes(125, 127, 118),
+            roughness:0.82
+        ))
+    )
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(
+            position:corners[0],
+            scale:Math.Vec3(0.5)
+        ))
+        ..with(Components.Mesh3D(cube))
+        ..with(Components.Material3D(
+            albedo:Color.cyan_400(),
+            metallic:0.08,
+            roughness:0.3
+        ))
+        ..with(timeline.play())
+    )
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(
+            position:Math.Vec3(0.0, height + 0.25, 0.0),
+            rotation:tilt,
+            scale:Math.Vec3(0.5)
+        ))
+        ..with(Components.Mesh3D(centered_cube))
+        ..with(Components.Material3D(
+            albedo:Color.green_500(),
+            metallic:0.08,
+            roughness:0.3
+        ))
+        ..with(center_rotation.play())
+    )
+}
+
+func create_lights(world:&Resources.World) {
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.AmbientLight3D(
+            color:Color.white(),
+            intensity:0.08
+        ))
+    )
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(position:Math.Vec3(0.0, 3.0, 0.0)))
+        ..with(
+            Components.PointLight3D(
+                color:Color.pink_200(),
+                intensity:8.0,
+                radius:2.0,
+            )
+                ..falloff = 1.25
+        )
+        ..with(Components.PointLightGizmo3D())
+    )
+}
+
+func create_moving_light(world:&Resources.World) {
+    let height = 1.5
+    let inset_corner = 1.45
+    let movement = corner_route(height, 1.2)
+        ..loop()
+
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(position:Math.Vec3(
+            -inset_corner,
+            height,
+            -inset_corner
+        )))
+        ..with(Components.PointLight3D(
+            color:Color.cyan_300(),
+            intensity:3.0,
+            radius:0.5
+        )..falloff = 5)
+        ..with(Components.PointLightGizmo3D())
+        ..with(movement.play())
+    )
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "GFX.Animation — Timeline 3D"
+            ..width = 1280
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Time())
+        ..add_plugin(Plugins.ViewportCamera3D(Plugins.ViewportCamera3DSettings()
+            ..target = Math.Vec3(0.0, 0.55, 0.0)
+            ..distance = 5.0
+            ..min_distance = 2.0
+            ..max_distance = 12.0
+            ..pitch = Math.radians(-18.0)
+            ..vertical_fov = Math.radians(42.0)
+            ..near_plane = 0.05
+            ..far_plane = 80.0
+        ))
+        ..add_plugin(Animation.Plugin())
+        ..add_system(Application.Schedule.startup, create_scene)
+        ..add_system(Application.Schedule.startup, create_lights)
+        ..add_system(Application.Schedule.startup, create_moving_light)
+        ..run()
+}

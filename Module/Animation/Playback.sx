@@ -6,16 +6,22 @@ public struct Playback {
     private let timeline:Timeline
     private var elapsed:float
     private var initial_position:Math.Vec2?
+    private var initial_position_3d:Math.Vec3?
     private var initial_rotation:float?
+    private var initial_rotation_3d:Math.Quat?
     private var initial_scale:Math.Vec2?
+    private var initial_scale_3d:Math.Vec3?
     private var initial_color:Color?
 
     module init(timeline:Timeline) {
         self.timeline = timeline
         self.elapsed = 0.0
         self.initial_position = null
+        self.initial_position_3d = null
         self.initial_rotation = null
+        self.initial_rotation_3d = null
         self.initial_scale = null
+        self.initial_scale_3d = null
         self.initial_color = null
     }
 
@@ -32,16 +38,34 @@ public struct Playback {
         return self.timeline.position_at(self.elapsed, self.initial_position!)
     }
 
+    module func position_3d(current:Math.Vec3) Math.Vec3? {
+        if !self.timeline.has_position_3d() { return null }
+        if self.initial_position_3d == null { self.initial_position_3d = current }
+        return self.timeline.position_3d_at(self.elapsed, self.initial_position_3d!)
+    }
+
     module func rotation(current:float) float? {
         if !self.timeline.has_rotation() { return null }
         if self.initial_rotation == null { self.initial_rotation = current }
         return self.timeline.rotation_at(self.elapsed, self.initial_rotation!)
     }
 
+    module func rotation_3d(current:Math.Quat) Math.Quat? {
+        if !self.timeline.has_rotation_3d() { return null }
+        if self.initial_rotation_3d == null { self.initial_rotation_3d = current }
+        return self.timeline.rotation_3d_at(self.elapsed, self.initial_rotation_3d!)
+    }
+
     module func scale(current:Math.Vec2) Math.Vec2? {
         if !self.timeline.has_scale() { return null }
         if self.initial_scale == null { self.initial_scale = current }
         return self.timeline.scale_at(self.elapsed, self.initial_scale!)
+    }
+
+    module func scale_3d(current:Math.Vec3) Math.Vec3? {
+        if !self.timeline.has_scale_3d() { return null }
+        if self.initial_scale_3d == null { self.initial_scale_3d = current }
+        return self.timeline.scale_3d_at(self.elapsed, self.initial_scale_3d!)
     }
 
     module func color(current:Color) Color? {

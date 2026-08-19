@@ -6,6 +6,7 @@ use GFX.ECS
 use GFX.Resources
 use GFX.Scene2D.Canvas as Canvas2D
 use GFX.Scene2D.Transform as Transform2D
+use GFX.Scene3D.Transform as Transform3D
 use STD.Math
 
 struct IntegrationState {
@@ -21,6 +22,16 @@ struct IntegrationState {
 }
 
 struct BlockingState {
+    var entity:ECS.Entity?
+    var frames:int
+
+    init() {
+        self.entity = null
+        self.frames = 0
+    }
+}
+
+struct Integration3DState {
     var entity:ECS.Entity?
     var frames:int
 
@@ -88,6 +99,43 @@ func force_half_second(time:&Resources.FrameTime) {
     time.delta = 0.5
 }
 
+func create_animated_3d_entity(
+    world:&Resources.World,
+    state:&Integration3DState
+) {
+    let timeline = Animation.parallel([
+        Animation.move_to(Math.Vec3(1.0, 0.5, 1.0), 1.0),
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi() * 0.5, Math.Vec3.up()),
+            1.0
+        ),
+        Animation.scale_to(2.0, 1.0),
+    ])
+    state.entity = world.spawn(ECS.EntityRecipe()
+        ..with(Transform3D(position:Math.Vec3(-1.0, 0.5, -1.0)))
+        ..with(timeline.play())
+    )
+}
+
+func verify_animation_3d(
+    world:@Resources.World,
+    state:&Integration3DState,
+    controller:&Application.Controller
+) {
+    state.frames++
+    if state.frames < 3 { return }
+
+    if let entity = state.entity {
+        let transform = world.get<Transform3D>(entity)
+        assert(transform.position == Math.Vec3(1.0, 0.5, 1.0))
+        assert(transform.rotation.y > 0.0)
+        assert(transform.scale == Math.Vec3(2.0))
+    } else {
+        assert(false)
+    }
+    controller.stop()
+}
+
 func create_blocking_entity(world:&Resources.World, state:&BlockingState) {
     let timeline = Animation.move_to(
         Math.Vec2(10.0, 0.0),
@@ -142,6 +190,27 @@ test "compose timeline actions through GFX.Animation" {
     assert(Math.nearly_equal(scale_pulse.duration(), 1.0))
     assert(Math.nearly_equal(route.duration(), 5.0))
     assert(Math.nearly_equal(timeline.duration(), 5.0))
+}
+
+test "compose and apply 3D transform animations through GFX.Animation" {
+    let route = Animation.parallel([
+        Animation.move_to(Math.Vec3(1.0, 0.5, 1.0), 1.0),
+        Animation.rotate_to(
+            Math.Quat.angle_axis(Math.pi() * 0.5, Math.Vec3.up()),
+            1.0
+        ),
+        Animation.scale_to(Math.Vec3(2.0), 1.0),
+    ])
+    assert(Math.nearly_equal(route.duration(), 1.0))
+
+    var application = Application()
+        ..add_resource(Integration3DState())
+        ..add_plugin(Animation.Plugin())
+        ..add_system(Application.Schedule.pre_update, force_half_second)
+        ..add_system(Application.Schedule.startup, create_animated_3d_entity)
+        ..add_after_system(Application.Schedule.update, verify_animation_3d)
+
+    assert(application.run() == 0)
 }
 
 test "compose every public easing family" {

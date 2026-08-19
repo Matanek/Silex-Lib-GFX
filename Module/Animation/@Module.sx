@@ -18,8 +18,24 @@ public func move_to(
     return Timeline.move_to(value, duration, easing)
 }
 
+public func move_to(
+    value:Math.Vec3,
+    duration:float,
+    easing:Easing = Easing.linear
+) Timeline {
+    return Timeline.move_to(value, duration, easing)
+}
+
 public func rotate_to(
     value:float,
+    duration:float,
+    easing:Easing = Easing.linear
+) Timeline {
+    return Timeline.rotate_to(value, duration, easing)
+}
+
+public func rotate_to(
+    value:Math.Quat,
     duration:float,
     easing:Easing = Easing.linear
 ) Timeline {
@@ -36,6 +52,14 @@ public func scale_to(
 
 public func scale_to(
     value:Math.Vec2,
+    duration:float,
+    easing:Easing = Easing.linear
+) Timeline {
+    return Timeline.scale_to(value, duration, easing)
+}
+
+public func scale_to(
+    value:Math.Vec3,
     duration:float,
     easing:Easing = Easing.linear
 ) Timeline {

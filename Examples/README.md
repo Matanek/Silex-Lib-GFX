@@ -7,6 +7,8 @@ an executable consumer of the public GFX API.
 
 - `Animation/Timeline2D.sx` composes movement, rotation, scale, and color in a
   looping ping-pong timeline.
+- `Animation/Timeline3D.sx` moves a hovering cyan cube and its cyan point light
+  around four inset corners while a tilted pink cube rotates at the center.
 - `Animation/EasingGallery.sx` compares every easing on synchronized tracks
   inside a pannable and zoomable Scene2D viewport.
 

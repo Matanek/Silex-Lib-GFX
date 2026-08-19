@@ -7,6 +7,7 @@ use GFX.ECS
 use GFX.Resources
 use GFX.Scene2D.Canvas as Canvas2D
 use GFX.Scene2D.Transform as Transform2D
+use GFX.Scene3D.Transform as Transform3D
 
 public struct Plugin:PluginProtocol {
     func id() str { return "GFX.Animation.Plugin" }
@@ -16,6 +17,7 @@ public struct Plugin:PluginProtocol {
         application.add_plugin(Time())
         application.add_after_system(Schedule.pre_update, advance_playback)
         application.add_system(Schedule.update, apply_transform_2d)
+        application.add_system(Schedule.update, apply_transform_3d)
         application.add_system(Schedule.update, apply_canvas_color)
     }
 }
@@ -38,6 +40,20 @@ func apply_transform_2d(query:ECS.Query<(&Playback, &Transform2D)>) {
             transform.rotation = rotation
         }
         if let scale = playback.scale(transform.scale) {
+            transform.scale = scale
+        }
+    }
+}
+
+func apply_transform_3d(query:ECS.Query<(&Playback, &Transform3D)>) {
+    for (playback, transform) in query {
+        if let position = playback.position_3d(transform.position) {
+            transform.position = position
+        }
+        if let rotation = playback.rotation_3d(transform.rotation) {
+            transform.rotation = rotation
+        }
+        if let scale = playback.scale_3d(transform.scale) {
             transform.scale = scale
         }
     }
