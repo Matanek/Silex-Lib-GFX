@@ -359,21 +359,24 @@ float atlas_shadow_depth(float2 uv, float4 rect, float localTexel) {
 }
 
 float pcf_shadow(float2 uv, float4 rect, float receiverDepth, float texel, float softness) {
-    const float radius = max(1.0, 1.0 + softness * 2.0);
+    const float radius = max(0.75, 0.75 + softness * 1.5);
     float visibility = 0.0;
+    float weightSum = 0.0;
     [unroll]
-    for (int y = -1; y <= 1; ++y) {
+    for (int y = -2; y <= 2; ++y) {
         [unroll]
-        for (int x = -1; x <= 1; ++x) {
+        for (int x = -2; x <= 2; ++x) {
+            const float weight = float(3 - abs(x)) * float(3 - abs(y));
             const float storedDepth = atlas_shadow_depth(
                 uv + float2(float(x), float(y)) * texel * radius,
                 rect,
                 texel
             );
-            visibility += receiverDepth <= storedDepth ? 1.0 : 0.0;
+            visibility += (receiverDepth <= storedDepth ? 1.0 : 0.0) * weight;
+            weightSum += weight;
         }
     }
-    return visibility / 9.0;
+    return visibility / weightSum;
 }
 
 float point_face_shadow(
@@ -402,17 +405,18 @@ float shadow_visibility(
     const float4 settings = shadowSettings[lightIndex];
     if (settings.x < 0.5) return 1.0;
     const int firstFace = (int)shadowSlots[lightIndex].x;
-    const float3 offsetPosition = worldPosition + normal * settings.w;
     const float texel = max(settings.z, 0.00001);
     const float normalLightDot = saturate(dot(normal, lightDirection));
+    const float slope = 1.0 - normalLightDot;
+    const float3 offsetPosition = worldPosition + normal * settings.w * slope;
     if (settings.x > 1.5) {
         const float3 toFragment = offsetPosition - lights[lightIndex].positionReach.xyz;
         const float distanceToLight = length(toFragment);
         const float range = max(lights[lightIndex].positionReach.w, 0.0001);
         if (distanceToLight <= 0.0001 || distanceToLight >= range) return 1.0;
         const float bias = max(
-            max(settings.y * (1.0 - normalLightDot), settings.y * 0.2),
-            texel * 4.0 / max(normalLightDot, 0.25)
+            settings.y * (0.2 + slope * 0.8),
+            texel * 0.75 / max(normalLightDot, 0.35)
         );
         const float receiverDepth = distanceToLight / range - bias;
         const float softness = shadowSlots[lightIndex].w;
@@ -468,7 +472,7 @@ float shadow_visibility(
     const float4 rect = shadowAtlasRects[lightIndex];
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
         || ndc.z < 0.0 || ndc.z > 1.0) return 1.0;
-    const float bias = max(settings.y * (1.0 - normalLightDot), settings.y);
+    const float bias = settings.y * (0.25 + slope * 0.75);
     return pcf_shadow(uv, rect, ndc.z - bias, texel, shadowSlots[lightIndex].w);
 }
 

@@ -22,3 +22,13 @@ test "keep shadows and gizmos in the public Scene3D lighting vocabulary" {
     assert(gizmo.visible)
     assert(gizmo.show_radius)
 }
+
+test "keep default projected shadows attached to contact edges" {
+    let sun = Scene3D.Shadow.sun()
+    let projector = Scene3D.Shadow.projector()
+
+    assert(sun.bias == 0.00045)
+    assert(sun.normal_offset == 0.0005)
+    assert(projector.bias == 0.00045)
+    assert(projector.normal_offset == 0.0005)
+}

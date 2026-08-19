@@ -6,6 +6,7 @@ use GFX.Scene3D.Lighting.Frame as LightingFrame
 use GFX.Scene3D.Lighting.Kind as LightKind
 use GFX.Scene3D.Material
 use GFX.Scene3D.Shadows.Frame as ShadowFrame
+use GFX.Scene3D.Shadows
 use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
 use Interop.C
@@ -179,7 +180,11 @@ func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
         if enabled && light.kind == LightKind.point { shadow_type = 2.0 }
         write_float(address, light_index * 16, shadow_type)
         write_float(address, light_index * 16 + 4, light.shadow.bias)
-        write_float(address, light_index * 16 + 8, frame.grid() as float / 2048.0)
+        write_float(
+            address,
+            light_index * 16 + 8,
+            frame.grid() as float / Shadows.atlas_size() as float
+        )
         write_float(address, light_index * 16 + 12, light.shadow.normal_offset)
         write_float(address, 256 + light_index * 16, frame.first_face(light_index) as float)
         write_float(address, 256 + light_index * 16 + 4, frame.faces_for(light_index) as float)

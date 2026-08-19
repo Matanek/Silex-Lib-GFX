@@ -3,6 +3,8 @@ use GFX.Scene3D.Lighting.Kind as LightKind
 use GFX.Scene3D.Lighting.Light
 use STD.Math
 
+func atlas_size() int { return 4096 }
+
 struct CameraView {
     let position:Math.Vec3
     let rotation:Math.Quat
@@ -93,7 +95,7 @@ class Frame {
                     view_projection = camera_fitted_sun_projection(
                         light,
                         view,
-                        2048 / self.atlas_grid
+                        atlas_size() / self.atlas_grid
                     )
                 }
             } else {
@@ -235,47 +237,39 @@ func camera_fitted_sun_projection(
     let corners = camera_frustum_corners(camera, shadow_distance)
     var center = Math.Vec3()
     for corner in corners { center = center.add(corner) }
-    center = center.divide(corners.count() as float).add(light.shadow_center)
-    let depth_padding = Math.max(light.shadow_depth * 0.5, 1.0)
+    center = center.divide(corners.count() as float)
+    var radius = 0.001
+    for corner in corners {
+        radius = Math.max(radius, corner.subtract(center).length())
+    }
+    radius += light.shadow_center.length() + 1.0
+    radius = Math.ceil(radius * 16.0) / 16.0
+    center = center.add(light.shadow_center)
+    let caster_padding = Math.max(light.shadow_depth * 0.5, 1.0)
+    let eye_distance = radius + caster_padding
     let view = Math.Mat4.look_at(
-        center.subtract(direction.multiply(depth_padding)),
+        center.subtract(direction.multiply(eye_distance)),
         center,
         shadow_up(direction)
     )
-    let first = view.multiply(Math.Vec4(corners[0], 1.0))
-    var minimum = Math.Vec3(first.x, first.y, first.z)
-    var maximum = minimum
-    for corner in corners {
-        let projected = view.multiply(Math.Vec4(corner, 1.0))
-        minimum.x = Math.min(minimum.x, projected.x)
-        minimum.y = Math.min(minimum.y, projected.y)
-        minimum.z = Math.min(minimum.z, projected.z)
-        maximum.x = Math.max(maximum.x, projected.x)
-        maximum.y = Math.max(maximum.y, projected.y)
-        maximum.z = Math.max(maximum.z, projected.z)
-    }
-    let left = minimum.x - 1.0
-    let right = maximum.x + 1.0
-    let bottom = minimum.y - 1.0
-    let top = maximum.y + 1.0
-    let width = Math.max(right - left, 0.001)
-    let height = Math.max(top - bottom, 0.001)
     let resolution = Math.max(shadow_resolution, 1) as float
-    let snapped_x = snap_shadow_center((left + right) * 0.5, width / resolution)
-    let snapped_y = snap_shadow_center((bottom + top) * 0.5, height / resolution)
+    let texel = radius * 2.0 / resolution
+    let world_origin = view.multiply(Math.Vec4(Math.Vec3(), 1.0))
+    let projection_x = world_origin.x - snap_shadow_center(world_origin.x, texel)
+    let projection_y = world_origin.y - snap_shadow_center(world_origin.y, texel)
     let projection_near = shadow_near_plane(
         light.shadow.near_plane,
-        depth_padding * 4.0
+        eye_distance * 2.0
     )
     let projection_far = Math.max(
         projection_near + 0.001,
-        -minimum.z + depth_padding
+        radius * 2.0 + caster_padding * 2.0
     )
     return orthographic_depth_zero_to_one(
-        snapped_x - width * 0.5,
-        snapped_x + width * 0.5,
-        snapped_y - height * 0.5,
-        snapped_y + height * 0.5,
+        projection_x - radius,
+        projection_x + radius,
+        projection_y - radius,
+        projection_y + radius,
         projection_near,
         projection_far
     ).multiply(view)

@@ -383,8 +383,8 @@ class Renderer {
         }
         if self.shadow_sampler == null {
             self.shadow_sampler = device.sampler(GPU.SamplerSettings(
-                min_filter:GPU.Filter.linear,
-                mag_filter:GPU.Filter.linear,
+                min_filter:GPU.Filter.nearest,
+                mag_filter:GPU.Filter.nearest,
                 address_u:GPU.AddressMode.clamp_to_edge,
                 address_v:GPU.AddressMode.clamp_to_edge,
                 name:"GFX.Scene3D shadow sampler"
@@ -420,7 +420,7 @@ class Renderer {
 
     private func render_shadows(device:@GPU.Device) {
         if self.shadows.face_count() == 0 { return }
-        self.ensure_shadow_resources(device, 2048)
+        self.ensure_shadow_resources(device, Shadows.atlas_size())
         if let texture = self.shadow_texture {
             var commands = device.commands()
             var colors:GPU.ColorTarget[] = []

@@ -17,14 +17,15 @@ func create_scene(
     let radius = model.radius()
     let instance = model.instantiate(world, meshes, images)
 
-    world.spawn(ECS.EntityRecipe()
-        ..with(Components.SunLight3D(
-            direction:Math.Vec3(-0.25, -0.75, 0.4).normalized(),
-            intensity:4.0
-        ))
+    var sun = Components.SunLight3D(
+        direction:Math.Vec3(-0.25, -0.75, 0.4).normalized(),
+        intensity:4.0
     )
-
-    print("TestPBR.glb: $(instance.entities.count()) primitives instantiated")
+    sun.shadow_follows_camera = false
+    sun.shadow_center = center
+    sun.shadow_size = Math.Vec2(Math.max(radius * 2.2, 1.0))
+    sun.shadow_depth = Math.max(radius * 4.0, 2.0)
+    world.spawn(ECS.EntityRecipe()..with(sun))
 }
 
 func main() {
