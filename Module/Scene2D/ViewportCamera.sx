@@ -103,7 +103,7 @@ public class Controller {
         if !self.settings.active { return }
         let scale = self.settings.pan_sensitivity / self.desired_zoom
         self.desired_position = self.desired_position.subtract(
-            Math.Vec2(mouse_x * scale, mouse_y * scale)
+            Math.Vec2(mouse_x * scale, -mouse_y * scale)
         )
     }
 

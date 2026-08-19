@@ -1,6 +1,8 @@
 use STD.Math
 use GFX.Scene2D.Transform
 
+// Scene2D world coordinates use X right and Y up. Projection returns ordinary
+// viewport coordinates with their origin at the top left.
 public struct Camera {
     var active:bool
     var zoom:float
@@ -36,8 +38,8 @@ public struct Camera {
         return Math.Mat4.orthographic(
             -half_width,
             half_width,
-            half_height,
             -half_height,
+            half_height,
             -1.0,
             1.0
         )

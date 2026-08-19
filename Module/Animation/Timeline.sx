@@ -179,14 +179,18 @@ public struct Timeline {
 
     module func position_at(time:float, initial:Math.Vec2) Math.Vec2 {
         let local_time = self.local_time(time)
+        let reversing = self.reversing_at(time)
         var previous = initial
         for clip in self.position_clips {
             if local_time < clip.start { return previous }
             if local_time <= clip.start + clip.duration {
                 return previous.lerp(
                     clip.end,
-                    sample_easing(clip.easing,
-                        (local_time - clip.start) / clip.duration)
+                    sample_easing(
+                        clip.easing,
+                        (local_time - clip.start) / clip.duration,
+                        reversing
+                    )
                 )
             }
             previous = clip.end
@@ -196,6 +200,7 @@ public struct Timeline {
 
     module func rotation_at(time:float, initial:float) float {
         let local_time = self.local_time(time)
+        let reversing = self.reversing_at(time)
         var previous = initial
         for clip in self.rotation_clips {
             if local_time < clip.start { return previous }
@@ -203,8 +208,11 @@ public struct Timeline {
                 return Math.lerp(
                     previous,
                     clip.end,
-                    sample_easing(clip.easing,
-                        (local_time - clip.start) / clip.duration)
+                    sample_easing(
+                        clip.easing,
+                        (local_time - clip.start) / clip.duration,
+                        reversing
+                    )
                 )
             }
             previous = clip.end
@@ -214,14 +222,18 @@ public struct Timeline {
 
     module func scale_at(time:float, initial:Math.Vec2) Math.Vec2 {
         let local_time = self.local_time(time)
+        let reversing = self.reversing_at(time)
         var previous = initial
         for clip in self.scale_clips {
             if local_time < clip.start { return previous }
             if local_time <= clip.start + clip.duration {
                 return previous.lerp(
                     clip.end,
-                    sample_easing(clip.easing,
-                        (local_time - clip.start) / clip.duration)
+                    sample_easing(
+                        clip.easing,
+                        (local_time - clip.start) / clip.duration,
+                        reversing
+                    )
                 )
             }
             previous = clip.end
@@ -231,14 +243,18 @@ public struct Timeline {
 
     module func color_at(time:float, initial:Color) Color {
         let local_time = self.local_time(time)
+        let reversing = self.reversing_at(time)
         var previous = initial
         for clip in self.color_clips {
             if local_time < clip.start { return previous }
             if local_time <= clip.start + clip.duration {
                 return previous.lerp(
                     clip.end,
-                    sample_easing(clip.easing,
-                        (local_time - clip.start) / clip.duration)
+                    sample_easing(
+                        clip.easing,
+                        (local_time - clip.start) / clip.duration,
+                        reversing
+                    )
                 )
             }
             previous = clip.end
@@ -371,18 +387,28 @@ public struct Timeline {
     private func local_time(time:float) float {
         let elapsed = Math.max(time, 0.0)
         if self.ping_ponging {
-            let cycle_duration = self.total_duration * 2.0
-            var phase = elapsed
-            if self.looping {
-                phase = Math.modulo(phase, cycle_duration)
-            } elif phase > cycle_duration {
-                phase = cycle_duration
-            }
+            let phase = self.ping_pong_phase(elapsed)
             if phase <= self.total_duration { return phase }
-            return cycle_duration - phase
+            return self.total_duration * 2.0 - phase
         }
         if self.looping { return Math.modulo(elapsed, self.total_duration) }
         return elapsed
+    }
+
+    private func reversing_at(time:float) bool {
+        if !self.ping_ponging { return false }
+        return self.ping_pong_phase(Math.max(time, 0.0)) > self.total_duration
+    }
+
+    private func ping_pong_phase(elapsed:float) float {
+        let cycle_duration = self.total_duration * 2.0
+        var phase = elapsed
+        if self.looping {
+            phase = Math.modulo(phase, cycle_duration)
+        } elif phase > cycle_duration {
+            phase = cycle_duration
+        }
+        return phase
     }
 }
 

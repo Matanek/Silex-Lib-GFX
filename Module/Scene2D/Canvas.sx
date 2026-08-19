@@ -15,8 +15,9 @@ struct AffineModel {
     let translation:Math.Vec2
 }
 
-// Retained Canvas content placed by Transform in either the 2D world or the
-// logical application viewport.
+// Retained Canvas content placed by Transform in either the Y-up 2D world or
+// the top-left, Y-down logical application viewport. Authored Canvas content
+// remains Y-down in both spaces and is oriented internally for the world.
 public struct Canvas {
     private var retained:Snapshot
     private var current_revision:int
@@ -73,7 +74,7 @@ public struct Canvas {
         let cosine = Math.cos(transform.rotation)
         let sine = Math.sin(transform.rotation)
         let transform_x = transform.scale.x
-        let transform_y = transform.scale.y
+        let transform_y = self.oriented_scale_y(transform.scale.y)
         let scale_x = transform_x * displayed.x / self.drawing_width as float
         let scale_y = transform_y * displayed.y / self.drawing_height as float
         let pivot_x = -self.pivot.x * displayed.x
@@ -92,10 +93,11 @@ public struct Canvas {
 
     module func text_model(transform:@Transform, viewport:Math.Vec2) Math.Mat4 {
         let position = self.placed_position(transform, viewport)
+        let scale_y = self.oriented_scale_y(transform.scale.y)
         return Math.Mat4.transform(
             Math.Vec3(position.x, position.y, 0.0),
             Math.Quat.angle_axis(transform.rotation, Math.Vec3.back()).to_mat3(),
-            Math.Vec3(transform.scale.x, transform.scale.y, 1.0)
+            Math.Vec3(transform.scale.x, scale_y, 1.0)
         )
     }
 
@@ -127,5 +129,10 @@ public struct Canvas {
             )
         }
         return transform.position
+    }
+
+    private func oriented_scale_y(value:float) float {
+        if self.space == Space.world { return -value }
+        return value
     }
 }

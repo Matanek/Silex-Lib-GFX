@@ -10,6 +10,18 @@ use STD.Math
 
 struct IntegrationState {
     var entity:ECS.Entity?
+    var blocked_entity:ECS.Entity?
+    var frames:int
+
+    init() {
+        self.entity = null
+        self.blocked_entity = null
+        self.frames = 0
+    }
+}
+
+struct BlockingState {
+    var entity:ECS.Entity?
     var frames:int
 
     init() {
@@ -33,6 +45,15 @@ func create_animated_entity(
         ..with(Canvas2D(Canvas(), 1, 1))
         ..with(timeline.play())
     )
+    let blocking = Animation.move_to(
+        Math.Vec2(10.0, 0.0),
+        1.0,
+        easing:Animation.Easing.constant
+    )
+    state.blocked_entity = world.spawn(ECS.EntityRecipe()
+        ..with(Transform2D())
+        ..with(blocking.play())
+    )
 }
 
 func verify_animation(
@@ -54,7 +75,51 @@ func verify_animation(
     } else {
         assert(false)
     }
+    if let blocked_entity = state.blocked_entity {
+        let blocked = world.get<Transform2D>(blocked_entity)
+        assert(blocked.position == Math.Vec2())
+    } else {
+        assert(false)
+    }
     controller.stop()
+}
+
+func force_half_second(time:&Resources.FrameTime) {
+    time.delta = 0.5
+}
+
+func create_blocking_entity(world:&Resources.World, state:&BlockingState) {
+    let timeline = Animation.move_to(
+        Math.Vec2(10.0, 0.0),
+        1.0,
+        easing:Animation.Easing.constant
+    )
+        ..ping_pong()
+        ..loop()
+    state.entity = world.spawn(ECS.EntityRecipe()
+        ..with(Transform2D())
+        ..with(timeline.play())
+    )
+}
+
+func verify_blocking(
+    world:@Resources.World,
+    state:&BlockingState,
+    controller:&Application.Controller
+) {
+    state.frames++
+    if let entity = state.entity {
+        let position = world.get<Transform2D>(entity).position
+        if state.frames == 1 { assert(position == Math.Vec2()) }
+        elif state.frames == 2 { assert(position == Math.Vec2(10.0, 0.0)) }
+        elif state.frames == 3 { assert(position == Math.Vec2(10.0, 0.0)) }
+        else {
+            assert(position == Math.Vec2())
+            controller.stop()
+        }
+    } else {
+        assert(false)
+    }
 }
 
 test "compose timeline actions through GFX.Animation" {
@@ -79,12 +144,50 @@ test "compose timeline actions through GFX.Animation" {
     assert(Math.nearly_equal(timeline.duration(), 5.0))
 }
 
+test "compose every public easing family" {
+    let timeline = Animation.sequence([
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.constant),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.linear),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.in_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.quadratic_in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.quadratic_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.quadratic_in_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.cubic_in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.cubic_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.cubic_in_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.sine_in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.sine_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.sine_in_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.back_in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.back_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.back_in_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.bounce_in),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.bounce_out),
+        Animation.move_to(Math.Vec2(), 1.0, easing:Animation.Easing.bounce_in_out),
+    ])
+
+    assert(Math.nearly_equal(timeline.duration(), 20.0))
+}
+
 test "animate Scene2D transform scale and canvas color through the plugin" {
     var application = Application()
         ..add_resource(IntegrationState())
         ..add_plugin(Animation.Plugin())
         ..add_system(Application.Schedule.startup, create_animated_entity)
         ..add_after_system(Application.Schedule.update, verify_animation)
+
+    assert(application.run() == 0)
+}
+
+test "hold both blocking poses for one complete ping-pong direction" {
+    var application = Application()
+        ..add_resource(BlockingState())
+        ..add_plugin(Animation.Plugin())
+        ..add_system(Application.Schedule.pre_update, force_half_second)
+        ..add_system(Application.Schedule.startup, create_blocking_entity)
+        ..add_after_system(Application.Schedule.update, verify_blocking)
 
     assert(application.run() == 0)
 }

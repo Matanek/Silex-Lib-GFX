@@ -3,6 +3,13 @@
 Examples are grouped by the capability they demonstrate. Every `.sx` file is
 an executable consumer of the public GFX API.
 
+## Animation
+
+- `Animation/Timeline2D.sx` composes movement, rotation, scale, and color in a
+  looping ping-pong timeline.
+- `Animation/EasingGallery.sx` compares every easing on synchronized tracks
+  inside a pannable and zoomable Scene2D viewport.
+
 ## Audio
 
 - `Audio/PlaySound.sx` loads and plays one sound.

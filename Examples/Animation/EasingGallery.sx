@@ -1,0 +1,169 @@
+use GFX.Animation
+use GFX.Application
+use GFX.Canvas
+use GFX.Color
+use GFX.Components
+use GFX.ECS
+use GFX.Input
+use GFX.Plugins
+use GFX.Resources
+use STD.Math
+
+static struct Const {
+    let track_width:int = 800
+    let track_height:int = 84
+    let track_origin_x:float = -400.0
+    let start_x:float = -180.0
+    let end_x:float = 300.0
+    let row_spacing:float = 130.0
+    let travel_duration:float = 1.8
+}
+
+func track(name:str, font:Canvas.Font) Canvas {
+    let line_y = 60.0
+    let start = Math.Vec2(Const.start_x - Const.track_origin_x, line_y)
+    let end = Math.Vec2(Const.end_x - Const.track_origin_x, line_y)
+    var canvas = Canvas()
+    canvas.paint(func(painter:&Canvas.Painter) {
+        painter.text(
+            name,
+            Math.Vec2(4.0, 4.0),
+            Canvas.TextStyle(size:20.0, color:Color.slate_100(), font:font)
+        )
+        painter.stroke(
+            Canvas.Line(start, end),
+            Canvas.Stroke(Color.slate_600(), 3.0)
+                ..cap = Canvas.StrokeCap.round
+        )
+        painter.fill(
+            Canvas.Circle(start, 6.0),
+            Canvas.Fill.solid(Color.slate_400())
+        )
+        painter.fill(
+            Canvas.Circle(end, 6.0),
+            Canvas.Fill.solid(Color.slate_400())
+        )
+    })
+    return canvas
+}
+
+func moving_square() Canvas {
+    var canvas = Canvas()
+    canvas.paint(func(painter:&Canvas.Painter) {
+        painter.fill(
+            Canvas.Rect(Math.Vec2(2.0), Math.Vec2(32.0), 7.0),
+            Canvas.Fill.solid(Color.cyan_400())
+        )
+    })
+    return canvas
+}
+
+func spawn_easing(
+    world:&Resources.World,
+    font:Canvas.Font,
+    name:str,
+    easing:Animation.Easing,
+    y:float
+) {
+    let line_y = y + 18.0
+    var background = track(name, font)
+    var square = moving_square()
+    let timeline = Animation.move_to(
+        Math.Vec2(Const.end_x, line_y),
+        Const.travel_duration,
+        easing:easing
+    )
+        ..ping_pong()
+        ..loop()
+
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform2D(position:Math.Vec2(Const.track_origin_x, y + 78.0)))
+        ..with(Components.Canvas(background, Const.track_width, Const.track_height)..pivot = Math.Vec2())
+    )
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform2D(position:Math.Vec2(Const.start_x, line_y)))
+        ..with(Components.Canvas(square, 36, 36))
+        ..with(timeline.play())
+    )
+}
+
+func create_gallery(world:&Resources.World) {
+    var font = Canvas.Font.default()
+    let easings:(name:str, value:Animation.Easing)[] = [
+        (name:"Animation.Easing.constant", value:Animation.Easing.constant),
+        (name:"Animation.Easing.linear", value:Animation.Easing.linear),
+        (name:"Animation.Easing.in", value:Animation.Easing.in),
+        (name:"Animation.Easing.out", value:Animation.Easing.out),
+        (name:"Animation.Easing.in_out", value:Animation.Easing.in_out),
+        (name:"Animation.Easing.quadratic_in", value:Animation.Easing.quadratic_in),
+        (name:"Animation.Easing.quadratic_out", value:Animation.Easing.quadratic_out),
+        (name:"Animation.Easing.quadratic_in_out", value:Animation.Easing.quadratic_in_out),
+        (name:"Animation.Easing.cubic_in", value:Animation.Easing.cubic_in),
+        (name:"Animation.Easing.cubic_out", value:Animation.Easing.cubic_out),
+        (name:"Animation.Easing.cubic_in_out", value:Animation.Easing.cubic_in_out),
+        (name:"Animation.Easing.sine_in", value:Animation.Easing.sine_in),
+        (name:"Animation.Easing.sine_out", value:Animation.Easing.sine_out),
+        (name:"Animation.Easing.sine_in_out", value:Animation.Easing.sine_in_out),
+        (name:"Animation.Easing.back_in", value:Animation.Easing.back_in),
+        (name:"Animation.Easing.back_out", value:Animation.Easing.back_out),
+        (name:"Animation.Easing.back_in_out", value:Animation.Easing.back_in_out),
+        (name:"Animation.Easing.bounce_in", value:Animation.Easing.bounce_in),
+        (name:"Animation.Easing.bounce_out", value:Animation.Easing.bounce_out),
+        (name:"Animation.Easing.bounce_in_out", value:Animation.Easing.bounce_in_out),
+    ]
+    var y = Const.row_spacing * 2.0
+    for easing in easings {
+        spawn_easing(world, font, easing.name, easing.value, y)
+        y -= Const.row_spacing
+    }
+}
+
+func create_help(world:&Resources.World) {
+    var font = Canvas.Font.default()
+    var help = Canvas()
+    help.paint(func(painter:&Canvas.Painter) {
+        painter.fill(
+            Canvas.Rect(Math.Vec2(), Math.Vec2(540.0, 58.0), 10.0),
+            Canvas.Fill.solid(Color.slate_900().with_alpha(0.92))
+        )
+        painter.text(
+            "Easing comparison",
+            Math.Vec2(16.0, 8.0),
+            Canvas.TextStyle(size:18.0, color:Color.white(), font:font)
+        )
+        painter.text(
+            "Left click: pan • Mouse wheel / Page Up / Page Down: zoom",
+            Math.Vec2(16.0, 32.0),
+            Canvas.TextStyle(size:13.0, color:Color.slate_300(), font:font)
+        )
+    })
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Overlay2D(help, 540, 58)
+            ..position = Math.Vec2(18.0)
+            ..layer = 10
+        )
+    )
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "GFX.Animation — Easing gallery"
+            ..width = 1024
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Rendering(Plugins.RenderingSettings()
+            ..clear = Color.slate_950()
+        ))
+        ..add_plugin(Plugins.ViewportCamera2D(
+            Plugins.ViewportCamera2DSettings()
+                ..position = Math.Vec2(0.0, Const.row_spacing)
+                ..controls = Plugins.ViewportCamera2DControls(
+                    pan:Input.MouseButton.left
+                )
+        ))
+        ..add_plugin(Animation.Plugin())
+        ..add_system(Application.Schedule.startup, create_gallery)
+        ..add_system(Application.Schedule.startup, create_help)
+        ..run()
+}

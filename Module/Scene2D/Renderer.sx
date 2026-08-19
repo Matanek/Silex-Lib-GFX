@@ -361,7 +361,7 @@ class Renderer {
                             )
                             self.sprite_draws.append(SpriteDraw(
                                 cache:self.image_index(image_cache),
-                                model:transform.matrix(),
+                                model:world_image_model(transform),
                                 size:drawing.text_size(text.size),
                                 pivot:drawing.text_pivot(text.origin, text.size),
                                 color:drawing.color,
@@ -396,7 +396,7 @@ class Renderer {
                         )
                         self.sprite_draws.append(SpriteDraw(
                             cache:self.image_index(cache),
-                            model:transform.matrix(),
+                            model:world_image_model(transform),
                             size:sprite.sprite_size(),
                             pivot:sprite.sprite_pivot(),
                             color:sprite.tint(),
@@ -995,6 +995,14 @@ local func scene_draw_before(left:SceneDraw, right:SceneDraw) bool {
     if left.layer != right.layer { return left.layer < right.layer }
     if left.depth != right.depth { return left.depth < right.depth }
     return left.order < right.order
+}
+
+local func world_image_model(transform:@Transform) Math.Mat4 {
+    return Math.Mat4.transform(
+        Math.Vec3(transform.position.x, transform.position.y, 0.0),
+        Math.Quat.angle_axis(transform.rotation, Math.Vec3.back()).to_mat3(),
+        Math.Vec3(transform.scale.x, -transform.scale.y, 1.0)
+    )
 }
 
 local func sprite_draw_before(left:SpriteDraw, right:SpriteDraw) bool {

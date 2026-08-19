@@ -10,8 +10,8 @@ struct AffineModel {
     let translation:Math.Vec2
 }
 
-// Retained vector content placed in the 2D world. The authored Canvas stays
-// renderer-independent; Scene2D only owns its transform, size and ordering.
+// Retained vector content placed in the Y-up 2D world. Authored Canvas content
+// keeps its top-left, Y-down coordinates and is oriented internally.
 public struct Drawing {
     private var retained:Snapshot
     private var current_revision:int
@@ -62,7 +62,7 @@ public struct Drawing {
         let cosine = Math.cos(transform.rotation)
         let sine = Math.sin(transform.rotation)
         let transform_x = transform.scale.x
-        let transform_y = transform.scale.y
+        let transform_y = -transform.scale.y
         let scale_x = transform_x * displayed.x / self.drawing_width as float
         let scale_y = transform_y * displayed.y / self.drawing_height as float
         let pivot_x = -self.pivot.x * displayed.x

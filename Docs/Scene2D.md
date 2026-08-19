@@ -16,11 +16,18 @@ camera supplied by Scene2D when the application does not create one. An
 explicit `Components.Camera2D` replaces that default when the scene needs to
 move, zoom, or select a camera.
 
+The Scene2D world follows the same spatial convention as Scene3D: X points
+right and Y points up. Authored `GFX.Canvas` content keeps its natural
+top-left, Y-down drawing coordinates and Scene2D orients it automatically when
+placing it in the world. `Camera.project()` returns top-left, Y-down viewport
+coordinates suitable for pointer input and window APIs.
+
 The same component can use logical window coordinates through
 `Components.CanvasSpace.viewport`. Its `anchor` selects a point in the
-viewport, while `Transform2D.position` remains the offset that animation and
-other systems modify. Canvases that share one authored value also share their
-cached geometry and are rendered as instances.
+viewport. This screen-space mode also remains top-left and Y-down, while
+`Transform2D.position` is the offset that animation and other systems modify.
+Canvases that share one authored value also share their cached geometry and
+are rendered as instances.
 
 ```silex
 use GFX.Canvas
