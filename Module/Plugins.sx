@@ -20,6 +20,12 @@ public use GFX.Scene2D.ViewportCamera as ViewportCamera2D
 public use GFX.Scene2D.ViewportCamera.Controls as ViewportCamera2DControls
 public use GFX.Scene2D.ViewportCamera.Settings as ViewportCamera2DSettings
 public use GFX.Scene3D.Grid as Grid3D
+public func FirstPersonCamera3D(
+    settings:GFX.Scene3D.FirstPersonCamera.Settings = GFX.Scene3D.FirstPersonCamera.Settings()
+) GFX.Scene3D.ViewportCamera {
+    return GFX.Scene3D.ViewportCamera(settings)
+}
+public use GFX.Scene3D.FirstPersonCamera.Settings as FirstPersonCamera3DSettings
 public use GFX.Scene3D.Plugin as Scene3D
 public use GFX.Scene3D.ViewportCamera as ViewportCamera3D
 public use GFX.Scene3D.ViewportCamera.Controls as ViewportCamera3DControls

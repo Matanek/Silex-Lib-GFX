@@ -6,8 +6,10 @@ use GFX.Input
 use GFX.Input.Plugin as InputPlugin
 use GFX.Input.State as InputState
 use GFX.Scene3D.Camera
+use GFX.Scene3D.FirstPersonCamera as FirstPerson
 use GFX.Scene3D.Plugin as ScenePlugin
 use GFX.Scene3D.Transform
+use GFX.Window
 use STD.Math
 use STD.Math.Quat
 use STD.Time.Clock
@@ -32,6 +34,7 @@ public struct Controls {
 }
 
 public struct Settings {
+    private var first_person:bool = false
     var target:Math.Vec3 = Math.Vec3()
     var distance:float = 8.0
     var yaw:float = 0.0
@@ -54,6 +57,30 @@ public struct Settings {
     var order:int = 0
     var active:bool = true
     var controls:Controls? = null
+
+    package static func from_first_person(settings:FirstPerson.Settings) Settings {
+        var result = Settings()
+        result.first_person = true
+        result.target = settings.position
+        result.yaw = settings.yaw
+        result.pitch = settings.pitch
+        result.min_pitch = settings.min_pitch
+        result.max_pitch = settings.max_pitch
+        result.zoom_speed = settings.move_speed
+        result.scroll_zoom_speed = settings.sprint_multiplier
+        result.orbit_sensitivity = settings.look_sensitivity
+        result.pan_response = 0.0
+        if settings.capture_mouse { result.pan_response = 1.0 }
+        result.vertical_fov = settings.vertical_fov
+        result.near_plane = settings.near_plane
+        result.far_plane = settings.far_plane
+        result.order = settings.order
+        result.active = settings.active
+        return result
+    }
+
+    module func is_first_person() bool { return self.first_person }
+    module func captures_mouse() bool { return self.pan_response != 0.0 }
 }
 
 public enum View {
@@ -70,6 +97,7 @@ public class Controller {
     private let settings:Settings
     private let configured_controls:Controls
     private var camera_entity:ECS.Entity
+    private var current_position:Math.Vec3
     private var current_target:Math.Vec3
     private var desired_target:Math.Vec3
     private var current_distance:float
@@ -84,6 +112,7 @@ public class Controller {
     private var orbit_start_pitch:float
     private var current_view:View
     private var axial_orbit:bool
+    private var mouse_captured:bool
     private var clock:Clock
 
     init(settings:Settings = Settings()) {
@@ -93,6 +122,7 @@ public class Controller {
         if let configured = settings.controls { controls = configured }
         self.configured_controls = controls
         self.camera_entity = ECS.Entity()
+        self.current_position = settings.target
         self.current_target = settings.target
         self.desired_target = settings.target
         self.current_distance = settings.distance
@@ -107,6 +137,7 @@ public class Controller {
         self.orbit_start_pitch = settings.pitch
         self.current_view = View.perspective
         self.axial_orbit = false
+        self.mouse_captured = settings.is_first_person() && settings.captures_mouse()
         self.clock = Clock()
     }
 
@@ -115,6 +146,53 @@ public class Controller {
     func distance() float { return self.desired_distance }
     func view() View { return self.current_view }
     module func controls() Controls { return self.configured_controls }
+    func position() Math.Vec3 { return self.transform().position }
+    func yaw() float { return self.current_yaw }
+    func pitch() float { return self.current_pitch }
+    func is_mouse_captured() bool { return self.mouse_captured }
+
+    func set_position(position:Math.Vec3) {
+        if self.settings.is_first_person() {
+            self.current_position = position
+            return
+        }
+        let offset = position.subtract(self.transform().position)
+        self.set_target(self.current_target.add(offset))
+    }
+
+    func set_orientation(yaw:float, pitch:float) {
+        if self.settings.is_first_person() {
+            self.current_yaw = yaw
+            self.current_pitch = Math.clamp(
+                pitch,
+                self.settings.min_pitch,
+                self.settings.max_pitch
+            )
+        }
+    }
+
+    func look(delta:Math.Vec2) {
+        if self.settings.is_first_person() {
+            if !self.settings.active || !self.mouse_captured { return }
+            self.set_orientation(
+                self.current_yaw - delta.x * self.settings.orbit_sensitivity,
+                self.current_pitch - delta.y * self.settings.orbit_sensitivity
+            )
+        }
+    }
+
+    func walk(forward:float, right:float, sprinting:bool, delta:float) {
+        if self.settings.is_first_person() {
+            if !self.settings.active || delta <= 0.0 { return }
+            let yaw_rotation = Math.Quat.angle_axis(self.current_yaw, Math.Vec3.up())
+            var direction = yaw_rotation.rotate(Math.Vec3.front()).multiply(forward)
+                .add(yaw_rotation.rotate(Math.Vec3.right()).multiply(right))
+            if direction.length_squared() > 1.0 { direction = direction.normalized() }
+            var speed = self.settings.zoom_speed
+            if sprinting { speed *= self.settings.scroll_zoom_speed }
+            self.current_position = self.current_position.add(direction.multiply(speed * delta))
+        }
+    }
 
     func set_target(target:Math.Vec3) {
         self.current_target = target
@@ -296,10 +374,26 @@ public class Controller {
 
     func transform() Transform {
         let rotation = self.rotation()
+        if self.settings.is_first_person() {
+            return Transform(position:self.current_position, rotation:rotation)
+        }
         let position = self.current_target.subtract(
             rotation.rotate(Math.Vec3.front()).multiply(self.current_distance)
         )
         return Transform(position, rotation)
+    }
+
+    module func tick() float {
+        var clock = self.clock
+        let delta = Math.clamp(clock.tick(), 0.0, 0.1)
+        self.clock = clock
+        return delta
+    }
+
+    module func set_mouse_captured(window:&Window, captured:bool) {
+        if self.mouse_captured == captured && window.is_relative_mouse() == captured { return }
+        window.set_relative_mouse(captured)
+        self.mouse_captured = captured
     }
 }
 
@@ -308,9 +402,27 @@ public struct ViewportCamera:PluginProtocol {
 
     init(settings:Settings = Settings()) { self.settings = settings }
 
-    func id() str { return "GFX.Scene3D.ViewportCamera" }
+    package init(settings:FirstPerson.Settings) {
+        validate_first_person(settings)
+        self.settings = Settings.from_first_person(settings)
+    }
+
+    func id() str {
+        if self.settings.is_first_person() { return "GFX.Scene3D.FirstPersonCamera" }
+        return "GFX.Scene3D.ViewportCamera"
+    }
 
     func build(application:&Application) {
+        if self.settings.is_first_person() {
+            application.add_plugin(InputPlugin())
+            application.add_plugin(ScenePlugin())
+            application.add_resource(Controller(self.settings))
+            application.add_system(Schedule.startup, create_camera)
+            application.add_after_system(Schedule.startup, start_first_person_mouse_capture)
+            application.add_system(Schedule.update, update_first_person_mouse_capture)
+            application.add_system(Schedule.update, update_first_person_camera)
+            return
+        }
         application.add_plugin(InputPlugin())
         application.add_plugin(ScenePlugin())
         application.add_resource(Controller(self.settings))
@@ -350,6 +462,45 @@ func update_camera(controller:&Controller, world:&ECS.World, input:@InputState) 
     }
 }
 
+func start_first_person_mouse_capture(controller:&Controller, window:&Window) {
+    controller.set_mouse_captured(window, controller.is_mouse_captured())
+}
+
+func update_first_person_mouse_capture(
+    controller:&Controller,
+    window:&Window,
+    input:@InputState
+) {
+    if input.is_pressed(Input.Key.escape) {
+        controller.set_mouse_captured(window, false)
+    }
+    if !controller.is_mouse_captured() && input.is_pressed(Input.MouseButton.left) {
+        controller.set_mouse_captured(window, true)
+    }
+}
+
+func update_first_person_camera(
+    controller:&Controller,
+    world:&ECS.World,
+    input:@InputState
+) {
+    controller.look(input.mouse_delta())
+    var forward = 0.0
+    var right = 0.0
+    if input.is_down(Input.Key.w) { forward += 1.0 }
+    if input.is_down(Input.Key.s) { forward -= 1.0 }
+    if input.is_down(Input.Key.d) { right += 1.0 }
+    if input.is_down(Input.Key.a) { right -= 1.0 }
+    let delta = controller.tick()
+    controller.walk(forward, right, input.is_down(Input.Key.left_shift), delta)
+
+    let entity = controller.entity()
+    if world.is_alive(entity) {
+        let removed = world.remove<Transform>(entity)
+        if removed != null { world.insert(entity, controller.transform()) }
+    }
+}
+
 func smoothing_factor(response:float, dt:float) float {
     if response <= 0.0 || dt <= 0.0 { return 0.0 }
     let scaled = response * dt
@@ -374,5 +525,26 @@ func validate(settings:Settings) {
     }
     if settings.max_delta_time <= 0.0 {
         panic("GFX.Scene3D.ViewportCamera requires a positive maximum delta time")
+    }
+}
+
+func validate_first_person(settings:FirstPerson.Settings) {
+    if settings.move_speed <= 0.0 {
+        panic("GFX.Scene3D.FirstPersonCamera requires a positive movement speed")
+    }
+    if settings.sprint_multiplier < 1.0 {
+        panic("GFX.Scene3D.FirstPersonCamera requires a sprint multiplier of at least one")
+    }
+    if settings.look_sensitivity <= 0.0 {
+        panic("GFX.Scene3D.FirstPersonCamera requires a positive look sensitivity")
+    }
+    if settings.max_pitch < settings.min_pitch {
+        panic("GFX.Scene3D.FirstPersonCamera requires an ordered pitch range")
+    }
+    if settings.pitch < settings.min_pitch || settings.pitch > settings.max_pitch {
+        panic("GFX.Scene3D.FirstPersonCamera initial pitch is outside its range")
+    }
+    if settings.near_plane <= 0.0 || settings.far_plane <= settings.near_plane {
+        panic("GFX.Scene3D.FirstPersonCamera requires valid near and far planes")
     }
 }

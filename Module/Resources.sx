@@ -13,6 +13,7 @@ public use GFX.Input.State as InputState
 public use GFX.Rendering.Renderer as Renderer
 public use GFX.Scene2D.ViewportCamera.Controller as ViewportCamera2D
 public use GFX.Scene3D.Meshes as Meshes3D
+public use GFX.Scene3D.ViewportCamera.Controller as FirstPersonCamera3D
 public use GFX.Scene3D.Skybox.Skybox as Skybox3D
 public use GFX.Scene3D.ToneMapping as ToneMapping3D
 public use GFX.Scene3D.ViewportCamera.Controller as ViewportCamera3D

@@ -1,5 +1,6 @@
 use GFX.Assets.Image
 use GFX.Assets.Images.Images as ImageCatalog
+use GFX.Assets.PNG
 use GFX.Color
 
 test "store caller-provided images without choosing a decoder" {
@@ -22,4 +23,18 @@ test "round normalized image colors to RGBA8 channels" {
     assert(pixels[1] == 64 as uint8)
     assert(pixels[2] == 191 as uint8)
     assert(pixels[3] == 128 as uint8)
+}
+
+test "load a standalone PNG image through the PNG API" {
+    let image = PNG.load("Packages/GFX/Assets/Textures/DarkGrid.png")
+    assert(image.width() == 1024)
+    assert(image.height() == 1024)
+    assert(image.byte_count() == 1024 * 1024 * 4)
+}
+
+test "report a missing PNG without panicking through the expert API" {
+    match PNG.try_load("Packages/GFX/Assets/Textures/Missing.png") {
+        success(image) => { panic("missing PNG was loaded") }
+        failure(error) => { assert(error != "") }
+    }
 }

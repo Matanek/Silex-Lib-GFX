@@ -1,0 +1,144 @@
+use GFX.Application
+use GFX.Assets
+use GFX.Assets.PNG
+use GFX.Color
+use GFX.Components
+use GFX.ECS
+use GFX.Plugins
+use GFX.Resources
+use GFX.Scene3D
+use STD.Math
+use STD.Randomizer
+
+func textured_material(image:Assets.ImageHandle, scale:Math.Vec2) Components.MaterialSettings3D {
+    return Components.MaterialSettings3D(
+        textures:Components.MaterialTextures3D(
+            albedo:Components.MaterialTexture3D(image:image, scale:scale)
+        )
+    )
+}
+
+func random_rotation(randomizer:Randomizer) Math.Quat {
+    let yaw = Math.Quat.angle_axis(
+        randomizer.get_float(0.0, Math.two_pi()),
+        Math.Vec3.up()
+    )
+    let pitch = Math.Quat.angle_axis(
+        randomizer.get_float(-0.28, 0.28),
+        Math.Vec3.right()
+    )
+    let roll = Math.Quat.angle_axis(
+        randomizer.get_float(-0.28, 0.28),
+        Math.Vec3.front()
+    )
+    return yaw.multiply(pitch).multiply(roll)
+}
+
+func add_ground(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    grid:Assets.ImageHandle
+) {
+    let ground = meshes.add(Scene3D.Geometry.Plane.make(Math.Vec2(100.0)))
+    let ground_rotation = Math.Quat.angle_axis(
+        Math.radians(-90.0),
+        Math.Vec3.right()
+    )
+
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.Transform3D(rotation:ground_rotation))
+        ..with(Components.Mesh3D(ground))
+        ..with(Components.Material3D(
+            albedo:Color.bytes(190, 198, 205),
+            roughness:0.9
+        ))
+        ..with(textured_material(grid, Math.Vec2(100.0)))
+    )
+}
+
+func add_rocks(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    grid:Assets.ImageHandle
+) {
+    let rock = meshes.add(Scene3D.Geometry.Cube.make())
+    let rock_material = Components.Material3D(
+        albedo:Color.bytes(152, 159, 166),
+        roughness:0.92
+    )
+    var rock_texture = textured_material(grid, Math.Vec2(1.5))
+    var randomizer = Randomizer(0x51_1E_80_1D)
+    var index = 0
+    while index < 140 {
+        var x = randomizer.get_float(-47.0, 47.0)
+        var z = randomizer.get_float(-47.0, 47.0)
+        while x * x + z * z < 36.0 {
+            x = randomizer.get_float(-47.0, 47.0)
+            z = randomizer.get_float(-47.0, 47.0)
+        }
+        let scale = Math.Vec3(
+            randomizer.get_float(0.5, 2.8),
+            randomizer.get_float(0.35, 1.9),
+            randomizer.get_float(0.5, 2.8)
+        )
+        world.spawn(ECS.EntityRecipe()
+            ..with(Components.Transform3D(
+                position:Math.Vec3(x, scale.y * 0.35, z),
+                rotation:random_rotation(randomizer),
+                scale:scale
+            ))
+            ..with(Components.Mesh3D(rock))
+            ..with(rock_material)
+            ..with(rock_texture)
+        )
+        index++
+    }
+}
+
+func add_lighting(world:&Resources.World) {
+    world.spawn(ECS.EntityRecipe()
+        ..with(Components.AmbientLight3D(
+            color:Color.sky_200(),
+            intensity:0.1
+        ))
+    )
+    var sun = Components.SunLight3D(
+        direction:Math.Vec3(-0.35, -0.8, -0.25).normalized(),
+        intensity:3.6
+    )
+    sun.shadow_size = Math.Vec2(42.0)
+    sun.shadow_depth = 90.0
+    sun.shadow_distance = 45.0
+    world.spawn(ECS.EntityRecipe()..with(sun))
+}
+
+func create_world(
+    world:&Resources.World,
+    meshes:&Resources.Meshes3D,
+    images:&Resources.Images
+) {
+    let grid = images.add(PNG.load("../../Assets/Textures/DarkGrid.png"))
+    add_ground(world, meshes, grid)
+    add_rocks(world, meshes, grid)
+    add_lighting(world)
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
+            ..title = "Scene3D — World (WASD, Shift, Escape)"
+            ..width = 1280
+            ..height = 720
+        ))
+        ..add_plugin(Plugins.Scene3D())
+        ..add_plugin(Plugins.FirstPersonCamera3D(Plugins.FirstPersonCamera3DSettings()
+            ..position = Math.Vec3(0.0, 1.7, 8.0)
+            ..move_speed = 6.0
+            ..sprint_multiplier = 2.0
+            ..far_plane = 180.0
+        ))
+        ..add_resource(Resources.Skybox3D.procedural(Scene3D.ProceduralSky.day()))
+        ..add_resource(Resources.ToneMapping3D.aces(exposure:0.25))
+        ..add_system(Application.Schedule.startup, create_world)
+        ..run()
+}
