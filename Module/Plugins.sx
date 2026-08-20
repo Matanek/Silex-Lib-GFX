@@ -2,9 +2,7 @@
 // their plugin because a re-exported declaration does not carry its module.
 public use GFX.Application.FramePacing as FramePacing
 public use GFX.Application.Time as Time
-public use GFX.Animation.Plugin as Animation
 public use GFX.Assets.Plugin as Assets
-public use GFX.Audio.Plugin as Audio
 public use GFX.ECS.Plugin as ECS
 public use GFX.FPSCounter.Anchor as FPSCounterAnchor
 public use GFX.FPSCounter.Plugin as FPSCounter
@@ -40,8 +38,6 @@ public use GFX.Scene3D.ViewportCamera.Settings as ViewportCamera3DSettings
 public use GFX.Scene3D.ViewportCamera.View as ViewportCamera3DView
 public use GFX.Viewer.Plugin as Viewer
 public use GFX.Viewer.Settings as ViewerSettings
-public use GFX.WebView.Plugin as WebView
-public use GFX.WebView.Settings as WebViewSettings
 public use GFX.Window.Plugin as Window
 public use GFX.Window.Plugin.CloseBehavior as WindowCloseBehavior
 public use GFX.Window.Plugin.Settings as WindowSettings

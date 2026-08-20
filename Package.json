@@ -1,9 +1,18 @@
 {
   "name": "GFX",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "extensions": {
     "GFX.Physics": {
       "friend": true
+    },
+    "GFX.Animation": {
+      "suite": true
+    },
+    "GFX.Audio": {
+      "suite": true
+    },
+    "GFX.WebView": {
+      "suite": true
     }
   },
   "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
@@ -28,14 +37,6 @@
           "archive": "Boundary/macos-arm64/libSDL3_ttf.a",
           "frameworks": ["CoreFoundation", "CoreGraphics", "CoreText"],
           "requires": ["GFX.SDL3"]
-        },
-        "SDL3_mixer": {
-          "archive": "Boundary/macos-arm64/libSDL3_mixer.a",
-          "requires": ["GFX.SDL3"]
-        },
-        "System": {
-          "frameworks": ["Cocoa", "WebKit"],
-          "libraries": ["objc"]
         }
       }
     },
@@ -48,10 +49,6 @@
         "SDL3_ttf": {
           "archive": "Boundary/linux-x64/libSDL3_ttf.a",
           "libraries": ["m", "pthread"],
-          "requires": ["GFX.SDL3"]
-        },
-        "SDL3_mixer": {
-          "archive": "Boundary/linux-x64/libSDL3_mixer.a",
           "requires": ["GFX.SDL3"]
         }
       }
@@ -69,10 +66,6 @@
           "archive": "Boundary/windows-x64/SDL3_ttf.lib",
           "libraries": ["gdi32", "rpcrt4", "usp10"],
           "requires": ["GFX.SDL3"]
-        },
-        "SDL3_mixer": {
-          "archive": "Boundary/windows-x64/SDL3_mixer.lib",
-          "requires": ["GFX.SDL3"]
         }
       }
     },
@@ -89,10 +82,6 @@
           "archive": "Boundary/windows-arm64/SDL3_ttf.lib",
           "libraries": ["gdi32", "rpcrt4", "usp10"],
           "requires": ["GFX.SDL3"]
-        },
-        "SDL3_mixer": {
-          "archive": "Boundary/windows-arm64/SDL3_mixer.lib",
-          "requires": ["GFX.SDL3"]
         }
       }
     }
@@ -108,11 +97,6 @@
         "path": "Boundary/macos-arm64/libSDL3_ttf.a",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-macos-arm64.a",
         "sha256": "09082a212708697d437eb79f56dc84dc01751fa83116ca6c0cc4aa8a0180dd85"
-      },
-      "SDL3_mixer": {
-        "path": "Boundary/macos-arm64/libSDL3_mixer.a",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-mixer-3.2.4-silex.2/SDL3_mixer-3.2.4-macos-arm64.a",
-        "sha256": "1012654550435658736b393669a166429db974be2986d98d025833c9c7f81dcd"
       }
     },
     "linux-x64": {
@@ -125,11 +109,6 @@
         "path": "Boundary/linux-x64/libSDL3_ttf.a",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-linux-x64.a",
         "sha256": "b8af5c4cd8e5b547dbee934369238f529ed57057a8f542570783e8505aa7710d"
-      },
-      "SDL3_mixer": {
-        "path": "Boundary/linux-x64/libSDL3_mixer.a",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-mixer-3.2.4-silex.2/SDL3_mixer-3.2.4-linux-x64.a",
-        "sha256": "2c904a21ea7d641afdaf30e219b53aff5504443496bee4ed76698dae76a62877"
       }
     },
     "windows-x64": {
@@ -142,11 +121,6 @@
         "path": "Boundary/windows-x64/SDL3_ttf.lib",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-windows-x64.lib",
         "sha256": "9adebcbbddc05673dd04fa4260ca8f58f4620ff78b5c38c98e8b2792cc7cd9d7"
-      },
-      "SDL3_mixer": {
-        "path": "Boundary/windows-x64/SDL3_mixer.lib",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-mixer-3.2.4-silex.2/SDL3_mixer-3.2.4-windows-x64.lib",
-        "sha256": "c08fd0a05ee3295ef71e2f2849df00c27dd98049f292ce92fd78bdaf892603e4"
       }
     },
     "windows-arm64": {
@@ -159,11 +133,6 @@
         "path": "Boundary/windows-arm64/SDL3_ttf.lib",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-windows-arm64.lib",
         "sha256": "36f7b73b740fe70140fb0647db1774d083427ec59e16f3e7b4b311741503bbb0"
-      },
-      "SDL3_mixer": {
-        "path": "Boundary/windows-arm64/SDL3_mixer.lib",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-mixer-3.2.4-silex.2/SDL3_mixer-3.2.4-windows-arm64.lib",
-        "sha256": "2854558e6fff3579406dac5c532682ec24bb890ee5a06d2619a9941ce2517a0b"
       }
     }
   }

@@ -3,10 +3,9 @@ Copyright 2026 Matanek and Silex contributors
 
 This product is licensed under the Apache License, Version 2.0.
 
-GFX distributes target-specific SDL3, SDL3_ttf, and SDL3_mixer static
-artifacts. Their notices and those of bundled SDL_ttf dependencies are kept in
-the Licenses directory. GFX.WebView uses facilities supplied by the selected
-operating system and does not distribute a browser engine.
+GFX distributes target-specific SDL3 and SDL3_ttf static artifacts. Their
+notices and those of bundled SDL_ttf dependencies are kept in the Licenses
+directory. GFX.Audio owns the separately distributed SDL3_mixer artifacts.
 
 GFX.Scene3D includes generated RGBA16F tone-mapping lookup tables derived from
 the Blender OpenColorIO color-management data identified alongside the assets.

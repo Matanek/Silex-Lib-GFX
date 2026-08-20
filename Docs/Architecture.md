@@ -1,19 +1,21 @@
 # GFX architecture
 
-`GFX` is the core package and root namespace for its domains. Its fundamental
-application and graphics capabilities are distributed together:
+`GFX` is the stable core package and root namespace for its domains. Its
+fundamental application and graphics capabilities are distributed together,
+while authorized child packages can keep an independent release cycle:
 
 ```text
 silex install GFX
 ```
 
-This command installs the complete core API, its shaders, examples, and
-required native artifacts. In source code, `GFX` is the namespace parent and
-`GFX.Application`, `GFX.Scene2D`, and `GFX.Audio` are child modules.
+This command installs the core API and exact extensions selected for the GFX
+suite. In source code, `GFX` remains the namespace parent. Applications with a
+manifest still declare every package whose modules they import directly.
 
-Large capabilities may be distributed as explicitly authorized child packages.
-`GFX.Physics` is the first such extension: it evolves independently and remains
-installed separately while it is under development.
+Capabilities may be distributed as explicitly authorized child packages.
+`GFX.Animation`, `GFX.Audio` and `GFX.WebView` are official suite members;
+`GFX.Physics` evolves independently and remains installed separately while it
+is under development.
 
 Authorization is a delegation from GFX, not a permanent transfer of its
 namespace. If GFX later supplies `GFX.Physics` itself, its module is canonical.
@@ -22,13 +24,12 @@ GFX grants it exact `merge: true` permission; otherwise the compiler reports
 the incompatible providers. A merge is additive, preserves declaration
 ownership and rejects public name collisions.
 
-## Modular monolith
+## Modular core
 
 ```text
 GFX
 ├── Application     loop, resources, systems, plugins, time, and pacing
 ├── Assets          images, models, glTF/GLB codecs, atlases, and asset identities
-├── Audio           sound loading, playback, and spatialization
 ├── Canvas          vector drawing intentions, rasterization, and 2D geometry
 ├── ECS             world, entities, components, queries, and commands
 ├── FrameGraph      logical resources, passes, ordering, and aliasing
@@ -38,15 +39,20 @@ GFX
 ├── Scene2D         camera, transform, sprite, grid, and 2D shaders
 ├── Scene3D         camera, mesh, material, light, selection, and 3D gizmos
 ├── Viewer          focused presentation of images and Canvas drawings
-├── WebView         embedded Web content and message bridge
 └── Window          windows, displays, and system presentation
 ```
 
-The package is monolithic for distribution, while its modules remain organized
-by capability. A cross-cutting capability may depend on a more fundamental
-one, but it does not become the owner of its consumers' concepts. `Rendering`
-may orchestrate a `FrameGraph`, while a 2D grid, a 3D material, and their
-shaders remain in their scene domains.
+The core modules remain organized by capability. A cross-cutting capability
+may depend on a more fundamental one, but it does not become the owner of its
+consumers' concepts. `Rendering` may orchestrate a `FrameGraph`, while a 2D
+grid, a 3D material, and their shaders remain in their scene domains.
+
+`GFX.Animation` owns its timelines, easing vocabulary, playback component and
+application plugin. `GFX.Audio` owns its portable API, application plugin and
+complete SDL3_mixer boundary. `GFX.WebView` owns its portable API, application
+plugin, platform adapters and system-framework boundary. These packages own
+their examples, tests and documentation, depend only on public GFX capabilities,
+and contribute their declarations to the parent's open catalogs.
 
 ## Umbrella views
 
@@ -93,17 +99,18 @@ world.spawn(ECS.EntityRecipe()
 
 ## Native infrastructure
 
-SDL is not a domain that users need to learn. The `SDL3`, `SDL3_ttf`, and
-`SDL3_mixer` providers, their archives, and their system dependencies are
-declared in the GFX manifest. WebView also uses the platform's system
-frameworks when an adapter is available.
+SDL is not a domain that users need to learn. GFX owns the `SDL3` and
+`SDL3_ttf` providers. GFX.Audio owns `SDL3_mixer`, whose provider privately
+requires `GFX.SDL3`; GFX.WebView owns its operating-system framework boundary.
 
 ```text
 Package.json
 Boundary/<target>/
 ├── SDL3
-├── SDL3_ttf
-└── SDL3_mixer
+└── SDL3_ttf
+
+GFX.Audio/Boundary/<target>/
+└── SDL3_mixer -> GFX.SDL3
 ```
 
 There is deliberately no public `GFX.SDL` module and no SDL version number in
@@ -122,8 +129,9 @@ Tests/Scene3D/        verified contract
 Docs/Scene3D.md       domain documentation
 ```
 
-The same rule applies to `Scene2D`, `Audio`, `Viewer`, `WebView`, and every other
-capability. A 2D grid shader belongs in `Shaders/Scene2D/Grid.hlsl`; a shadow
+The same rule applies to `Scene2D`, `Viewer`, and every other capability. An
+extracted package such as GFX.Audio becomes the root of those same owned
+artifacts. A 2D grid shader belongs in `Shaders/Scene2D/Grid.hlsl`; a shadow
 shader belongs in `Shaders/Scene3D/Shadow.hlsl`. Documentation stays flat as
 long as a domain needs only one file; a domain directory is introduced only
 when several cohesive documents justify it.
@@ -160,7 +168,7 @@ those details are not extension points.
 
 ## Invariants
 
-1. `GFX` is the complete graphics and application core; every official
+1. `GFX` is the stable graphics and application core; every official
    `GFX.*` package requires exact namespace authorization and an explicit
    decision about privileged access and suite installation.
 2. A domain expresses a user capability, never a technical layer.
@@ -169,5 +177,5 @@ those details are not extension points.
    live there.
 5. Native providers are private infrastructure, not an SDL API.
 6. Extension points are public and validated from consumer code.
-7. A new domain can be added without renaming existing domains or creating a
-   new repository.
+7. A domain can move to an authorized child package without changing its
+   public module path.

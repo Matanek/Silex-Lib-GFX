@@ -14,7 +14,6 @@ func injected_foundation_resources(
 func injected_asset_resources(
     images:&Resources.Images,
     sprite_sheets:&Resources.SpriteSheets,
-    audio:&Resources.Audio,
     input:&Resources.Input
 ) {}
 
@@ -29,8 +28,7 @@ func injected_scene_resources(
 func injected_presentation_resources(
     device:@Resources.Device,
     surface:@Resources.GPUSurface,
-    viewer:&Resources.Viewer,
-    web_view:&Resources.WebView
+    viewer:&Resources.Viewer
 ) {}
 
 func configured_plugins(
@@ -43,7 +41,6 @@ func configured_plugins(
 
 func foundation_plugins(
     assets:Plugins.Assets,
-    audio:Plugins.Audio,
     ecs:Plugins.ECS,
     input:Plugins.Input,
     rendering:Plugins.Rendering
@@ -51,7 +48,6 @@ func foundation_plugins(
 
 func presentation_plugins(
     viewer:Plugins.Viewer,
-    web_view:Plugins.WebView,
     window:Plugins.Window
 ) {}
 
@@ -71,7 +67,6 @@ test "expose components resources and plugins through intentional umbrellas" {
     assert(material_settings.alpha == Components.AlphaMode3D.blend)
 
     let time = Plugins.Time()
-    let animation = Plugins.Animation()
     let pacing = Plugins.FramePacing(60)
     let scene_2d = Plugins.Scene2D()
     let scene_3d = Plugins.Scene3D()

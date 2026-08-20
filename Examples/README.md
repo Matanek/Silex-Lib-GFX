@@ -3,20 +3,6 @@
 Examples are grouped by the capability they demonstrate. Every `.sx` file is
 an executable consumer of the public GFX API.
 
-## Animation
-
-- `Animation/Timeline2D.sx` composes movement, rotation, scale, and color in a
-  looping ping-pong timeline.
-- `Animation/Timeline3D.sx` moves a hovering cyan cube and its cyan point light
-  around four inset corners while a tilted pink cube rotates at the center.
-- `Animation/EasingGallery.sx` compares every easing on synchronized tracks
-  inside a pannable and zoomable Scene2D viewport.
-
-## Audio
-
-- `Audio/PlaySound.sx` loads and plays one sound.
-- `Audio/PlaySpatialSound.sx` controls spatial playback.
-
 ## Canvas
 
 - `Canvas/CreateImage.sx` paints and displays a generated chart.
@@ -71,9 +57,3 @@ the GPU.
   instances;
   `--benchmark-no-msaa`, `--benchmark-hard-shadows`, and
   `--benchmark-no-shadows` provide targeted rendering ablations.
-
-## WebView
-
-- `WebView/BridgeWebPage.sx` exchanges named messages with embedded content.
-- `WebView/EmbeddedFiles.sx` serves HTML, CSS, and JavaScript from the
-  executable.
