@@ -162,7 +162,13 @@ func alpha_mode(value:GFX.Scene3D.Material.AlphaMode) float {
 }
 
 func lighting(frame:@LightingFrame, skybox:Skybox) str {
-    var bytes = storage(1488)
+    var bytes = "\0"
+    refresh_lighting(bytes, frame, skybox)
+    return bytes
+}
+
+func refresh_lighting(bytes:&str, frame:@LightingFrame, skybox:Skybox) {
+    ensure_storage(bytes, 1488)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_color(address, 0, frame.ambient())
     write_vec4(address, 16, Math.Vec4(frame.count() as float, 0.0, 0.0, 0.0))
@@ -192,11 +198,20 @@ func lighting(frame:@LightingFrame, skybox:Skybox) str {
         index++
     }
     write_skybox(address, 1312, skybox)
-    return bytes
 }
 
 func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
-    var bytes = storage(3600)
+    var bytes = "\0"
+    refresh_shadows(bytes, lighting, frame)
+    return bytes
+}
+
+func refresh_shadows(
+    bytes:&str,
+    lighting:@LightingFrame,
+    frame:@ShadowFrame
+) {
+    ensure_storage(bytes, 3600)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     var light_index = 0
     for light in lighting.all() {
@@ -235,7 +250,6 @@ func shadows(lighting:@LightingFrame, frame:@ShadowFrame) str {
         face_index++
     }
     write_vec4(address, 3584, Math.Vec4(frame.forward(), 0.0))
-    return bytes
 }
 
 func shadow_draw(model:Math.Mat4, view_projection:Math.Mat4) str {
@@ -298,7 +312,13 @@ func grid(
 }
 
 func tone_mapping(value:ToneMapping) str {
-    var bytes = storage(32)
+    var bytes = "\0"
+    refresh_tone_mapping(bytes, value)
+    return bytes
+}
+
+func refresh_tone_mapping(bytes:&str, value:ToneMapping) {
+    ensure_storage(bytes, 32)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_vec4(address, 0, Math.Vec4(
         value.method.raw_value as float,
@@ -314,7 +334,6 @@ func tone_mapping(value:ToneMapping) str {
         value.split_position,
         split
     ))
-    return bytes
 }
 
 func skybox_background(
@@ -323,13 +342,30 @@ func skybox_background(
     skybox:Skybox,
     tone_mapping:ToneMapping
 ) str {
-    var bytes = storage(288)
+    var bytes = "\0"
+    refresh_skybox_background(
+        bytes,
+        inverse_view_projection,
+        camera_position,
+        skybox,
+        tone_mapping
+    )
+    return bytes
+}
+
+func refresh_skybox_background(
+    bytes:&str,
+    inverse_view_projection:Math.Mat4,
+    camera_position:Math.Vec3,
+    skybox:Skybox,
+    tone_mapping:ToneMapping
+) {
+    ensure_storage(bytes, 288)
     let address = C.address_bits(C.mutable_string_pointer(bytes))
     write_mat4(address, 0, inverse_view_projection)
     write_vec4(address, 64, Math.Vec4(camera_position, 1.0))
     write_skybox(address, 80, skybox)
     write_tone_mapping(address, 256, tone_mapping)
-    return bytes
 }
 
 local func write_skybox(address:uint, offset:int, value:Skybox) {
@@ -410,6 +446,10 @@ local func storage(minimum:int) str {
     var bytes = "\0"
     while C.byte_count(bytes) < minimum as uint { bytes = bytes + bytes }
     return bytes
+}
+
+local func ensure_storage(bytes:&str, minimum:int) {
+    if C.byte_count(bytes) < minimum as uint { bytes = storage(minimum) }
 }
 
 local func write_float(address:uint, offset:int, value:float) {

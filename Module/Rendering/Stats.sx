@@ -12,6 +12,9 @@ public struct Stats {
     private var submitted_instances:int
     private var pushed_uniform_bytes:int
     private var bound_textures:int
+    private var submitted_shadow_draw_calls:int
+    private var submitted_shadow_triangles:int
+    private var submitted_shadow_instances:int
 
     init() {
         self.rendered_frames = 0
@@ -25,6 +28,9 @@ public struct Stats {
         self.submitted_instances = 0
         self.pushed_uniform_bytes = 0
         self.bound_textures = 0
+        self.submitted_shadow_draw_calls = 0
+        self.submitted_shadow_triangles = 0
+        self.submitted_shadow_instances = 0
     }
 
     func frames() int { return self.rendered_frames }
@@ -38,6 +44,18 @@ public struct Stats {
     func instances() int { return self.submitted_instances }
     func uniform_bytes() int { return self.pushed_uniform_bytes }
     func texture_bindings() int { return self.bound_textures }
+    func color_draw_calls() int {
+        return self.submitted_draw_calls - self.submitted_shadow_draw_calls
+    }
+    func shadow_draw_calls() int { return self.submitted_shadow_draw_calls }
+    func color_triangles() int {
+        return self.submitted_triangles - self.submitted_shadow_triangles
+    }
+    func shadow_triangles() int { return self.submitted_shadow_triangles }
+    func color_instances() int {
+        return self.submitted_instances - self.submitted_shadow_instances
+    }
+    func shadow_instances() int { return self.submitted_shadow_instances }
 
     module func record_frame(pass_count:int, commands:CommandStats) {
         self.rendered_frames++
@@ -51,5 +69,8 @@ public struct Stats {
         self.submitted_instances = commands.instance_count()
         self.pushed_uniform_bytes = commands.uniforms_size()
         self.bound_textures = commands.texture_count()
+        self.submitted_shadow_draw_calls = commands.shadow_draw_count()
+        self.submitted_shadow_triangles = commands.shadow_triangle_count()
+        self.submitted_shadow_instances = commands.shadow_instance_count()
     }
 }

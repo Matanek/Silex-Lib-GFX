@@ -75,6 +75,9 @@ package struct CommandStats {
     var instances:int
     var uniform_bytes:int
     var texture_bindings:int
+    var shadow_draw_calls:int
+    var shadow_triangles:int
+    var shadow_instances:int
 
     init() {
         self.render_passes = 0
@@ -86,6 +89,9 @@ package struct CommandStats {
         self.instances = 0
         self.uniform_bytes = 0
         self.texture_bindings = 0
+        self.shadow_draw_calls = 0
+        self.shadow_triangles = 0
+        self.shadow_instances = 0
     }
 
     func pass_count() int { return self.render_passes }
@@ -97,6 +103,9 @@ package struct CommandStats {
     func instance_count() int { return self.instances }
     func uniforms_size() int { return self.uniform_bytes }
     func texture_count() int { return self.texture_bindings }
+    func shadow_draw_count() int { return self.shadow_draw_calls }
+    func shadow_triangle_count() int { return self.shadow_triangles }
+    func shadow_instance_count() int { return self.shadow_instances }
 }
 
 public class Device {
@@ -203,7 +212,9 @@ public class Device {
     func suspend() { sdl_gdk_suspend_gpu(C.pointer_bits(self.handle)) }
     func resume() { sdl_gdk_resume_gpu(C.pointer_bits(self.handle)) }
 
-    package func reset_command_stats() { self.current_command_stats = CommandStats() }
+    package func reset_command_stats() {
+        self.current_command_stats = CommandStats()
+    }
     package func command_stats() CommandStats { return self.current_command_stats }
     module func record_render_pass() { self.current_command_stats.render_passes++ }
     module func record_pipeline_binding(primitive:Types.Primitive) {
@@ -212,7 +223,12 @@ public class Device {
     }
     module func record_uniform(byte_count:int) { self.current_command_stats.uniform_bytes += byte_count }
     module func record_texture_binding() { self.current_command_stats.texture_bindings++ }
-    module func record_draw(elements:int, instances:int, indexed:bool) {
+    module func record_draw(
+        elements:int,
+        instances:int,
+        indexed:bool,
+        shadow:bool
+    ) {
         self.current_command_stats.draw_calls++
         self.current_command_stats.instances += instances
         if indexed { self.current_command_stats.indices += elements * instances }
@@ -222,6 +238,11 @@ public class Device {
         if self.current_primitive == Types.Primitive.triangles { triangles = elements / 3 }
         else if self.current_primitive == Types.Primitive.triangle_strip && elements > 2 { triangles = elements - 2 }
         self.current_command_stats.triangles += triangles * instances
+        if shadow {
+            self.current_command_stats.shadow_draw_calls++
+            self.current_command_stats.shadow_triangles += triangles * instances
+            self.current_command_stats.shadow_instances += instances
+        }
     }
     module func record_indirect_draw(count:int) {
         self.current_command_stats.draw_calls += count

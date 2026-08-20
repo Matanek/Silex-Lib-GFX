@@ -15,6 +15,8 @@ use GFX.Scene2D.Sprite
 use GFX.Scene2D.Transform
 use GFX.Window
 use Interop.C
+use STD.Collections.Dictionary
+use STD.Collections.Hashing
 use STD.Math
 
 class CachedOverlay {
@@ -41,15 +43,19 @@ class CachedOverlay {
 }
 
 class CachedSceneDrawing {
-    let snapshot_id:int
+    let geometry_hash:uint
+    let packed_vertices:str
     var vertices:GPU.Buffer? = null
     var upload:GPU.TransferBuffer? = null
-    var vertex_count:int
+    let vertex_count:int
 
-    init(snapshot_id:int) {
-        self.snapshot_id = snapshot_id
-        self.vertex_count = 0
+    init(geometry_hash:uint, packed_vertices:str, vertex_count:int) {
+        self.geometry_hash = geometry_hash
+        self.packed_vertices = packed_vertices
+        self.vertex_count = vertex_count
     }
+
+    func bytes() str { return self.packed_vertices }
 }
 
 class CachedImage {
@@ -123,6 +129,9 @@ class Renderer {
     private var overlays:CachedOverlay[]
     private var draws:Draw[]
     private var scene_drawing_cache:CachedSceneDrawing[]
+    private var scene_drawing_snapshots:Dictionary<int, int>
+    private var last_scene_snapshot_id:int
+    private var last_scene_cache_index:int
     private var image_cache:CachedImage[]
     private var scene_draws:SceneDraw[]
     private var sprite_draws:SpriteDraw[]
@@ -140,6 +149,9 @@ class Renderer {
         self.overlays = []
         self.draws = []
         self.scene_drawing_cache = []
+        self.scene_drawing_snapshots = Dictionary<int, int>(minimum_capacity:256)
+        self.last_scene_snapshot_id = -1
+        self.last_scene_cache_index = -1
         self.image_cache = []
         self.scene_draws = []
         self.sprite_draws = []
@@ -151,7 +163,11 @@ class Renderer {
         self.camera_ready = false
     }
 
-    func start(device:@GPU.Device, surface:@GPU.Surface) {
+    func start(
+        device:@GPU.Device,
+        surface:@GPU.Surface,
+        samples:GPU.Samples
+    ) {
         let target = color_target(surface.format())
 
         var drawing_buffers:GPU.VertexBufferLayout[] = []
@@ -177,6 +193,7 @@ class Renderer {
                 vertex_buffers:drawing_buffers,
                 attributes:drawing_attributes,
                 rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                multisample:GPU.MultisampleState(samples:samples),
                 color_targets:target,
                 name:"GFX.Scene2D vector drawing"
             )
@@ -193,6 +210,7 @@ class Renderer {
                 vertex_buffers:sprite_buffers,
                 attributes:sprite_attributes,
                 rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                multisample:GPU.MultisampleState(samples:samples),
                 color_targets:target,
                 name:"GFX.Scene2D drawing text"
             )
@@ -202,6 +220,7 @@ class Renderer {
                 GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene2D/Grid.hlsl"),
                 GPU.GraphicsPipelineSettings(
                     rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+                    multisample:GPU.MultisampleState(samples:samples),
                     color_targets:target,
                     name:"GFX.Scene2D viewport grid"
                 )
@@ -268,11 +287,15 @@ class Renderer {
                     let transform = world.query_get<Transform>(entity)
                     let canvas = world.query_get<SceneCanvas>(entity)
                     if canvas.visible {
-                        let cache_index = self.scene_drawing_cache_index(canvas.snapshot_id())
+                        let snapshot_id = canvas.snapshot_id()
+                        var cache_index = self.known_scene_drawing_cache(snapshot_id)
+                        if cache_index < 0 {
+                            var snapshot = canvas.snapshot()
+                            cache_index = self.register_scene_drawing(snapshot)
+                        }
                         var cache = self.scene_drawing_cache[cache_index]
                         if cache.vertices == null {
-                            var snapshot = canvas.snapshot()
-                            self.refresh_scene_geometry(device, cache, snapshot)
+                            self.refresh_scene_geometry(device, cache)
                         }
                         let model = canvas.affine_model(transform, viewport)
                         self.scene_draws.append(SceneDraw(
@@ -324,11 +347,15 @@ class Renderer {
                     let transform = world.query_get<Transform>(entity)
                     let drawing = world.query_get<SceneDrawing>(entity)
                     if drawing.visible {
-                        let cache_index = self.scene_drawing_cache_index(drawing.snapshot_id())
+                        let snapshot_id = drawing.snapshot_id()
+                        var cache_index = self.known_scene_drawing_cache(snapshot_id)
+                        if cache_index < 0 {
+                            var snapshot = drawing.snapshot()
+                            cache_index = self.register_scene_drawing(snapshot)
+                        }
                         var cache = self.scene_drawing_cache[cache_index]
                         if cache.vertices == null {
-                            var snapshot = drawing.snapshot()
-                            self.refresh_scene_geometry(device, cache, snapshot)
+                            self.refresh_scene_geometry(device, cache)
                         }
                         let model = drawing.affine_model(transform)
                         self.scene_draws.append(SceneDraw(
@@ -621,29 +648,58 @@ class Renderer {
         }
     }
 
-    private func scene_drawing_cache_index(snapshot_id:int) int {
+    private func known_scene_drawing_cache(snapshot_id:int) int {
+        if snapshot_id == self.last_scene_snapshot_id {
+            return self.last_scene_cache_index
+        }
+        if self.scene_drawing_snapshots.contains(snapshot_id) {
+            let cache_index:int =
+                self.scene_drawing_snapshots.get(snapshot_id) + 0
+            self.last_scene_snapshot_id = snapshot_id
+            self.last_scene_cache_index = cache_index
+            return cache_index
+        }
+        return -1
+    }
+
+    private func register_scene_drawing(snapshot:@Snapshot) int {
+        let snapshot_id = snapshot.id()
+        let geometry = snapshot.geometry()
+        let packed = Packing.drawing_vertices(geometry)
+        let geometry_hash = Hashing.hash(packed)
         var index = 0
         while index < self.scene_drawing_cache.count() {
             var cache = self.scene_drawing_cache[index]
-            if cache.snapshot_id == snapshot_id { return index }
+            if cache.geometry_hash == geometry_hash &&
+                cache.packed_vertices == packed
+            {
+                self.scene_drawing_snapshots.set(snapshot_id, index)
+                self.last_scene_snapshot_id = snapshot_id
+                self.last_scene_cache_index = index
+                return index
+            }
             index++
         }
-        var created = CachedSceneDrawing(snapshot_id)
+        var created = CachedSceneDrawing(
+            geometry_hash,
+            packed,
+            geometry.vertex_count()
+        )
         self.scene_drawing_cache.append(created)
-        return self.scene_drawing_cache.count() - 1
+        let created_index = self.scene_drawing_cache.count() - 1
+        self.scene_drawing_snapshots.set(snapshot_id, created_index)
+        self.last_scene_snapshot_id = snapshot_id
+        self.last_scene_cache_index = created_index
+        return created_index
     }
 
     private func refresh_scene_geometry(
         device:@GPU.Device,
-        cache:&CachedSceneDrawing,
-        snapshot:@Snapshot
+        cache:&CachedSceneDrawing
     ) {
         if cache.vertices != null { return }
-        let geometry = snapshot.geometry()
-        cache.vertex_count = geometry.vertex_count()
-        if geometry.is_empty() { return }
+        if cache.vertex_count == 0 { return }
         let byte_count = cache.vertex_count * 36
-        var bytes = Packing.drawing_vertices(geometry)
         cache.upload = device.upload_buffer(
             byte_count,
             "GFX.Scene2D retained drawing upload"
@@ -655,7 +711,7 @@ class Renderer {
         ))
         if let upload = cache.upload {
             if let destination = cache.vertices {
-                upload.write_packed(bytes, byte_count)
+                upload.write_packed(cache.bytes(), byte_count)
                 copy_buffer(device, upload, destination, byte_count)
             }
         }

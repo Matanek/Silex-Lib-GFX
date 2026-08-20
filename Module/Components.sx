@@ -12,6 +12,7 @@ public use GFX.Scene3D.AmbientLight as AmbientLight3D
 public use GFX.Scene3D.Camera as Camera3D
 public use GFX.Scene3D.CubeProjectorLight as CubeProjectorLight3D
 public use GFX.Scene3D.CubeProjectorLightGizmo as CubeProjectorLightGizmo3D
+public use GFX.Scene3D.Instances as Instances3D
 public use GFX.Scene3D.AlphaMode as AlphaMode3D
 public use GFX.Scene3D.Material as Material3D
 public use GFX.Scene3D.MaterialSettings as MaterialSettings3D

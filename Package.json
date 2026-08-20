@@ -1,8 +1,13 @@
 {
   "name": "GFX",
-  "version": "0.34.0",
-  "extensions": [],
-  "requires": { "silex": ">=0.38.30" },
+  "version": "0.35.0",
+  "extensions": {
+    "GFX.Physics": {
+      "friend": true
+    }
+  },
+  "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
+  "requires": { "silex": ">=0.38.34" },
   "dependencies": {
     "JSON": "^0.1.0",
     "STD": "^0.16.0"

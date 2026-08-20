@@ -5,11 +5,74 @@ use GFX.Assets.PNG
 use GFX.Color
 use GFX.Components
 use GFX.ECS
+use GFX.GPU
 use GFX.Input
 use GFX.Plugins
 use GFX.Resources
 use GFX.Scene3D
 use STD.Math
+use STD.Process
+use STD.Time.Clock
+
+struct Benchmark {
+    var clock:Clock
+    var elapsed:float
+    var sample_elapsed:float
+    var frames:int
+    var sample_frames:int
+    var started:bool
+    var moving:bool
+    var slowest_frame:float
+    let grass_count:int
+    let duration:float
+    let present_mode:str
+
+    init(
+        moving:bool = false,
+        grass_count:int = 5000,
+        duration:float = 5.0,
+        present_mode:str = "immediate"
+    ) {
+        self.clock = Clock()
+        self.elapsed = 0.0
+        self.sample_elapsed = 0.0
+        self.frames = 0
+        self.sample_frames = 0
+        self.started = false
+        self.moving = moving
+        self.slowest_frame = 0.0
+        self.grass_count = grass_count
+        self.duration = duration
+        self.present_mode = present_mode
+    }
+}
+
+func move_benchmark_camera(
+    benchmark:@Benchmark,
+    controller:&Resources.FirstPersonCamera3D,
+    world:&Resources.World
+) {
+    let time = benchmark.elapsed
+    let position = Math.Vec3(
+        Math.sin(time * 0.19) * 38.0,
+        1.7 + Math.sin(time * 0.41) * 0.35,
+        Math.sin(time * 0.13 + 1.3) * 38.0
+    )
+    let yaw = time * 0.55 + Math.sin(time * 0.17) * 1.2
+    let pitch = -0.08 + Math.sin(time * 0.37) * 0.28
+    controller.set_position(position)
+    controller.set_orientation(yaw, pitch)
+    let entity = controller.entity()
+    if world.is_alive(entity) {
+        world.update<Components.Transform3D>(entity, func(transform:&Components.Transform3D) {
+            transform.position = position
+            transform.rotation = Math.Quat.angle_axis(
+                yaw,
+                Math.Vec3.up()
+            ).multiply(Math.Quat.angle_axis(pitch, Math.Vec3.right()))
+        })
+    }
+}
 
 func textured_material(image:Assets.ImageHandle, scale:Math.Vec2) Components.MaterialSettings3D {
     return Components.MaterialSettings3D(
@@ -51,15 +114,16 @@ func world_scatter(count:int, seed:int) Scene3D.Scatter {
     return scatter
 }
 
-func spawn_scattered_mesh(
+func spawn_scattered_instances(
     world:&Resources.World,
-    transform:Components.Transform3D,
+    transforms:Components.Transform3D[],
     mesh:Scene3D.MeshHandle,
     material:Components.Material3D,
     settings:Components.MaterialSettings3D
 ) {
     world.spawn(ECS.EntityRecipe()
-        ..with(transform)
+        ..with(Components.Transform3D())
+        ..with(Components.Instances3D(transforms))
         ..with(Components.Mesh3D(mesh))
         ..with(material)
         ..with(settings)
@@ -86,29 +150,37 @@ func add_rocks(
     )
     large.scale_toward_edge(1.0, 0.72)
     var rock_texture = textured_material(grid, Math.Vec2(1.5))
+    var rock_transforms:Components.Transform3D[] = []
     for placement in large.generate() {
         var transform = placement
         transform.position.y = transform.scale.y * 0.35
-        spawn_scattered_mesh(world, transform, cube, rock_material, rock_texture)
+        rock_transforms.append(transform)
     }
+    spawn_scattered_instances(
+        world, rock_transforms, cube, rock_material, rock_texture
+    )
 
     let pebble_material = Components.Material3D(
         albedo:Color.bytes(121, 132, 141),
         roughness:0.98
     )
     var pebbles = world_scatter(320, 0x51_1E_80_1E)
-    pebbles.vary_rotation(Math.Vec3(), Math.Vec3(Math.two_pi()))
-    pebbles.vary_scale(
-        Math.Vec3(0.12, 0.08, 0.12),
-        Math.Vec3(0.65, 0.42, 0.65)
-    )
-    pebbles.soften_edges(0.15)
+        ..vary_rotation(Math.Vec3(), Math.Vec3(Math.two_pi()))
+        ..vary_scale(
+            Math.Vec3(0.12, 0.08, 0.12),
+            Math.Vec3(0.65, 0.42, 0.65)
+        )
+        ..soften_edges(0.15)
     var pebble_texture = textured_material(grid, Math.Vec2(0.8))
+    var pebble_transforms:Components.Transform3D[] = []
     for placement in pebbles.generate() {
         var transform = placement
         transform.position.y = transform.scale.y * 0.3
-        spawn_scattered_mesh(world, transform, cube, pebble_material, pebble_texture)
+        pebble_transforms.append(transform)
     }
+    spawn_scattered_instances(
+        world, pebble_transforms, cube, pebble_material, pebble_texture
+    )
 }
 
 func add_trees(
@@ -117,9 +189,9 @@ func add_trees(
     grid:Assets.ImageHandle
 ) {
     var trees = world_scatter(42, 0x51_1E_80_1F)
-    trees.vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
-    trees.vary_uniform_scale(0.72, 1.35)
-    trees.soften_edges(0.28)
+        ..vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
+        ..vary_uniform_scale(0.72, 1.35)
+        ..soften_edges(0.28)
 
     let trunk_material = Components.Material3D(
         albedo:Color.bytes(102, 76, 52),
@@ -131,31 +203,27 @@ func add_trees(
     )
     var trunk_texture = textured_material(grid, Math.Vec2(0.7, 2.5))
     var crown_texture = textured_material(grid, Math.Vec2(1.2))
+    var trunk_transforms:Components.Transform3D[] = []
+    var crown_transforms:Components.Transform3D[] = []
     for placement in trees.generate() {
         let size = placement.scale.x
-        spawn_scattered_mesh(
-            world,
-            Components.Transform3D(
-                position:placement.position.add(Math.Vec3(0.0, 1.35 * size, 0.0)),
-                rotation:placement.rotation,
-                scale:Math.Vec3(0.34 * size, 2.7 * size, 0.34 * size)
-            ),
-            cube,
-            trunk_material,
-            trunk_texture
-        )
-        spawn_scattered_mesh(
-            world,
-            Components.Transform3D(
-                position:placement.position.add(Math.Vec3(0.0, 3.15 * size, 0.0)),
-                rotation:placement.rotation,
-                scale:Math.Vec3(2.0 * size, 2.25 * size, 2.0 * size)
-            ),
-            cube,
-            crown_material,
-            crown_texture
-        )
+        trunk_transforms.append(Components.Transform3D(
+            position:placement.position.add(Math.Vec3(0.0, 1.35 * size, 0.0)),
+            rotation:placement.rotation,
+            scale:Math.Vec3(0.34 * size, 2.7 * size, 0.34 * size)
+        ))
+        crown_transforms.append(Components.Transform3D(
+            position:placement.position.add(Math.Vec3(0.0, 3.15 * size, 0.0)),
+            rotation:placement.rotation,
+            scale:Math.Vec3(2.0 * size, 2.25 * size, 2.0 * size)
+        ))
     }
+    spawn_scattered_instances(
+        world, trunk_transforms, cube, trunk_material, trunk_texture
+    )
+    spawn_scattered_instances(
+        world, crown_transforms, cube, crown_material, crown_texture
+    )
 }
 
 func compose_transform(
@@ -170,28 +238,35 @@ func compose_transform(
     )
 }
 
-func spawn_imported_tree(
+func spawn_imported_instances(
     world:&Resources.World,
     sources:ECS.Entity[],
-    placement:Components.Transform3D
+    placements:Components.Transform3D[],
+    shadow_distance:float = 0.0,
+    shadow_cascades:int = 4
 ) {
     for source in sources {
+        let source_transform = copy world.get<Components.Transform3D>(source)
+        let mesh = copy world.get<Components.Mesh3D>(source)
+        let material = copy world.get<Components.Material3D>(source)
+        var transforms:Components.Transform3D[] = []
+        for placement in placements {
+            transforms.append(compose_transform(placement, source_transform))
+        }
         var recipe = ECS.EntityRecipe()
-            ..with(compose_transform(
-                placement,
-                world.get<Components.Transform3D>(source)
+            ..with(Components.Transform3D())
+            ..with(Components.Instances3D(transforms))
+            ..with(Components.Mesh3D(
+                asset:mesh.asset,
+                visible:mesh.visible,
+                casts_shadows:mesh.casts_shadows,
+                shadow_distance:shadow_distance,
+                shadow_cascades:shadow_cascades
             ))
-            ..with(world.get<Components.Mesh3D>(source))
-            ..with(world.get<Components.Material3D>(source))
+            ..with(material)
         if world.has<Components.MaterialSettings3D>(source) {
-            let settings = world.get<Components.MaterialSettings3D>(source)
-            recipe.with(Components.MaterialSettings3D(
-                textures:settings.textures,
-                alpha:settings.alpha,
-                alpha_cutoff:settings.alpha_cutoff,
-                double_sided:settings.double_sided,
-                unlit:settings.unlit
-            ))
+            var settings = copy world.get<Components.MaterialSettings3D>(source)
+            recipe.with(settings)
         }
         world.spawn(recipe)
     }
@@ -205,46 +280,48 @@ func add_blender_trees(
     let model = GLTF.load("../../Assets/Models/Tree.glb")
     let source = model.instantiate(world, meshes, images)
     var trees = world_scatter(18, 0x51_1E_80_21)
-    trees.vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
-    trees.vary_uniform_scale(0.22, 0.32)
-    trees.soften_edges(0.32)
+        ..vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
+        ..vary_uniform_scale(0.22, 0.32)
+        ..soften_edges(0.32)
 
+    var placements:Components.Transform3D[] = []
     for generated in trees.generate() {
         var placement = generated
         placement.position.y = -model.minimum_bounds().y * placement.scale.y
-        spawn_imported_tree(world, source.entities, placement)
+        placements.append(placement)
     }
+    spawn_imported_instances(world, source.entities, placements)
     for entity in source.entities { world.destroy(entity) }
 }
 
 func add_grass(
     world:&Resources.World,
-    cube:Scene3D.MeshHandle,
-    grid:Assets.ImageHandle
+    meshes:&Resources.Meshes3D,
+    images:&Resources.Images
 ) {
-    var grass = world_scatter(900, 0x51_1E_80_20)
-    grass.vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
-    grass.vary_uniform_scale(0.65, 1.4)
-    grass.soften_edges(0.2)
-    let material = Components.Material3D(
-        albedo:Color.bytes(92, 132, 72),
-        roughness:1.0
-    )
-    var texture = textured_material(grid, Math.Vec2(0.35, 1.2))
-    for placement in grass.generate() {
-        let size = placement.scale.x
-        spawn_scattered_mesh(
-            world,
-            Components.Transform3D(
-                position:placement.position.add(Math.Vec3(0.0, 0.32 * size, 0.0)),
-                rotation:placement.rotation,
-                scale:Math.Vec3(0.08 * size, 0.64 * size, 0.22 * size)
-            ),
-            cube,
-            material,
-            texture
-        )
+    let model = GLTF.load("../../Assets/Models/Grass.glb")
+    let source = model.instantiate(world, meshes, images)
+    var grass_count = 5000
+    if option_requested("--benchmark-heavy") { grass_count = 50000 }
+    var grass = world_scatter(grass_count, 0x51_1E_80_20)
+        ..vary_rotation(Math.Vec3(), Math.Vec3(0.0, Math.two_pi(), 0.0))
+        ..vary_uniform_scale(0.5, 1.25)
+        ..soften_edges(0.2)
+
+    var placements:Components.Transform3D[] = []
+    for generated in grass.generate() {
+        var placement = generated
+        placement.position.y = -model.minimum_bounds().y * placement.scale.y
+        placements.append(placement)
     }
+    spawn_imported_instances(
+        world,
+        source.entities,
+        placements,
+        shadow_distance:20.0,
+        shadow_cascades:1
+    )
+    for entity in source.entities { world.destroy(entity) }
 }
 
 func add_lighting(world:&Resources.World) {
@@ -254,13 +331,19 @@ func add_lighting(world:&Resources.World) {
             intensity:0.1
         ))
     )
-    var sun = Components.SunLight3D(
-        direction:Math.Vec3(-0.35, -0.8, -0.25).normalized(),
-        intensity:3.6
-    )
-    sun.shadow_size = Math.Vec2(42.0)
-    sun.shadow_depth = 90.0
-    sun.shadow_distance = 45.0
+    var sun = Components.SunLight3D()
+        ..direction = Math.Vec3(-0.35, -0.8, -0.25).normalized()
+        ..intensity = 3.6
+        ..shadow_size = Math.Vec2(42.0)
+        ..shadow_depth = 90.0
+        ..shadow_distance = 45.0
+        ..shadow_cascade_distances = Math.Vec4(22.0, 31.0, 38.0, 45.0)
+    if option_requested("--benchmark-hard-shadows") {
+        sun.shadow.softness = 0.0
+    }
+    if option_requested("--benchmark-no-shadows") {
+        sun.shadow.enabled = false
+    }
     world.spawn(ECS.EntityRecipe()..with(sun))
 }
 
@@ -275,7 +358,7 @@ func create_world(
     add_rocks(world, cube, grid)
     add_trees(world, cube, grid)
     add_blender_trees(world, meshes, images)
-    add_grass(world, cube, grid)
+    add_grass(world, meshes, images)
     add_lighting(world)
 }
 
@@ -288,25 +371,136 @@ func exit_application(
     }
 }
 
+func benchmark(
+    benchmark:&Benchmark,
+    renderer:@Resources.Renderer,
+    window:@Resources.Window,
+    controller:&Application.Controller
+) {
+    let delta = benchmark.clock.tick()
+    if !benchmark.started {
+        benchmark.started = true
+        return
+    }
+    benchmark.elapsed += delta
+    benchmark.sample_elapsed += delta
+    benchmark.frames++
+    benchmark.sample_frames++
+    if benchmark.elapsed > 0.5 {
+        benchmark.slowest_frame = Math.max(benchmark.slowest_frame, delta)
+    }
+    if benchmark.sample_elapsed >= 5.0 || benchmark.elapsed >= benchmark.duration {
+        let stats = renderer.stats()
+        print(
+            "SILEX_GFX_WORLD seconds=$(benchmark.elapsed) " +
+            "present=$(benchmark.present_mode) grass=$(benchmark.grass_count) " +
+            "moving=$(benchmark.moving) " +
+            "fps=$(benchmark.sample_frames as float / benchmark.sample_elapsed) " +
+            "slowest_ms=$(benchmark.slowest_frame * 1000.0) " +
+            "pixels=$(window.pixel_size().x)x$(window.pixel_size().y) " +
+            "color_draws=$(stats.color_draw_calls()) shadow_draws=$(stats.shadow_draw_calls()) " +
+            "color_triangles=$(stats.color_triangles()) shadow_triangles=$(stats.shadow_triangles())"
+        )
+        benchmark.sample_elapsed = 0.0
+        benchmark.sample_frames = 0
+    }
+    if benchmark.elapsed >= benchmark.duration {
+        controller.stop()
+    }
+}
+
+func option_requested(expected:str) bool {
+    match Process.arguments() {
+        failure(error) => { panic(error.detail) }
+        success(arguments) => {
+            for argument in arguments {
+                if argument == expected { return true }
+            }
+        }
+    }
+    return false
+}
+
 func main() {
-    Application()
-        ..add_plugin(Plugins.Window(Plugins.WindowSettings()
-            ..title = "Scene3D — World (WASD, Shift, Escape)"
-            ..width = 1280
-            ..height = 720
-            ..maximized = true
-        ))
+    let moving_benchmark = option_requested("--benchmark-moving")
+    let focused_benchmark = option_requested("--benchmark-focused")
+    let large_benchmark = option_requested("--benchmark-large")
+    let retina_benchmark = option_requested("--benchmark-retina")
+    let heavy_benchmark = option_requested("--benchmark-heavy")
+    let no_msaa_benchmark = option_requested("--benchmark-no-msaa")
+    let hard_shadow_benchmark = option_requested("--benchmark-hard-shadows")
+    let no_shadow_benchmark = option_requested("--benchmark-no-shadows")
+    let soak_benchmark = option_requested("--benchmark-soak")
+    let panel_benchmark = option_requested("--benchmark-panel")
+    let synchronized_benchmark = option_requested("--benchmark-synchronized")
+    let mailbox_benchmark = option_requested("--benchmark-mailbox")
+    let benchmark_requested = option_requested("--benchmark") ||
+        moving_benchmark || focused_benchmark || large_benchmark ||
+        retina_benchmark || heavy_benchmark || no_msaa_benchmark ||
+        hard_shadow_benchmark || no_shadow_benchmark || soak_benchmark ||
+        panel_benchmark || synchronized_benchmark || mailbox_benchmark
+    var camera_settings = Plugins.FirstPersonCamera3DSettings()
+        ..position = Math.Vec3(0.0, 1.7, 8.0)
+        ..move_speed = 6.0
+        ..sprint_multiplier = 2.0
+        ..far_plane = 180.0
+    if benchmark_requested { camera_settings.capture_mouse = false }
+    var window_settings = Plugins.WindowSettings()
+        ..title = "Scene3D — World (WASD, Shift, Escape)"
+        ..width = 1280
+        ..height = 720
+        ..high_pixel_density = retina_benchmark
+        ..maximized = !benchmark_requested
+        ..focusable = !benchmark_requested || focused_benchmark
+    if large_benchmark {
+        window_settings.width = 2560
+        window_settings.height = 1440
+    }
+    var rendering_settings = Plugins.RenderingSettings()
+    if no_msaa_benchmark {
+        rendering_settings.antialiasing = Plugins.RenderingAntialiasing.none
+    }
+    var gpu_settings = Plugins.GPUSettings()
+    if benchmark_requested {
+        var present_mode = GPU.PresentMode.immediate
+        if synchronized_benchmark {
+            present_mode = GPU.PresentMode.synchronized
+        } elif mailbox_benchmark {
+            present_mode = GPU.PresentMode.mailbox
+        }
+        gpu_settings.surface = GPU.SurfaceSettings(present_mode:present_mode)
+    }
+    var application = Application()
+        ..add_plugin(Plugins.Window(window_settings))
+        ..add_plugin(Plugins.GPU(gpu_settings))
+        ..add_plugin(Plugins.Rendering(rendering_settings))
         ..add_plugin(Plugins.Scene3D())
-        ..add_plugin(Plugins.FirstPersonCamera3D(Plugins.FirstPersonCamera3DSettings()
-            ..position = Math.Vec3(0.0, 1.7, 8.0)
-            ..move_speed = 6.0
-            ..sprint_multiplier = 2.0
-            ..far_plane = 180.0
-        ))
-        ..add_plugin(Plugins.PerformancePanel())
+        ..add_plugin(Plugins.FirstPersonCamera3D(camera_settings))
         ..add_resource(Resources.Skybox3D.procedural(Scene3D.ProceduralSky.day()))
         ..add_resource(Resources.ToneMapping3D.aces(exposure:0.25))
         ..add_system(Application.Schedule.startup, create_world)
         //..add_system(Application.Schedule.update, exit_application)
-        ..run()
+    if !benchmark_requested || panel_benchmark {
+        application.add_plugin(Plugins.PerformancePanel())
+    }
+    if benchmark_requested {
+        var grass_count = 5000
+        if heavy_benchmark { grass_count = 50000 }
+        var duration = 5.0
+        if soak_benchmark { duration = 60.0 }
+        var present_mode = "immediate"
+        if synchronized_benchmark { present_mode = "synchronized" }
+        elif mailbox_benchmark { present_mode = "mailbox" }
+        application.add_resource(Benchmark(
+            moving:moving_benchmark || soak_benchmark,
+            grass_count:grass_count,
+            duration:duration,
+            present_mode:present_mode
+        ))
+        if moving_benchmark || soak_benchmark {
+            application.add_system(Application.Schedule.update, move_benchmark_camera)
+        }
+        application.add_after_system(Application.Schedule.render, benchmark)
+    }
+    application.run()
 }

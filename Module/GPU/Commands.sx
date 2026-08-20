@@ -23,8 +23,8 @@ public struct ColorTarget {
     var resolve:Texture? = null
     var resolve_mip_level:int = 0
     var resolve_layer:int = 0
-    var cycle:bool = true
-    var cycle_resolve:bool = true
+    var cycle:bool = false
+    var cycle_resolve:bool = false
 }
 
 public struct DepthTarget {
@@ -37,7 +37,7 @@ public struct DepthTarget {
     var clear_stencil:uint8 = 0
     var mip_level:int = 0
     var layer:int = 0
-    var cycle:bool = true
+    var cycle:bool = false
     module var native_texture:uint = 0
     module var native_owner:uint = 0
 }
@@ -129,6 +129,7 @@ public class CommandBuffer {
     private var handle:uint
     private var pass_active:bool
     private var scratch_address:uint
+    private var records_shadows:bool
 
     module init(device:Device, handle:uint) {
         self.device_handle = device.native_handle()
@@ -136,6 +137,7 @@ public class CommandBuffer {
         self.handle = handle
         self.pass_active = false
         self.scratch_address = C.address_bits(sdl_malloc(320 as C.Size))
+        self.records_shadows = false
         if self.scratch_address == 0 as uint { panic("GFX.GPU could not allocate command scratch memory") }
     }
 
@@ -161,6 +163,42 @@ public class CommandBuffer {
         if texture == 0 as uint { return null }
         let color_target = self.scratch_address
         encode_color_target_handle(texture, options, color_target)
+        var depth_address:uint = 0
+        if var configured = depth {
+            self.require_owner(depth_owner(configured))
+            depth_address = self.scratch_address + 64 as uint
+            encode_depth_target(configured, depth_address)
+        }
+        return self.begin_render(color_target, 1, depth_address, width, height)
+    }
+
+    package func render_resolved(
+        surface:@Surface,
+        color:@Texture,
+        clear:Color = Color.black(),
+        depth:DepthTarget? = null
+    ) RenderPass? {
+        self.require_available("begin a multisampled window render pass")
+        self.require_owner(surface.owner_handle())
+        self.require_owner(color.owner_handle())
+        if color.samples() == Types.Samples.one {
+            panic("GFX.GPU multisampled window color must use more than one sample")
+        }
+        var texture:uint = 0
+        var width:uint32 = 0
+        var height:uint32 = 0
+        require_gpu_action(sdl_wait_and_acquire_gpu_swapchain_texture(
+            C.pointer_bits(self.handle), C.pointer_bits(surface.native_window()),
+            C.mutable_pointer(texture), C.mutable_pointer(width), C.mutable_pointer(height)
+        ) != 0, "acquire the next window image")
+        if texture == 0 as uint { return null }
+        if color.width() != width as int || color.height() != height as int {
+            panic("GFX.GPU multisampled window color must match the drawable size")
+        }
+        let color_target = self.scratch_address
+        encode_resolved_color_target(
+            color.native_handle(), texture, clear, color_target
+        )
         var depth_address:uint = 0
         if var configured = depth {
             self.require_owner(depth_owner(configured))
@@ -373,6 +411,7 @@ public class CommandBuffer {
     module func require_resource(owner:uint) { self.require_owner(owner) }
     module func native_handle() uint { return self.handle }
     module func native_device() uint { return self.device_handle }
+    package func record_shadows() { self.records_shadows = true }
     module func record_render_pass() { if var device = self.device_owner { device.record_render_pass() } }
     module func record_pipeline_binding(primitive:Types.Primitive) {
         if var device = self.device_owner { device.record_pipeline_binding(primitive) }
@@ -380,7 +419,9 @@ public class CommandBuffer {
     module func record_uniform(byte_count:int) { if var device = self.device_owner { device.record_uniform(byte_count) } }
     module func record_texture_binding() { if var device = self.device_owner { device.record_texture_binding() } }
     module func record_draw(elements:int, instances:int, indexed:bool) {
-        if var device = self.device_owner { device.record_draw(elements, instances, indexed) }
+        if var device = self.device_owner {
+            device.record_draw(elements, instances, indexed, self.records_shadows)
+        }
     }
     module func record_indirect_draw(count:int) { if var device = self.device_owner { device.record_indirect_draw(count) } }
 
@@ -913,6 +954,24 @@ local func encode_color_target_handle(texture:uint, clear:Color, address:uint) {
     let resolve = C.store<uint>(address, 40 as uint, 0 as uint)
     let resolve_mip = C.store<uint32>(address, 48 as uint, 0); let resolve_layer = C.store<uint32>(address, 52 as uint, 0)
     let cycle = C.store<uint8>(address, 56 as uint, 0); let cycle_resolve = C.store<uint8>(address, 57 as uint, 0)
+}
+local func encode_resolved_color_target(
+    texture:uint,
+    resolve:uint,
+    clear:Color,
+    address:uint
+) {
+    let target = C.store<uint>(address, 0 as uint, texture)
+    let mip = C.store<uint32>(address, 8 as uint, 0)
+    let layer = C.store<uint32>(address, 12 as uint, 0)
+    encode_color(clear, address + 16)
+    let load = C.store<int32>(address, 32 as uint, Types.Load.clear.raw_value as int32)
+    let store = C.store<int32>(address, 36 as uint, Types.Store.resolve.raw_value as int32)
+    let resolved = C.store<uint>(address, 40 as uint, resolve)
+    let resolve_mip = C.store<uint32>(address, 48 as uint, 0)
+    let resolve_layer = C.store<uint32>(address, 52 as uint, 0)
+    let cycle = C.store<uint8>(address, 56 as uint, 0)
+    let cycle_resolve = C.store<uint8>(address, 57 as uint, 0)
 }
 local func encode_color_target(value:ColorTarget, address:uint) {
     let texture = C.store<uint>(address, 0 as uint, required_texture(value.texture).native_handle())

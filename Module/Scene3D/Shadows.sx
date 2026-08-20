@@ -3,7 +3,9 @@ use GFX.Scene3D.Lighting.Kind as LightKind
 use GFX.Scene3D.Lighting.Light
 use STD.Math
 
-func atlas_size() int { return 4096 }
+// Four sun cascades occupy a 2x2 atlas. An 8192 atlas preserves the same
+// 4096x4096 resolution per cascade used by NKEngine's WorldDemo.
+func atlas_size() int { return 8192 }
 
 struct CameraView {
     let position:Math.Vec3
@@ -209,13 +211,32 @@ class Frame {
         let near_plane = Math.max(camera.near_plane, 0.001)
         let far_plane = sun_shadow_distance(light, camera)
         var splits:float[] = [near_plane]
-        var index = 1
-        while index <= cascade_count {
-            let ratio = index as float / cascade_count as float
-            let linear = Math.lerp(near_plane, far_plane, ratio)
-            let logarithmic = near_plane * Math.pow(far_plane / near_plane, ratio)
-            splits.append(Math.lerp(linear, logarithmic, 0.65))
-            index++
+        if valid_manual_cascades(
+            light.shadow_cascade_distances,
+            near_plane,
+            far_plane
+        ) {
+            let configured = light.shadow_cascade_distances
+            let values:float[] = [
+                configured.x,
+                configured.y,
+                configured.z,
+                configured.w
+            ]
+            var index = 0
+            while index < cascade_count {
+                splits.append(Math.min(values[index], far_plane))
+                index++
+            }
+        } else {
+            var index = 1
+            while index <= cascade_count {
+                let ratio = index as float / cascade_count as float
+                let linear = Math.lerp(near_plane, far_plane, ratio)
+                let logarithmic = near_plane * Math.pow(far_plane / near_plane, ratio)
+                splits.append(Math.lerp(linear, logarithmic, 0.65))
+                index++
+            }
         }
         splits[cascade_count] = far_plane
 
@@ -321,6 +342,15 @@ class Frame {
     }
 }
 
+func valid_manual_cascades(
+    value:Math.Vec4,
+    near_plane:float,
+    far_plane:float
+) bool {
+    return value.x > near_plane && value.y > value.x &&
+        value.z > value.y && value.w > value.z && value.w <= far_plane
+}
+
 func camera_fitted_sun_projection(
     light:Light,
     camera:CameraView,
@@ -333,38 +363,55 @@ func camera_fitted_sun_projection(
     var center = Math.Vec3()
     for corner in corners { center = center.add(corner) }
     center = center.divide(corners.count() as float)
-    var radius = 0.001
-    for corner in corners {
-        radius = Math.max(radius, corner.subtract(center).length())
-    }
-    radius += light.shadow_center.length() + 0.25
-    radius = Math.ceil(radius * 16.0) / 16.0
-    center = center.add(light.shadow_center)
     let caster_padding = Math.max(light.shadow_depth * 0.5, 1.0)
-    let eye_distance = radius + caster_padding
+    let eye_distance = caster_padding + slice_far + 1.0
     let view = Math.Mat4.look_at(
         center.subtract(direction.multiply(eye_distance)),
         center,
         shadow_up(direction)
     )
+    let first = view.multiply(Math.Vec4(corners[0], 1.0)).xyz()
+    var minimum = first
+    var maximum = first
+    for corner in corners {
+        let light_space = view.multiply(Math.Vec4(corner, 1.0)).xyz()
+        minimum.x = Math.min(minimum.x, light_space.x)
+        minimum.y = Math.min(minimum.y, light_space.y)
+        minimum.z = Math.min(minimum.z, light_space.z)
+        maximum.x = Math.max(maximum.x, light_space.x)
+        maximum.y = Math.max(maximum.y, light_space.y)
+        maximum.z = Math.max(maximum.z, light_space.z)
+    }
     let resolution = Math.max(shadow_resolution, 1) as float
-    let texel = radius * 2.0 / resolution
-    let world_origin = view.multiply(Math.Vec4(Math.Vec3(), 1.0))
-    let projection_x = world_origin.x - snap_shadow_center(world_origin.x, texel)
-    let projection_y = world_origin.y - snap_shadow_center(world_origin.y, texel)
-    let projection_near = shadow_near_plane(
+    let width = Math.max(maximum.x - minimum.x, 0.001)
+    let height = Math.max(maximum.y - minimum.y, 0.001)
+    let texel_x = width / resolution
+    let texel_y = height / resolution
+    let half_width = width * 0.5 + texel_x * 2.0
+    let half_height = height * 0.5 + texel_y * 2.0
+    let projection_x = snap_shadow_center(
+        (minimum.x + maximum.x) * 0.5,
+        texel_x
+    )
+    let projection_y = snap_shadow_center(
+        (minimum.y + maximum.y) * 0.5,
+        texel_y
+    )
+    let nearest_depth = -maximum.z
+    let farthest_depth = -minimum.z
+    let projection_near = Math.max(
         light.shadow.near_plane,
-        eye_distance * 2.0
+        nearest_depth - caster_padding
     )
     let projection_far = Math.max(
         projection_near + 0.001,
-        radius * 2.0 + caster_padding * 2.0
+        farthest_depth + 1.0
     )
     return orthographic_depth_zero_to_one(
-        projection_x - radius,
-        projection_x + radius,
-        projection_y - radius,
-        projection_y + radius,
+        projection_x - half_width,
+        projection_x + half_width,
+        projection_y - half_height,
+        projection_y + half_height,
         projection_near,
         projection_far
     ).multiply(view)

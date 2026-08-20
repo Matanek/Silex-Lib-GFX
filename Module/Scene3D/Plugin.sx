@@ -5,10 +5,13 @@ use GFX.Assets.Images
 use GFX.ECS
 use GFX.GPU
 use GFX.Rendering
+use GFX.Rendering.Multisampling.Multisampling
 use GFX.Scene3D.Meshes
+use GFX.Scene3D.Mesh
 use GFX.Scene3D.Renderer
 use GFX.Scene3D.Skybox.Skybox
 use GFX.Scene3D.ToneMapping
+use GFX.Scene3D.Transform
 use GFX.Window
 
 public struct Plugin:PluginProtocol {
@@ -38,8 +41,13 @@ public struct Plugin:PluginProtocol {
     }
 }
 
-func start_scene(device:@GPU.Device, surface:@GPU.Surface, renderer:&Renderer) {
-    renderer.start(device, surface)
+func start_scene(
+    device:@GPU.Device,
+    surface:@GPU.Surface,
+    multisampling:@Multisampling,
+    renderer:&Renderer
+) {
+    renderer.start(device, surface, multisampling.samples())
 }
 
 func update_viewport(window:@Window, renderer:&Renderer) {
@@ -57,11 +65,16 @@ func update_skybox(skybox:@Skybox, renderer:&Renderer) {
 func prepare_scene(
     device:@GPU.Device,
     world:@ECS.World,
+    query:ECS.Query<(ECS.Entity, @Transform, @Mesh)>,
     meshes:@Meshes,
     images:@Images,
     renderer:&Renderer
 ) {
-    renderer.prepare(device, world, meshes, images)
+    renderer.begin_prepare(world)
+    for (entity, transform, mesh) in query {
+        renderer.collect(world, entity, transform, mesh, meshes)
+    }
+    renderer.finish_prepare(device, meshes, images)
 }
 
 func render_scene(pass:@GPU.RenderPass, application:@Application) {

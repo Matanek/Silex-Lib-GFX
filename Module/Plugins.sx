@@ -20,6 +20,7 @@ public use GFX.GPU.Plugin.Settings as GPUSettings
 public use GFX.Input.Plugin as Input
 public use GFX.Rendering.Plugin as Rendering
 public use GFX.Rendering.Plugin.Settings as RenderingSettings
+public use GFX.Rendering.Antialiasing.Antialiasing as RenderingAntialiasing
 public use GFX.Scene2D.Grid as Grid2D
 public use GFX.Scene2D.Plugin as Scene2D
 public use GFX.Scene2D.ViewportCamera as ViewportCamera2D

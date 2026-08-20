@@ -84,7 +84,20 @@ test "expose components resources and plugins through intentional umbrellas" {
     let grid_2d = Plugins.Grid2D()
     let grid_3d = Plugins.Grid3D()
     let window = Plugins.Window(Plugins.WindowSettings()..hidden = true)
+    let rendering_defaults = Plugins.RenderingSettings()
+    let rendering_without_aa = Plugins.RenderingSettings(
+        antialiasing:Plugins.RenderingAntialiasing.none
+    )
     let viewport = Plugins.ViewportCamera3D(
         Plugins.ViewportCamera3DSettings()..distance = 12.0
+    )
+
+    assert(
+        rendering_defaults.antialiasing ==
+        Plugins.RenderingAntialiasing.msaa_4x
+    )
+    assert(
+        rendering_without_aa.antialiasing ==
+        Plugins.RenderingAntialiasing.none
     )
 }

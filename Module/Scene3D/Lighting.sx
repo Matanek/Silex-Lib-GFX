@@ -36,6 +36,7 @@ struct Light {
     let shadow_size:Math.Vec2
     let shadow_depth:float
     let shadow_distance:float
+    let shadow_cascade_distances:Math.Vec4
     let shadow_follows_camera:bool
     let shadow:Shadow
 }
@@ -124,6 +125,7 @@ class Frame {
                 shadow_size:Math.Vec2(8.0),
                 shadow_depth:12.0,
                 shadow_distance:0.0,
+                shadow_cascade_distances:Math.Vec4(),
                 shadow_follows_camera:true,
                 shadow:Shadow(enabled:false)
             ))
@@ -161,6 +163,7 @@ class Frame {
                 ),
                 shadow_depth:Math.max(light.shadow_depth, 0.002),
                 shadow_distance:Math.max(light.shadow_distance, 0.0),
+                shadow_cascade_distances:light.shadow_cascade_distances,
                 shadow_follows_camera:light.shadow_follows_camera,
                 shadow:sanitized_shadow(light.shadow)
             ))
@@ -189,6 +192,7 @@ class Frame {
                 shadow_size:Math.Vec2(8.0),
                 shadow_depth:12.0,
                 shadow_distance:0.0,
+                shadow_cascade_distances:Math.Vec4(),
                 shadow_follows_camera:false,
                 shadow:sanitized_shadow(light.shadow)
             ))
@@ -218,6 +222,7 @@ class Frame {
                 shadow_size:Math.Vec2(8.0),
                 shadow_depth:12.0,
                 shadow_distance:0.0,
+                shadow_cascade_distances:Math.Vec4(),
                 shadow_follows_camera:false,
                 shadow:sanitized_shadow(light.shadow)
             ))
@@ -251,6 +256,7 @@ class Frame {
                 shadow_size:Math.Vec2(size.x, size.y),
                 shadow_depth:size.z,
                 shadow_distance:0.0,
+                shadow_cascade_distances:Math.Vec4(),
                 shadow_follows_camera:false,
                 shadow:sanitized_shadow(light.shadow)
             ))
@@ -281,6 +287,7 @@ class Frame {
                 shadow_size:Math.Vec2(radius * 2.0),
                 shadow_depth:length,
                 shadow_distance:0.0,
+                shadow_cascade_distances:Math.Vec4(),
                 shadow_follows_camera:false,
                 shadow:sanitized_shadow(light.shadow)
             ))

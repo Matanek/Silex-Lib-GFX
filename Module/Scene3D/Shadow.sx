@@ -20,7 +20,12 @@ public struct Shadow {
     }
 
     static func sun() Shadow {
-        return Shadow(near_plane:0.1, bias:0.00045, normal_offset:0.0005)
+        return Shadow(
+            near_plane:0.1,
+            bias:0.00045,
+            normal_offset:0.0005,
+            softness:0.65
+        )
     }
 
     static func projector() Shadow {

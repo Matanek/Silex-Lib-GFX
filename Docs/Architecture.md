@@ -1,15 +1,26 @@
 # GFX architecture
 
-`GFX` is a single package and a root namespace for its domains. There are no
-official `GFX.*` packages to install separately:
+`GFX` is the core package and root namespace for its domains. Its fundamental
+application and graphics capabilities are distributed together:
 
 ```text
 silex install GFX
 ```
 
-This command installs the complete API, its shaders, examples, and required
-native artifacts. In source code, `GFX` is the namespace parent and
+This command installs the complete core API, its shaders, examples, and
+required native artifacts. In source code, `GFX` is the namespace parent and
 `GFX.Application`, `GFX.Scene2D`, and `GFX.Audio` are child modules.
+
+Large capabilities may be distributed as explicitly authorized child packages.
+`GFX.Physics` is the first such extension: it evolves independently and remains
+installed separately while it is under development.
+
+Authorization is a delegation from GFX, not a permanent transfer of its
+namespace. If GFX later supplies `GFX.Physics` itself, its module is canonical.
+The separately released package can share that exact public façade only when
+GFX grants it exact `merge: true` permission; otherwise the compiler reports
+the incompatible providers. A merge is additive, preserves declaration
+ownership and rejects public name collisions.
 
 ## Modular monolith
 
@@ -50,6 +61,12 @@ They are views over the domain API, not new owners and not separate packages.
 Domain modules remain available when an application wants a focused import.
 Dimensional suffixes appear in `Components` and `Plugins` because those two
 umbrellas deliberately place the 2D and 3D vocabularies side by side.
+
+The GFX manifest opens exactly these three modules as reexport-only catalogs.
+An authorized child package may contribute declarations that it owns from its
+portable principal module. The compiler rejects executable declarations,
+foreign ownership and every alias collision, so the umbrellas remain views
+rather than cross-package implementation modules.
 
 ```silex
 use GFX.Components
@@ -143,7 +160,9 @@ those details are not extension points.
 
 ## Invariants
 
-1. `GFX` is the only official package and the only distribution manifest.
+1. `GFX` is the complete graphics and application core; every official
+   `GFX.*` package requires exact namespace authorization and an explicit
+   decision about privileged access and suite installation.
 2. A domain expresses a user capability, never a technical layer.
 3. Every shader, asset, example, test, and document belongs to its domain.
 4. `Rendering` remains generic: scene geometry, materials, and shaders do not

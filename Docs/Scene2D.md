@@ -7,6 +7,7 @@ declarations remain unsuffixed.
 
 ```silex
 use GFX.Canvas
+use GFX.Color
 use GFX.Components
 ```
 
@@ -29,8 +30,14 @@ viewport. This screen-space mode also remains top-left and Y-down, while
 Canvases that share one authored value also share their cached geometry and
 are rendered as instances.
 
+Equivalent vector geometry is interned by the renderer even when placements
+come from distinct authored Canvas objects. Per-entity color, layer, pivot, and
+size remain independent without requiring a batching API or shared-cache
+ceremony in application code.
+
 ```silex
 use GFX.Canvas
+use GFX.Color
 use GFX.Components
 use GFX.ECS
 use STD.Math
@@ -38,7 +45,7 @@ use STD.Math
 var drawing = Canvas()
 world.spawn(ECS.EntityRecipe()
     ..with(Components.Transform2D(position:Math.Vec2(40.0, 20.0)))
-    ..with(Components.Canvas(drawing, 320, 180))
+    ..with(Components.Canvas(drawing, 320, 180)..color = Color.cyan_400())
 )
 world.spawn(ECS.EntityRecipe()
     ..with(Components.Transform2D())

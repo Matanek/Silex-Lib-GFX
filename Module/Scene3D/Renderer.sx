@@ -8,8 +8,10 @@ use GFX.Scene3D.Camera
 use GFX.Scene3D.Batches.Batch
 use GFX.Scene3D.Batches.Draw
 use GFX.Scene3D.Batches.DrawSettings
+use GFX.Scene3D.Batches.same_matrix
 use GFX.Scene3D.Gizmos
 use GFX.Scene3D.Grid
+use GFX.Scene3D.Instances
 use GFX.Scene3D.Lighting
 use GFX.Scene3D.Material
 use GFX.Scene3D.Material.MaterialSettings
@@ -36,6 +38,7 @@ class CachedMesh {
     var vertex_capacity:int
     var index_capacity:int
     var index_count:int
+    var local_radius:float
 
     init(handle:MeshHandle) {
         self.index = handle.index()
@@ -44,6 +47,7 @@ class CachedMesh {
         self.vertex_capacity = 0
         self.index_capacity = 0
         self.index_count = 0
+        self.local_radius = 0.0
     }
 }
 
@@ -62,6 +66,22 @@ class CachedImage {
     }
 }
 
+class CachedInstances {
+    let identity:int
+    var revision:int
+    var parent:Math.Mat4
+    var models:Math.Mat4[]
+    var used:bool
+
+    init(identity:int) {
+        self.identity = identity
+        self.revision = 0
+        self.parent = Math.Mat4.identity()
+        self.models = []
+        self.used = true
+    }
+}
+
 class Renderer {
     private var pipeline:GPU.GraphicsPipeline? = null
     private var double_sided_pipeline:GPU.GraphicsPipeline? = null
@@ -74,6 +94,7 @@ class Renderer {
     private var skybox_pipeline:GPU.GraphicsPipeline? = null
     private var meshes:CachedMesh[]
     private var images:CachedImage[]
+    private var instance_models:CachedInstances[]
     private var draws:Draw[]
     private var batches:Batch[]
     private var active_batches:int
@@ -93,6 +114,7 @@ class Renderer {
     private var skybox_background_uniform:str
     private var shadow_texture:GPU.Texture? = null
     private var shadow_sampler:GPU.Sampler? = null
+    private var shadow_depth_format:GPU.TextureFormat
     private var material_sampler:GPU.Sampler? = null
     private var white_srgb:GPU.Texture? = null
     private var white_linear:GPU.Texture? = null
@@ -107,6 +129,7 @@ class Renderer {
     init() {
         self.meshes = []
         self.images = []
+        self.instance_models = []
         self.draws = []
         self.batches = []
         self.active_batches = 0
@@ -124,25 +147,38 @@ class Renderer {
         self.tone_mapping_uniform = "\0"
         self.skybox_background_uniform = "\0"
         self.shadow_atlas_size = 0
+        self.shadow_depth_format = GPU.TextureFormat.depth16
         self.gizmo_capacity = 0
         self.gizmo_count = 0
     }
 
-    func start(device:@GPU.Device, surface:@GPU.Surface) {
-        self.pipeline = forward_pipeline(device, surface, false, false)
-        self.double_sided_pipeline = forward_pipeline(device, surface, true, false)
-        self.transparent_pipeline = forward_pipeline(device, surface, false, true)
+    func start(
+        device:@GPU.Device,
+        surface:@GPU.Surface,
+        samples:GPU.Samples
+    ) {
+        self.shadow_depth_format = best_shadow_depth_format(device)
+        self.pipeline = forward_pipeline(device, surface, false, false, samples)
+        self.double_sided_pipeline = forward_pipeline(device, surface, true, false, samples)
+        self.transparent_pipeline = forward_pipeline(device, surface, false, true, samples)
         self.transparent_double_sided_pipeline = forward_pipeline(
             device,
             surface,
             true,
-            true
+            true,
+            samples
         )
-        self.shadow_pipeline = shadow_pipeline(device, false)
-        self.point_shadow_pipeline = shadow_pipeline(device, true)
-        self.gizmo_pipeline = gizmo_pipeline(device, surface)
-        self.skybox_pipeline = skybox_pipeline(device, surface)
-        if self.grid != null { self.grid_pipeline = grid_pipeline(device, surface) }
+        self.shadow_pipeline = shadow_pipeline(
+            device, false, self.shadow_depth_format
+        )
+        self.point_shadow_pipeline = shadow_pipeline(
+            device, true, self.shadow_depth_format
+        )
+        self.gizmo_pipeline = gizmo_pipeline(device, surface, samples)
+        self.skybox_pipeline = skybox_pipeline(device, surface, samples)
+        if self.grid != null {
+            self.grid_pipeline = grid_pipeline(device, surface, samples)
+        }
         self.ensure_shadow_resources(device, 1)
         self.material_sampler = device.sampler(GPU.SamplerSettings(
             min_filter:GPU.Filter.linear,
@@ -175,64 +211,111 @@ class Renderer {
         )
     }
 
-    func prepare(
-        device:@GPU.Device,
-        world:@ECS.World,
-        catalog:@Meshes,
-        images:@Images
-    ) {
+    func begin_prepare(world:@ECS.World) {
         self.draws.clear()
+        for cache in self.instance_models { cache.used = false }
         self.camera_ready = false
         self.camera_view = null
         self.lighting.rebuild(world)
         self.gizmos.rebuild(world)
         self.find_camera(world)
-        for entity in world.entities() {
-            if world.has<Transform>(entity) && world.has<Mesh>(entity) {
-                let mesh = world.get<Mesh>(entity)
-                if mesh.visible && catalog.contains(mesh.asset) {
-                    var cache = self.cache_for(mesh.asset)
-                    var material = Material()
-                    if world.has<Material>(entity) { material = world.get<Material>(entity) }
-                    var textures = MaterialTextures()
-                    var settings = DrawSettings()
-                    if world.has<MaterialSettings>(entity) {
-                        let configured = world.get<MaterialSettings>(entity)
-                        textures = configured.textures
-                        settings = DrawSettings(
-                            alpha:configured.alpha,
-                            alpha_cutoff:configured.alpha_cutoff,
-                            double_sided:configured.double_sided,
-                            unlit:configured.unlit
-                        )
-                    }
-                    let position = world.get<Transform>(entity).position
-                    self.draws.append(Draw(
-                        cache:self.index_of(cache),
-                        model:world.get<Transform>(entity).matrix(),
-                        material:material,
-                        settings:settings,
-                        distance:position.subtract(self.camera_position).length_squared(),
-                        textures:textures
-                    ))
-                }
-            }
+    }
+
+    func collect(
+        world:@ECS.World,
+        entity:ECS.Entity,
+        transform:@Transform,
+        mesh:@Mesh,
+        catalog:@Meshes
+    ) {
+        if !mesh.visible || !catalog.contains(mesh.asset) { return }
+        var cache = self.cache_for(mesh.asset)
+        var material = Material()
+        if world.has<Material>(entity) { material = world.get<Material>(entity) }
+        var textures = MaterialTextures()
+        var settings = DrawSettings(
+            casts_shadows:mesh.casts_shadows,
+            shadow_distance:mesh.shadow_distance,
+            shadow_cascades:mesh.shadow_cascades
+        )
+        if world.has<MaterialSettings>(entity) {
+            let configured = world.get<MaterialSettings>(entity)
+            textures = configured.textures
+            settings = DrawSettings(
+                alpha:configured.alpha,
+                alpha_cutoff:configured.alpha_cutoff,
+                double_sided:configured.double_sided,
+                unlit:configured.unlit,
+                casts_shadows:mesh.casts_shadows,
+                shadow_distance:mesh.shadow_distance,
+                shadow_cascades:mesh.shadow_cascades
+            )
         }
+        let position = transform.position
+        let parent = transform.matrix()
+        var instance_cache = -1
+        var instance_identity = 0
+        var instance_revision = 0
+        if world.has<Instances>(entity) {
+            let instances = world.get<Instances>(entity)
+            instance_identity = instances.identity()
+            instance_revision = instances.revision()
+            instance_cache = self.refresh_instance_models(
+                instances,
+                instance_identity,
+                instance_revision,
+                parent
+            )
+            var cached = self.instance_models[instance_cache]
+            if cached.models.count() == 0 { return }
+        }
+        self.draws.append(Draw(
+            cache:self.index_of(cache),
+            model:parent,
+            instance_cache:instance_cache,
+            instance_identity:instance_identity,
+            instance_revision:instance_revision,
+            instance_parent:parent,
+            material:material,
+            settings:settings,
+            distance:position.subtract(self.camera_position).length_squared(),
+            textures:textures,
+            position:position
+        ))
+    }
+
+    func finish_prepare(
+        device:@GPU.Device,
+        catalog:@Meshes,
+        images:@Images
+    ) {
         sort_draws(self.draws)
         self.rebuild_batches(device)
         self.refresh_batch_resources(device, catalog, images)
+        self.rebuild_batch_bounds()
+        self.refresh_spatial_chunks(device)
         self.shadows.rebuild(self.lighting, self.camera_view)
-        self.lighting_uniform = Packing.lighting(self.lighting, self.skybox)
-        self.shadow_uniform = Packing.shadows(self.lighting, self.shadows)
-        self.tone_mapping_uniform = Packing.tone_mapping(self.tone_mapping)
-        self.skybox_background_uniform = Packing.skybox_background(
+        var lighting_uniform = self.lighting_uniform
+        var shadow_uniform = self.shadow_uniform
+        var tone_mapping_uniform = self.tone_mapping_uniform
+        var skybox_background_uniform = self.skybox_background_uniform
+        Packing.refresh_lighting(lighting_uniform, self.lighting, self.skybox)
+        Packing.refresh_shadows(shadow_uniform, self.lighting, self.shadows)
+        Packing.refresh_tone_mapping(tone_mapping_uniform, self.tone_mapping)
+        Packing.refresh_skybox_background(
+            skybox_background_uniform,
             self.view_projection.inverted(),
             self.camera_position,
             self.skybox,
             self.tone_mapping
         )
+        self.lighting_uniform = lighting_uniform
+        self.shadow_uniform = shadow_uniform
+        self.tone_mapping_uniform = tone_mapping_uniform
+        self.skybox_background_uniform = skybox_background_uniform
         self.prepare_gizmos(device)
         self.render_shadows(device)
+        self.prune_instance_models()
     }
 
     func set_viewport(size:Math.Vec2) {
@@ -268,6 +351,10 @@ class Renderer {
         var batch_index = 0
         while batch_index < self.active_batches {
             var batch = self.batches[batch_index]
+            if !self.bounds_visible(batch.center, batch.radius) {
+                batch_index++
+                continue
+            }
             let source = self.draws[batch.draw_index]
             if let pipeline = self.pipeline_for(batch.settings) {
                 pass.bind(pipeline)
@@ -292,12 +379,29 @@ class Renderer {
                             pass.vertex_uniform(0, vertex_uniform, 80)
                             pass.fragment_uniform(0, material_uniform, 176)
                             pass.vertex_buffer(0, vertices)
-                            pass.vertex_buffer(1, instances)
                             pass.index_buffer(indices, GPU.IndexType.thirty_two_bits)
-                            pass.draw_indexed(
-                                cache.index_count,
-                                batch.models.count()
-                            )
+                            if batch.active_chunks > 0 {
+                                var chunk_index = 0
+                                while chunk_index < batch.active_chunks {
+                                    var chunk = batch.chunks[chunk_index]
+                                    if self.bounds_visible(chunk.center, chunk.radius) {
+                                        if let chunk_instances = chunk.instances {
+                                            pass.vertex_buffer(1, chunk_instances)
+                                            pass.draw_indexed(
+                                                cache.index_count,
+                                                chunk.models.count()
+                                            )
+                                        }
+                                    }
+                                    chunk_index++
+                                }
+                            } else {
+                                pass.vertex_buffer(1, instances)
+                                pass.draw_indexed(
+                                    cache.index_count,
+                                    batch.models.count()
+                                )
+                            }
                         }
                     }
                 }
@@ -314,9 +418,21 @@ class Renderer {
         while draw_index < self.draws.count() {
             let draw = self.draws[draw_index]
             if draw.settings.alpha != GFX.Scene3D.Material.AlphaMode.blend {
-                let index = self.find_or_start_batch(draw, draw_index)
+                var index = 0
+                if draw.instance_revision > 0 {
+                    index = self.start_batch(draw, draw_index)
+                } else {
+                    index = self.find_or_start_batch(draw, draw_index)
+                }
                 var batch = self.batches[index]
-                batch.models.append(draw.model)
+                if draw.instance_revision == 0 || batch.models_changed {
+                    if draw.instance_revision > 0 {
+                        var cached = self.instance_models[draw.instance_cache]
+                        for model in cached.models {
+                            batch.models.append(model)
+                        }
+                    } else { batch.models.append(draw.model) }
+                }
             }
             draw_index++
         }
@@ -324,16 +440,28 @@ class Renderer {
         while draw_index < self.draws.count() {
             let draw = self.draws[draw_index]
             if draw.settings.alpha == GFX.Scene3D.Material.AlphaMode.blend {
-                let index = self.start_batch(draw, draw_index)
-                var batch = self.batches[index]
-                batch.models.append(draw.model)
+                if draw.instance_revision > 0 {
+                    var cached = self.instance_models[draw.instance_cache]
+                    for model in cached.models {
+                        let index = self.start_batch(draw, draw_index)
+                        var batch = self.batches[index]
+                        if batch.models_changed { batch.models.append(model) }
+                    }
+                } else {
+                    let index = self.start_batch(draw, draw_index)
+                    var batch = self.batches[index]
+                    batch.models.append(draw.model)
+                }
             }
             draw_index++
         }
         self.upload_batches(device)
     }
 
-    private func find_or_start_batch(draw:@Draw, draw_index:int) int {
+    private func find_or_start_batch(
+        draw:@Draw,
+        draw_index:int
+    ) int {
         var index = 0
         while index < self.active_batches {
             var batch = self.batches[index]
@@ -344,7 +472,10 @@ class Renderer {
         return self.start_batch(draw, draw_index)
     }
 
-    private func start_batch(draw:@Draw, draw_index:int) int {
+    private func start_batch(
+        draw:@Draw,
+        draw_index:int
+    ) int {
         let index = self.active_batches
         if index < self.batches.count() {
             var batch = self.batches[index]
@@ -359,9 +490,11 @@ class Renderer {
     private func upload_batches(device:@GPU.Device) {
         if self.active_batches == 0 { return }
         var index = 0
+        var upload_count = 0
         while index < self.active_batches {
             var batch = self.batches[index]
             let byte_count = batch.models.count() * 64
+            var allocated = false
             if batch.instances == null || batch.capacity < byte_count {
                 batch.upload = device.upload_buffer(
                     byte_count,
@@ -373,33 +506,102 @@ class Renderer {
                     name:"GFX.Scene3D instances"
                 ))
                 batch.capacity = byte_count
+                allocated = true
             }
-            if let upload = batch.upload {
-                var bytes = Packing.instances(batch.models)
-                upload.write_packed(bytes, byte_count, cycle:true)
+            if batch.source_revision == 0 {
+                batch.models_changed = batch.needs_upload()
+            } else if allocated {
+                batch.models_changed = true
+            }
+            if batch.models_changed {
+                if let upload = batch.upload {
+                    var bytes = Packing.instances(batch.models)
+                    upload.write_packed(bytes, byte_count, cycle:true)
+                    batch.remember_upload()
+                    batch.pending_upload = true
+                    upload_count++
+                }
             }
             index++
         }
 
+        if upload_count == 0 { return }
         var commands = device.commands()
         var pass = commands.copy()
         index = 0
         while index < self.active_batches {
             var batch = self.batches[index]
-            if let upload = batch.upload {
-                if let instances = batch.instances {
-                    pass.upload(
-                        upload,
-                        instances,
-                        batch.models.count() * 64,
-                        cycle:true
-                    )
+            if batch.pending_upload {
+                if let upload = batch.upload {
+                    if let instances = batch.instances {
+                        pass.upload(
+                            upload,
+                            instances,
+                            batch.models.count() * 64,
+                            cycle:true
+                        )
+                    }
                 }
+                batch.pending_upload = false
             }
             index++
         }
         pass.finish()
         commands.submit()
+    }
+
+    private func refresh_instance_models(
+        instances:@Instances,
+        identity:int,
+        revision:int,
+        parent:Math.Mat4
+    ) int {
+        var index = 0
+        while index < self.instance_models.count() {
+            var cache = self.instance_models[index]
+            if cache.identity == identity {
+                cache.used = true
+                if cache.revision != revision || !same_matrix(cache.parent, parent) {
+                    self.rebuild_instance_models(cache, instances, revision, parent)
+                }
+                return index
+            }
+            index++
+        }
+        var cache = CachedInstances(identity)
+        self.rebuild_instance_models(cache, instances, revision, parent)
+        self.instance_models.append(cache)
+        return self.instance_models.count() - 1
+    }
+
+    private func rebuild_instance_models(
+        cache:&CachedInstances,
+        instances:@Instances,
+        revision:int,
+        parent:Math.Mat4
+    ) {
+        cache.models.clear()
+        if same_matrix(parent, Math.Mat4.identity()) {
+            for instance in instances.matrices() { cache.models.append(instance) }
+        } else {
+            for instance in instances.matrices() {
+                cache.models.append(parent.multiply(instance))
+            }
+        }
+        cache.revision = revision
+        cache.parent = parent
+    }
+
+    private func prune_instance_models() {
+        var index = 0
+        while index < self.instance_models.count() {
+            var cache = self.instance_models[index]
+            if !cache.used {
+                var removed = self.instance_models.take(index)
+            } else {
+                index++
+            }
+        }
     }
 
     private func refresh_batch_resources(
@@ -422,6 +624,116 @@ class Renderer {
         }
     }
 
+    private func rebuild_batch_bounds() {
+        var index = 0
+        while index < self.active_batches {
+            var batch = self.batches[index]
+            if batch.models_changed {
+                batch.rebuild_bounds(self.meshes[batch.cache].local_radius)
+            }
+            index++
+        }
+    }
+
+    private func refresh_spatial_chunks(device:@GPU.Device) {
+        var batch_index = 0
+        var upload_count = 0
+        while batch_index < self.active_batches {
+            var batch = self.batches[batch_index]
+            if batch.settings.shadow_distance <= 0.0 ||
+                batch.settings.alpha == GFX.Scene3D.Material.AlphaMode.blend
+            {
+                batch.active_chunks = 0
+                batch_index++
+                continue
+            }
+            let local_radius = self.meshes[batch.cache].local_radius
+            if batch.models_changed || batch.active_chunks == 0 ||
+                batch.chunk_local_radius != local_radius
+            {
+                batch.rebuild_chunks(local_radius)
+            }
+            var chunk_index = 0
+            while chunk_index < batch.active_chunks {
+                var chunk = batch.chunks[chunk_index]
+                let byte_count = chunk.models.count() * 64
+                if chunk.instances == null || chunk.capacity < byte_count {
+                    chunk.upload = device.upload_buffer(
+                        byte_count,
+                        "GFX.Scene3D spatial instance upload"
+                    )
+                    chunk.instances = device.buffer(GPU.BufferSettings(
+                        size:byte_count,
+                        usage:GPU.BufferUsage.vertex(),
+                        name:"GFX.Scene3D spatial instances"
+                    ))
+                    chunk.capacity = byte_count
+                }
+                if chunk.needs_upload() {
+                    if let upload = chunk.upload {
+                        var bytes = Packing.instances(chunk.models)
+                        upload.write_packed(bytes, byte_count, cycle:true)
+                        chunk.remember_upload()
+                        chunk.pending_upload = true
+                        upload_count++
+                    }
+                }
+                chunk_index++
+            }
+            batch_index++
+        }
+        if upload_count == 0 { return }
+        var commands = device.commands()
+        var pass = commands.copy()
+        batch_index = 0
+        while batch_index < self.active_batches {
+            var batch = self.batches[batch_index]
+            var chunk_index = 0
+            while chunk_index < batch.active_chunks {
+                var chunk = batch.chunks[chunk_index]
+                if chunk.pending_upload {
+                    if let upload = chunk.upload {
+                        if let instances = chunk.instances {
+                            pass.upload(
+                                upload,
+                                instances,
+                                chunk.models.count() * 64,
+                                cycle:true
+                            )
+                        }
+                    }
+                    chunk.pending_upload = false
+                }
+                chunk_index++
+            }
+            batch_index++
+        }
+        pass.finish()
+        commands.submit()
+    }
+
+    private func bounds_visible(center:Math.Vec3, radius:float) bool {
+        if !self.camera_ready { return false }
+        if let camera = self.camera_view {
+            let offset = center.subtract(camera.position)
+            let forward = camera.rotation.rotate(Math.Vec3.front())
+            let right = camera.rotation.rotate(Math.Vec3.right())
+            let up = camera.rotation.rotate(Math.Vec3.up())
+            let depth = offset.dot(forward)
+            if depth + radius < camera.near_plane { return false }
+            if depth - radius > camera.far_plane { return false }
+            let tangent = Math.tan(camera.vertical_fov * 0.5)
+            let half_height = Math.max(depth, 0.0) * tangent
+            let half_width = half_height * camera.aspect_ratio
+            let half_fov_x = Math.atan(camera.aspect_ratio * tangent)
+            let radius_x = radius / Math.cos(half_fov_x)
+            let radius_y = radius / Math.cos(camera.vertical_fov * 0.5)
+            return Math.abs(offset.dot(right)) <= half_width + radius_x &&
+                Math.abs(offset.dot(up)) <= half_height + radius_y
+        }
+        return true
+    }
+
     private func draw_skybox(pass:@GPU.RenderPass) {
         if !self.skybox.enabled || !self.skybox.visible { return }
         if let pipeline = self.skybox_pipeline {
@@ -431,6 +743,7 @@ class Renderer {
             pass.draw(3)
         }
     }
+
 
     private func find_camera(world:@ECS.World) {
         let pixels = self.viewport
@@ -465,7 +778,7 @@ class Renderer {
     private func ensure_shadow_resources(device:@GPU.Device, size:int) {
         if self.shadow_texture == null || self.shadow_atlas_size != size {
             self.shadow_texture = device.texture(GPU.TextureSettings(
-                format:GPU.TextureFormat.depth32_float,
+                format:self.shadow_depth_format,
                 width:size,
                 height:size,
                 usage:GPU.TextureUsage(sampled:true, depth_stencil_target:true),
@@ -476,10 +789,12 @@ class Renderer {
         }
         if self.shadow_sampler == null {
             self.shadow_sampler = device.sampler(GPU.SamplerSettings(
-                min_filter:GPU.Filter.nearest,
-                mag_filter:GPU.Filter.nearest,
+                min_filter:GPU.Filter.linear,
+                mag_filter:GPU.Filter.linear,
                 address_u:GPU.AddressMode.clamp_to_edge,
                 address_v:GPU.AddressMode.clamp_to_edge,
+                compare:GPU.Compare.less_or_equal,
+                comparison:true,
                 name:"GFX.Scene3D shadow sampler"
             ))
         }
@@ -516,6 +831,7 @@ class Renderer {
         self.ensure_shadow_resources(device, Shadows.atlas_size())
         if let texture = self.shadow_texture {
             var commands = device.commands()
+            commands.record_shadows()
             var colors:GPU.ColorTarget[] = []
             var pass = commands.render(colors, GPU.DepthTarget(
                 texture:texture,
@@ -549,17 +865,61 @@ class Renderer {
                         batch_index++
                         continue
                     }
+                    if !batch.settings.casts_shadows ||
+                        (!face.point &&
+                            face.face_index >= batch.settings.shadow_cascades)
+                    {
+                        batch_index++
+                        continue
+                    }
                     var cache = self.meshes[batch.cache]
                     if let vertices = cache.vertices {
                         if let indices = cache.indices {
                             if let instances = batch.instances {
                                 pass.vertex_buffer(0, vertices)
-                                pass.vertex_buffer(1, instances)
                                 pass.index_buffer(indices, GPU.IndexType.thirty_two_bits)
-                                pass.draw_indexed(
-                                    cache.index_count,
-                                    batch.models.count()
-                                )
+                                if !face.point && batch.active_chunks > 0 {
+                                    var chunk_index = 0
+                                    while chunk_index < batch.active_chunks {
+                                        var chunk = batch.chunks[chunk_index]
+                                        if self.shadow_bounds_relevant(
+                                            batch.settings,
+                                            chunk.center,
+                                            chunk.radius,
+                                            face.split_near,
+                                            face.split_far
+                                        ) && bounds_in_frustum(
+                                            chunk.center,
+                                            chunk.radius,
+                                            face.view_projection
+                                        ) {
+                                            if let chunk_instances = chunk.instances {
+                                                pass.vertex_buffer(1, chunk_instances)
+                                                pass.draw_indexed(
+                                                    cache.index_count,
+                                                    chunk.models.count()
+                                                )
+                                            }
+                                        }
+                                        chunk_index++
+                                    }
+                                } else if face.point || self.shadow_bounds_relevant(
+                                    batch.settings,
+                                    batch.center,
+                                    batch.radius,
+                                    face.split_near,
+                                    face.split_far
+                                ) && bounds_in_frustum(
+                                    batch.center,
+                                    batch.radius,
+                                    face.view_projection
+                                ) {
+                                    pass.vertex_buffer(1, instances)
+                                    pass.draw_indexed(
+                                        cache.index_count,
+                                        batch.models.count()
+                                    )
+                                }
                             }
                         }
                     }
@@ -569,6 +929,27 @@ class Renderer {
             pass.finish()
             commands.submit()
         }
+    }
+
+    private func shadow_bounds_relevant(
+        settings:DrawSettings,
+        center:Math.Vec3,
+        radius:float,
+        split_near:float,
+        split_far:float
+    ) bool {
+        if split_far <= 0.0 { return true }
+        let padding = 12.0
+        let configured_distance = settings.shadow_distance
+        if configured_distance > 0.0 && split_near > configured_distance + padding {
+            return false
+        }
+        var effective_far = split_far
+        if configured_distance > 0.0 {
+            effective_far = Math.min(effective_far, configured_distance)
+        }
+        return center.subtract(self.camera_position).length() <=
+            effective_far + radius + padding
     }
 
     private func draw_gizmos(pass:@GPU.RenderPass) {
@@ -776,6 +1157,7 @@ class Renderer {
         let revision = catalog.revision(handle)
         if cache.revision == revision { return }
         let mesh = catalog.snapshot(handle)
+        cache.local_radius = geometry_radius(mesh)
         let vertex_count = mesh.vertex_count() * 48
         let index_count = mesh.index_count() * 4
         var vertex_bytes = Packing.vertices(mesh)
@@ -880,7 +1262,8 @@ local func forward_pipeline(
     device:@GPU.Device,
     surface:@GPU.Surface,
     double_sided:bool,
-    transparent:bool
+    transparent:bool,
+    samples:GPU.Samples
 ) GPU.GraphicsPipeline {
     var cull = GPU.Cull.back
     if double_sided { cull = GPU.Cull.none }
@@ -911,6 +1294,7 @@ local func forward_pipeline(
             vertex_buffers:mesh_buffers(),
             attributes:mesh_attributes(),
             rasterizer:GPU.RasterizerState(cull:cull),
+            multisample:GPU.MultisampleState(samples:samples),
             depth_stencil:GPU.DepthStencilState(
                 depth_compare:GPU.Compare.less_or_equal,
                 depth_test:true,
@@ -923,7 +1307,11 @@ local func forward_pipeline(
     )
 }
 
-local func shadow_pipeline(device:@GPU.Device, point:bool) GPU.GraphicsPipeline {
+local func shadow_pipeline(
+    device:@GPU.Device,
+    point:bool,
+    depth_format:GPU.TextureFormat
+) GPU.GraphicsPipeline {
     var shader = GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Shadow.hlsl")
     var name = "GFX.Scene3D projected shadows"
     if point {
@@ -933,20 +1321,37 @@ local func shadow_pipeline(device:@GPU.Device, point:bool) GPU.GraphicsPipeline 
     return device.graphics_pipeline(shader, GPU.GraphicsPipelineSettings(
         vertex_buffers:mesh_buffers(),
         attributes:mesh_attributes(),
-        rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+        rasterizer:GPU.RasterizerState(
+            cull:GPU.Cull.back,
+            depth_bias:2.0,
+            depth_bias_slope:3.0,
+            bias_depth:true
+        ),
         depth_stencil:GPU.DepthStencilState(
             depth_compare:GPU.Compare.less,
             depth_test:true,
             depth_write:true
         ),
-        depth_stencil_format:GPU.TextureFormat.depth32_float,
+        depth_stencil_format:depth_format,
         name:name
     ))
 }
 
+local func best_shadow_depth_format(device:@GPU.Device) GPU.TextureFormat {
+    let usage = GPU.TextureUsage(sampled:true, depth_stencil_target:true)
+    if device.supports(GPU.TextureFormat.depth32_float, usage) {
+        return GPU.TextureFormat.depth32_float
+    }
+    if device.supports(GPU.TextureFormat.depth24, usage) {
+        return GPU.TextureFormat.depth24
+    }
+    return GPU.TextureFormat.depth16
+}
+
 local func gizmo_pipeline(
     device:@GPU.Device,
-    surface:@GPU.Surface
+    surface:@GPU.Surface,
+    samples:GPU.Samples
 ) GPU.GraphicsPipeline {
     let buffers:GPU.VertexBufferLayout[] = [GPU.VertexBufferLayout(slot:0, pitch:28)]
     let attributes:GPU.VertexAttribute[] = [
@@ -973,6 +1378,7 @@ local func gizmo_pipeline(
             attributes:attributes,
             primitive:GPU.Primitive.lines,
             rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            multisample:GPU.MultisampleState(samples:samples),
             depth_stencil:GPU.DepthStencilState(
                 depth_compare:GPU.Compare.less_or_equal,
                 depth_test:true,
@@ -987,7 +1393,8 @@ local func gizmo_pipeline(
 
 local func grid_pipeline(
     device:@GPU.Device,
-    surface:@GPU.Surface
+    surface:@GPU.Surface,
+    samples:GPU.Samples
 ) GPU.GraphicsPipeline {
     let targets:GPU.ColorTargetFormat[] = [GPU.ColorTargetFormat(
         format:surface.format(),
@@ -1003,6 +1410,7 @@ local func grid_pipeline(
         GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Grid.hlsl"),
         GPU.GraphicsPipelineSettings(
             rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            multisample:GPU.MultisampleState(samples:samples),
             depth_stencil:GPU.DepthStencilState(
                 depth_compare:GPU.Compare.less_or_equal,
                 depth_test:true,
@@ -1017,7 +1425,8 @@ local func grid_pipeline(
 
 local func skybox_pipeline(
     device:@GPU.Device,
-    surface:@GPU.Surface
+    surface:@GPU.Surface,
+    samples:GPU.Samples
 ) GPU.GraphicsPipeline {
     let targets:GPU.ColorTargetFormat[] = [
         GPU.ColorTargetFormat(format:surface.format())
@@ -1026,6 +1435,7 @@ local func skybox_pipeline(
         GPU.ShaderProgram.hlsl(file:"../../Shaders/Scene3D/Skybox.hlsl"),
         GPU.GraphicsPipelineSettings(
             rasterizer:GPU.RasterizerState(cull:GPU.Cull.none),
+            multisample:GPU.MultisampleState(samples:samples),
             depth_stencil:GPU.DepthStencilState(
                 depth_test:false,
                 depth_write:false
@@ -1098,6 +1508,62 @@ local func mip_levels(width:int, height:int) int {
 local func texture_handle(texture:MaterialTexture?) ImageHandle {
     if let reference = texture { return reference.image }
     return ImageHandle()
+}
+
+local func geometry_radius(mesh:@GFX.Scene3D.Geometry.Mesh) float {
+    var radius = 0.0
+    for vertex in mesh.vertices() {
+        radius = Math.max(radius, vertex.position.length())
+    }
+    return radius
+}
+
+local func bounds_in_frustum(
+    center:Math.Vec3,
+    radius:float,
+    view_projection:Math.Mat4
+) bool {
+    let row_x = Math.Vec4(
+        view_projection.x.x,
+        view_projection.y.x,
+        view_projection.z.x,
+        view_projection.w.x
+    )
+    let row_y = Math.Vec4(
+        view_projection.x.y,
+        view_projection.y.y,
+        view_projection.z.y,
+        view_projection.w.y
+    )
+    let row_z = Math.Vec4(
+        view_projection.x.z,
+        view_projection.y.z,
+        view_projection.z.z,
+        view_projection.w.z
+    )
+    let row_w = Math.Vec4(
+        view_projection.x.w,
+        view_projection.y.w,
+        view_projection.z.w,
+        view_projection.w.w
+    )
+    return sphere_inside_plane(center, radius, row_w.add(row_x)) &&
+        sphere_inside_plane(center, radius, row_w.subtract(row_x)) &&
+        sphere_inside_plane(center, radius, row_w.add(row_y)) &&
+        sphere_inside_plane(center, radius, row_w.subtract(row_y)) &&
+        sphere_inside_plane(center, radius, row_z) &&
+        sphere_inside_plane(center, radius, row_w.subtract(row_z))
+}
+
+local func sphere_inside_plane(
+    center:Math.Vec3,
+    radius:float,
+    plane:Math.Vec4
+) bool {
+    let normal = plane.xyz()
+    let length = normal.length()
+    if length <= 0.0000001 { return true }
+    return normal.dot(center) + plane.w >= -radius * length
 }
 
 local func sort_draws(draws:&Draw[]) {

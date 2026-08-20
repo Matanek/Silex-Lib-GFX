@@ -5,6 +5,7 @@ use GFX.Assets
 use GFX.ECS
 use GFX.GPU
 use GFX.Rendering
+use GFX.Rendering.Multisampling.Multisampling
 use GFX.Scene2D.Renderer
 use GFX.Window
 
@@ -27,8 +28,13 @@ public struct Plugin:PluginProtocol {
     }
 }
 
-func start_scene(device:@GPU.Device, surface:@GPU.Surface, renderer:&Renderer) {
-    renderer.start(device, surface)
+func start_scene(
+    device:@GPU.Device,
+    surface:@GPU.Surface,
+    multisampling:@Multisampling,
+    renderer:&Renderer
+) {
+    renderer.start(device, surface, multisampling.samples())
 }
 
 func prepare_scene(

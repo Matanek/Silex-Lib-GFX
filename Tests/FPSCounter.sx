@@ -75,7 +75,7 @@ test "display GPU performance statistics through the public plugin umbrella" {
     assert(application.run() == 0)
     assert(resources.get<Probe>().overlays == 1)
     assert(resources.get<Probe>().width == 252)
-    assert(resources.get<Probe>().height == 214)
+    assert(resources.get<Probe>().height == 252)
     assert(resources.get<Probe>().draw_calls > 0)
     assert(resources.get<Probe>().render_passes > 0)
 }

@@ -153,8 +153,10 @@ func performance_canvas(fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas
     var labels:str[] = []
     labels.append("FPS")
     labels.append("FRAME")
-    labels.append("DRAW CALLS")
-    labels.append("TRIANGLES")
+    labels.append("COLOR DRAWS")
+    labels.append("SHADOW DRAWS")
+    labels.append("COLOR TRIS")
+    labels.append("SHADOW TRIS")
     labels.append("PIPELINE BINDS")
     labels.append("GPU PASSES")
     labels.append("UNIFORMS")
@@ -163,8 +165,10 @@ func performance_canvas(fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas
     var values:str[] = []
     values.append("$(fps)")
     values.append(decimal_tenths(frame_tenths) + " ms")
-    values.append("$(stats.draw_calls())")
-    values.append("$(stats.triangles())")
+    values.append("$(stats.color_draw_calls())")
+    values.append("$(stats.shadow_draw_calls())")
+    values.append("$(stats.color_triangles())")
+    values.append("$(stats.shadow_triangles())")
     values.append("$(stats.pipeline_bindings())")
     values.append("$(stats.render_passes())")
     values.append("$((stats.uniform_bytes() + 1023) / 1024) KiB")
@@ -173,11 +177,11 @@ func performance_canvas(fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas
     var canvas = Canvas()
     canvas.paint(func(painter:&Canvas.Painter) {
         painter.fill(
-            Canvas.Rect(Math.Vec2(), Math.Vec2(252.0, 214.0), 9.0),
+            Canvas.Rect(Math.Vec2(), Math.Vec2(252.0, 252.0), 9.0),
             Canvas.Fill.solid(Color.black().with_alpha(0.82))
         )
         painter.stroke(
-            Canvas.Rect(Math.Vec2(0.5), Math.Vec2(251.0, 213.0), 9.0),
+            Canvas.Rect(Math.Vec2(0.5), Math.Vec2(251.0, 251.0), 9.0),
             Canvas.Stroke(Color.cyan_400().with_alpha(0.48), 1.0)
         )
         painter.text(
@@ -214,7 +218,7 @@ func display_width(settings:Settings) int {
 }
 
 func display_height(settings:Settings) int {
-    if settings.detailed { return 214 }
+    if settings.detailed { return 252 }
     return 34
 }
 func display_canvas(settings:Settings, fps:int, frame_tenths:int, stats:Rendering.Stats) Canvas {

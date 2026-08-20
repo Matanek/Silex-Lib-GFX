@@ -69,7 +69,7 @@ cbuffer ToneMappingUniforms : register(b2, space3) {
 };
 
 Texture2D<float> shadowAtlas : register(t0, space2);
-SamplerState shadowSampler : register(s0, space2);
+SamplerComparisonState shadowSampler : register(s0, space2);
 Texture2D<float4> albedoMap : register(t1, space2);
 SamplerState albedoSampler : register(s1, space2);
 Texture2D<float4> normalMap : register(t2, space2);
@@ -361,34 +361,133 @@ float2 point_shadow_uv_for_face(float3 direction, int face) {
     return uv * 0.9826972631 * 0.5 + 0.5;
 }
 
-float atlas_shadow_depth(float2 uv, float4 rect, float localTexel) {
+float atlas_shadow_compare(
+    float2 uv,
+    float4 rect,
+    float localTexel,
+    float receiverDepth
+) {
     const float2 atlasTexel = float2(localTexel * rect.x, localTexel * rect.y);
     const float2 atlasMin = rect.zw + atlasTexel * 0.5;
     const float2 atlasMax = rect.zw + rect.xy - atlasTexel * 0.5;
     const float2 atlasUv = uv * rect.xy + rect.zw;
-    return shadowAtlas.Sample(shadowSampler, clamp(atlasUv, atlasMin, atlasMax));
+    return shadowAtlas.SampleCmpLevelZero(
+        shadowSampler,
+        clamp(atlasUv, atlasMin, atlasMax),
+        receiverDepth
+    );
+}
+
+float atlas_shadow_depth(float2 uv, float4 rect, float localTexel) {
+    const float2 atlasTexel = float2(localTexel * rect.x, localTexel * rect.y);
+    const float2 atlasMin = rect.zw + atlasTexel * 0.5;
+    const float2 atlasMax = rect.zw + rect.xy - atlasTexel * 0.5;
+    const float2 atlasUv = clamp(uv * rect.xy + rect.zw, atlasMin, atlasMax);
+    uint width;
+    uint height;
+    shadowAtlas.GetDimensions(width, height);
+    const int2 lastPixel = int2(width - 1, height - 1);
+    const int2 pixel = clamp(
+        int2(atlasUv * float2(width, height)),
+        int2(0, 0),
+        lastPixel
+    );
+    return shadowAtlas.Load(int3(pixel, 0));
+}
+
+static const float2 shadowPoissonDisk[16] = {
+    float2(-0.94201624, -0.39906216), float2( 0.94558609, -0.76890725),
+    float2(-0.09418410, -0.92938870), float2( 0.34495938,  0.29387760),
+    float2(-0.91588581,  0.45771432), float2(-0.81544232, -0.87912464),
+    float2(-0.38277543,  0.27676845), float2( 0.97484398,  0.75648379),
+    float2( 0.44323325, -0.97511554), float2( 0.53742981, -0.47373420),
+    float2(-0.26496911, -0.41893023), float2( 0.79197514,  0.19090188),
+    float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
+    float2( 0.19984126,  0.78641367), float2( 0.14383161, -0.14100790)
+};
+
+float poisson_pcf_shadow(
+    float2 uv,
+    float4 rect,
+    float receiverDepth,
+    float texel,
+    float radius
+) {
+    float visibility = 0.0;
+    [unroll]
+    for (int sampleIndex = 0; sampleIndex < 16; ++sampleIndex) {
+        visibility += atlas_shadow_compare(
+            uv + shadowPoissonDisk[sampleIndex] * radius,
+            rect,
+            texel,
+            receiverDepth
+        );
+    }
+    return visibility * (1.0 / 16.0);
 }
 
 float pcf_shadow(float2 uv, float4 rect, float receiverDepth, float texel, float softness) {
     if (softness <= 0.0001) {
-        const float storedDepth = atlas_shadow_depth(uv, rect, texel);
-        return receiverDepth <= storedDepth ? 1.0 : 0.0;
+        return atlas_shadow_compare(uv, rect, texel, receiverDepth);
     }
-    const float radius = 1.0 + softness * 2.0;
-    float visibility = 0.0;
+    return poisson_pcf_shadow(
+        uv, rect, receiverDepth, texel, texel * (0.75 + softness * 1.5)
+    );
+}
+
+float pcss_shadow(
+    float2 uv,
+    float4 rect,
+    float receiverDepth,
+    float bias,
+    float texel,
+    float softness
+) {
+    if (softness <= 0.0001) {
+        return atlas_shadow_compare(uv, rect, texel, receiverDepth - bias);
+    }
+    const float2 edgeDistance = min(uv, float2(1.0, 1.0) - uv);
+    const float safeRadius = min(edgeDistance.x, edgeDistance.y);
+    const float lightSize = 1.5;
+    const float searchRadius = min(
+        lightSize * texel * softness * 0.5,
+        safeRadius
+    );
+    static const float2 blockerOffsets[8] = {
+        float2(-0.5, -0.5), float2( 0.5, -0.5),
+        float2(-0.5,  0.5), float2( 0.5,  0.5),
+        float2(-1.0,  0.0), float2( 1.0,  0.0),
+        float2( 0.0, -1.0), float2( 0.0,  1.0)
+    };
+    float blockerDepth = 0.0;
+    float blockerCount = 0.0;
     [unroll]
-    for (int y = -1; y <= 1; ++y) {
-        [unroll]
-        for (int x = -1; x <= 1; ++x) {
-            const float storedDepth = atlas_shadow_depth(
-                uv + float2(float(x), float(y)) * texel * radius,
-                rect,
-                texel
-            );
-            visibility += receiverDepth <= storedDepth ? 1.0 : 0.0;
+    for (int sampleIndex = 0; sampleIndex < 8; ++sampleIndex) {
+        const float depth = atlas_shadow_depth(
+            uv + blockerOffsets[sampleIndex] * searchRadius,
+            rect,
+            texel
+        );
+        if (depth < receiverDepth - bias) {
+            blockerDepth += depth;
+            blockerCount += 1.0;
         }
     }
-    return visibility / 9.0;
+    if (blockerCount < 0.5) return 1.0;
+    const float averageBlocker = blockerDepth / blockerCount;
+    const float penumbra = (receiverDepth - averageBlocker) * lightSize
+        / max(averageBlocker, 0.001);
+    const float filterRadius = min(
+        max(penumbra * texel * softness, texel),
+        safeRadius
+    );
+    return poisson_pcf_shadow(
+        uv,
+        rect,
+        receiverDepth - bias,
+        texel,
+        filterRadius
+    );
 }
 
 float point_face_shadow(
@@ -405,6 +504,36 @@ float point_face_shadow(
         receiverDepth,
         texel,
         softness
+    );
+}
+
+float projected_face_shadow(
+    int lightIndex,
+    int projectedFace,
+    float3 offsetPosition,
+    float slope,
+    float texel,
+    out bool valid
+) {
+    valid = false;
+    const float4 clip = mul(
+        shadowMatrices[projectedFace],
+        float4(offsetPosition, 1.0)
+    );
+    if (clip.w <= 0.0001) return 1.0;
+    const float3 ndc = clip.xyz / clip.w;
+    const float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
+        || ndc.z < 0.0 || ndc.z > 1.0) return 1.0;
+    valid = true;
+    const float bias = shadowSettings[lightIndex].y * (0.25 + slope * 0.75);
+    return pcss_shadow(
+        uv,
+        shadowAtlasRects[projectedFace],
+        ndc.z,
+        bias,
+        texel,
+        shadowSlots[lightIndex].w
     );
 }
 
@@ -479,8 +608,10 @@ float shadow_visibility(
     }
     int projectedFace = firstFace;
     const int faceCount = (int)shadowSlots[lightIndex].y;
-    if (shadowSlots[lightIndex].z < 0.5 && faceCount > 1) {
-        const float viewDepth = dot(
+    const bool cascaded = shadowSlots[lightIndex].z < 0.5 && faceCount > 1;
+    float viewDepth = 0.0;
+    if (cascaded) {
+        viewDepth = dot(
             offsetPosition - cameraPosition.xyz,
             shadowCameraForward.xyz
         );
@@ -492,18 +623,33 @@ float shadow_visibility(
             }
         }
     }
-    const float4 clip = mul(
-        shadowMatrices[projectedFace],
-        float4(offsetPosition, 1.0)
+    bool primaryValid;
+    float visibility = projected_face_shadow(
+        lightIndex, projectedFace, offsetPosition, slope, texel, primaryValid
     );
-    if (clip.w <= 0.0001) return 1.0;
-    const float3 ndc = clip.xyz / clip.w;
-    const float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-    const float4 rect = shadowAtlasRects[projectedFace];
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
-        || ndc.z < 0.0 || ndc.z > 1.0) return 1.0;
-    const float bias = settings.y * (0.25 + slope * 0.75);
-    return pcf_shadow(uv, rect, ndc.z - bias, texel, shadowSlots[lightIndex].w);
+    if (cascaded && projectedFace + 1 < firstFace + faceCount) {
+        const float2 split = shadowProjectedDepths[projectedFace].xy;
+        const float blendWidth = max((split.y - split.x) * 0.08, 0.0001);
+        const float blendStart = split.y - blendWidth;
+        if (viewDepth > blendStart) {
+            bool nextValid;
+            const float nextVisibility = projected_face_shadow(
+                lightIndex,
+                projectedFace + 1,
+                offsetPosition,
+                slope,
+                texel,
+                nextValid
+            );
+            if (nextValid) {
+                const float blend = smoothstep(
+                    blendStart, split.y, viewDepth
+                );
+                visibility = lerp(visibility, nextVisibility, blend);
+            }
+        }
+    }
+    return visibility;
 }
 
 float3 evaluate_light(

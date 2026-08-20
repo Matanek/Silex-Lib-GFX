@@ -3,6 +3,7 @@ public use GFX.Scene3D.Camera.Camera
 public use GFX.Scene3D.CubeProjectorLight.CubeProjectorLight
 public use GFX.Scene3D.CubeProjectorLightGizmo.CubeProjectorLightGizmo
 public use GFX.Scene3D.Grid.Grid
+public use GFX.Scene3D.Instances.Instances
 public use GFX.Scene3D.Material.Material
 public use GFX.Scene3D.Material.AlphaMode
 public use GFX.Scene3D.Material.MaterialSettings

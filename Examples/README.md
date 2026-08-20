@@ -53,7 +53,24 @@ the GPU.
 - `Scene3D/World.sx` provides a reusable 100 m × 100 m textured world with a
   first-person camera, deterministic scatters for rocks, pebbles, trees, and
   grass, and a live GPU performance panel demonstrating automatic instance
-  batching.
+  batching. Pass `--benchmark` to report a five-second FPS sample with separate
+  color and shadow work, or `--benchmark-moving` to measure along a wide path
+  that crosses the map while continuously varying the camera orientation.
+  `--benchmark-soak` runs that path for 60 seconds and reports five-second
+  samples. Benchmarks use a non-focusable 1280 x 720 window and exit
+  automatically. Add `--benchmark-focused` when an absolute FPS comparison
+  needs the window to remain active, or `--benchmark-panel` to include the live
+  performance overlay. The example renders at logical window density so Retina
+  and standard-density displays submit the same pixel load. Benchmark modes
+  select immediate presentation so display refresh does not cap measured
+  throughput; `--benchmark-synchronized` and `--benchmark-mailbox` select the
+  corresponding presentation modes for sustained-frame comparisons.
+  `--benchmark-large` selects 2560 x 1440 for GPU stress comparisons;
+  `--benchmark-retina` enables the display's high-density drawable;
+  `--benchmark-heavy` increases the deterministic grass field to 50,000
+  instances;
+  `--benchmark-no-msaa`, `--benchmark-hard-shadows`, and
+  `--benchmark-no-shadows` provide targeted rendering ablations.
 
 ## WebView
 

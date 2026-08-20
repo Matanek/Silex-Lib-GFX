@@ -73,7 +73,7 @@ public class Presentation {
     func present(window:&WindowApi) {
         if self.completed || !self.requested { return }
         window.show()
-        window.raise()
+        if window.state().focusable { window.raise() }
         self.completed = true
     }
 }

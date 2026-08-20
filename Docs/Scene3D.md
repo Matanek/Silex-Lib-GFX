@@ -66,9 +66,11 @@ filtering.
 
 A `SunLight` whose `shadow_follows_camera` value is enabled distributes its
 shadow atlas space across four stabilized cascades fitted to the active camera
-frustum. The split distribution favors the first meters around the camera and
-progressively reduces precision toward `shadow_distance`. This keeps nearby
-contact shadows sharp without requiring a larger atlas. Setting
+frustum. Each cascade uses the tight light-space bounds of its eight frustum
+corners instead of enclosing their diagonal in a square bounding sphere. The
+split distribution favors the first meters around the camera and progressively
+reduces precision toward `shadow_distance`. This keeps nearby contact shadows
+sharp without wasting texels on unseen space. Setting
 `shadow_follows_camera` to `false` preserves the fixed orthographic projection
 defined by `shadow_center`, `shadow_size`, and `shadow_depth`.
 
@@ -76,18 +78,79 @@ defined by `shadow_center`, `shadow_size`, and `shadow_depth`.
 camera. A zero value retains the legacy range derived from `shadow_size` and
 `shadow_depth`; an explicit positive value is preferable for world scenes.
 
+By default, the renderer derives the four cascade endings automatically.
+`shadow_cascade_distances` can instead provide four strictly increasing world
+distances whose last value does not exceed `shadow_distance`. A zero or invalid
+vector keeps the automatic distribution. This is useful when small details are
+limited to the first cascade but must retain their shadows farther from the
+camera:
+
+```silex
+var sun = Scene3D.SunLight()
+sun.shadow_distance = 45.0
+sun.shadow_cascade_distances = Math.Vec4(22.0, 31.0, 38.0, 45.0)
+```
+
+The renderer selects a sampled D32 shadow format when available, then falls
+back to D24 or D16. Shadow casters use slope-aware raster depth bias and
+back-face culling to prevent self-shadowing patterns before filtering. Four sun
+cascades occupy an 8192 atlas, preserving 4096x4096 effective texels per
+cascade. This matches the spatial shadow resolution used by the historical
+WorldDemo instead of enlarging a 2048-tile edge with filtering.
+
+Sun shadows use percentage-closer soft shadows through
+`Shadow.sun().softness`: eight depth taps estimate the nearest blockers, then a
+16-tap Poisson PCF adapts the penumbra to their separation from the receiver.
+Comparison taps retain GPU bilinear depth filtering. Setting
+`sun.shadow.softness` to zero selects one bilinear comparison.
+
+Adjacent sun cascades overlap by eight percent and blend across that shared
+range. Resolution and bias therefore change progressively instead of producing
+a hard line at a cascade boundary.
+
 ## Automatic batching
 
 The built-in renderer automatically instances compatible opaque and alpha-mask
 entities that share their mesh, material values, textures, and raster state.
-The same persistent instance buffers feed the forward and shadow passes, while
-their matrix contents are refreshed every frame. Blended entities remain
-individual draws so their far-to-near ordering stays correct.
+The same persistent instance buffers feed the forward and shadow passes. Static
+matrix contents stay on the GPU until their transforms change. Batches with a
+finite shadow distance are divided into persistent spatial chunks. Those chunks
+are rejected against the camera frustum before the forward draw, then against
+both each cascade frustum and the configured detail distance before a sun-shadow
+draw. Blended entities remain individual draws so their far-to-near ordering
+stays correct.
 
-This optimization does not add a batching component or change normal ECS
-usage: applications keep spawning `Transform`, `Mesh`, `Material`, and optional
-`MaterialSettings` components. `Rendering.Stats` exposes the resulting draw,
-instance, triangle, pipeline, pass, uniform, and texture work for profiling.
+Small repeated details can restrict how far and through how many sun cascades
+they cast shadows. A zero `shadow_distance` keeps the unbounded default;
+`shadow_cascades` accepts one through four. The renderer derives and culls its
+spatial chunks internally:
+
+```silex
+world.spawn(ECS.EntityRecipe()
+    ..with(Scene3D.Transform())
+    ..with(Scene3D.Instances(grass_transforms))
+    ..with(Scene3D.Mesh(
+        grass_mesh,
+        shadow_distance:20.0,
+        shadow_cascades:1
+    ))
+    ..with(grass_material)
+)
+```
+
+`casts_shadows:false` removes an object from every shadow pass without hiding
+it from the color pass.
+
+Normal ECS usage does not require a batching component: applications can keep
+spawning `Transform`, `Mesh`, `Material`, and optional `MaterialSettings`
+components. For thousands of static repetitions, `Instances` stores every
+local transform on one entity and avoids scanning thousands of equivalent ECS
+entities each frame. Changing the collection through `replace`, `append`, or
+`clear` increments its revision and refreshes its GPU buffers.
+
+`Rendering.Stats` exposes color and shadow draw, instance, and triangle work
+separately, in addition to their totals and the pipeline, pass, uniform, and
+texture work.
 
 ## Procedural scatter
 
@@ -117,11 +180,11 @@ for transform in rocks.generate() {
 ```
 
 Scatter stays independent from assets and ECS recipes: the same placements can
-instantiate a mesh, several entities forming one object, or another consumer's
-components. Compatible generated entities are picked up by automatic batching
-without another public rendering concept. A seed always reproduces the same
-placements and variations. An impossible exclusion can yield fewer transforms
-than requested after bounded placement attempts.
+instantiate a mesh, several entities forming one object, an `Instances`
+component for a dense static field, or another consumer's components.
+Compatible generated entities are picked up by automatic batching. A seed
+always reproduces the same placements and variations. An impossible exclusion
+can yield fewer transforms than requested after bounded placement attempts.
 
 ## Tone mapping
 
