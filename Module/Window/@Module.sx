@@ -151,7 +151,7 @@ public class Window {
         return Platform.presentation_handle(self.handle)
     }
 
-    func native_handle() uint { return self.handle }
+    package func native_handle() uint { return self.handle }
 
     func title() str {
         return self.current_title

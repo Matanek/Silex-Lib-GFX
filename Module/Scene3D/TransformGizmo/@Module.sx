@@ -1,3 +1,0 @@
-public use GFX.Scene3D.TransformGizmo.Controller.Controller
-public use GFX.Scene3D.TransformGizmo.Controller.Mode
-public use GFX.Scene3D.TransformGizmo.Controller.Space

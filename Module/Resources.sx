@@ -1,20 +1,6 @@
 // Application-owned values intended for system injection and deliberate runtime
 // control. Configuration helpers and renderer internals stay in their domains.
 public use GFX.Application.FrameTime as FrameTime
-public use GFX.Assets.Images as Images
-public use GFX.Assets.SpriteSheets as SpriteSheets
-public use GFX.ECS.Commands as Commands
-public use GFX.ECS.World as World
-public use GFX.GPU.Device as Device
-public use GFX.GPU.Device.Surface as GPUSurface
 public use GFX.Input as Input
 public use GFX.Input.State as InputState
-public use GFX.Rendering.Renderer as Renderer
-public use GFX.Scene2D.ViewportCamera.Controller as ViewportCamera2D
-public use GFX.Scene3D.Meshes as Meshes3D
-public use GFX.Scene3D.ViewportCamera.Controller as FirstPersonCamera3D
-public use GFX.Scene3D.Skybox.Skybox as Skybox3D
-public use GFX.Scene3D.ToneMapping as ToneMapping3D
-public use GFX.Scene3D.ViewportCamera.Controller as ViewportCamera3D
-public use GFX.Viewer.View as Viewer
 public use GFX.Window as Window

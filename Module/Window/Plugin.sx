@@ -20,42 +20,6 @@ struct ClosePolicy {
     }
 }
 
-public struct Settings {
-    var title:str
-    var width:int
-    var height:int
-    var resizable:bool
-    var fullscreen:bool
-    var borderless:bool
-    var high_pixel_density:bool
-    var hidden:bool
-    var maximized:bool
-    var minimized:bool
-    var always_on_top:bool
-    var transparent:bool
-    var focusable:bool
-    var utility:bool
-    var close_behavior:CloseBehavior
-
-    init() {
-        self.title = "Window"
-        self.width = 1280
-        self.height = 720
-        self.resizable = true
-        self.fullscreen = false
-        self.borderless = false
-        self.high_pixel_density = true
-        self.hidden = false
-        self.maximized = false
-        self.minimized = false
-        self.always_on_top = false
-        self.transparent = false
-        self.focusable = true
-        self.utility = false
-        self.close_behavior = CloseBehavior.automatic
-    }
-}
-
 struct Configuration {
     let settings:WindowApi.Settings
     let visible_on_ready:bool
@@ -79,6 +43,42 @@ public class Presentation {
 }
 
 public struct Plugin:PluginProtocol {
+    struct Settings {
+        var title:str
+        var width:int
+        var height:int
+        var resizable:bool
+        var fullscreen:bool
+        var borderless:bool
+        var high_pixel_density:bool
+        var hidden:bool
+        var maximized:bool
+        var minimized:bool
+        var always_on_top:bool
+        var transparent:bool
+        var focusable:bool
+        var utility:bool
+        var close_behavior:CloseBehavior
+
+        init() {
+            self.title = "Window"
+            self.width = 1280
+            self.height = 720
+            self.resizable = true
+            self.fullscreen = false
+            self.borderless = false
+            self.high_pixel_density = true
+            self.hidden = false
+            self.maximized = false
+            self.minimized = false
+            self.always_on_top = false
+            self.transparent = false
+            self.focusable = true
+            self.utility = false
+            self.close_behavior = CloseBehavior.automatic
+        }
+    }
+
     private let settings:Settings
 
     init(settings:Settings = Settings()) {

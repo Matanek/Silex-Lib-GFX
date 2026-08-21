@@ -1,0 +1,52 @@
+use GFX.Application
+use GFX.ECS
+
+struct HelperPosition { var value:int }
+struct HelperStep { let value:int }
+
+func advance_position(position:&HelperPosition, step:int) {
+    position.value += step
+}
+
+func update_through_mutating_helper(
+    query:ECS.Query<(&HelperPosition, @HelperStep)>
+) {
+    for (position, step) in query {
+        advance_position(position, step.value)
+    }
+}
+
+func run_helper_update(application:Application) int {
+    application.run_schedule(Application.Schedule.update)
+    return 0
+}
+
+test "parallelize an ECS query helper through the Application scheduler" {
+    var application = Application()
+        ..add_plugin(ECS.Plugin())
+        ..add_system(Application.Schedule.update, update_through_mutating_helper)
+        ..with_runner(run_helper_update)
+    application.prepare()
+    var resources = application.resources()
+    var world:&ECS.World = resources.get_mut<ECS.World>()
+    var index = 0
+    while index < 257 {
+        world.spawn(ECS.EntityRecipe()
+            ..with(HelperPosition(value:index))
+            ..with(HelperStep(value:2))
+        )
+        index++
+    }
+
+    assert(application.run() == 0)
+    assert(application.scheduler_parallel_query_system_count(
+        Application.Schedule.update,
+        false
+    ) == 1)
+    assert(application.query_parallel_dispatch_count() == 1)
+    var total = 0
+    for entity in world.entities() {
+        total += world.get<HelperPosition>(entity).value
+    }
+    assert(total == 33_410)
+}

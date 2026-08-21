@@ -1,3 +1,0 @@
-public use GFX.Rendering.Antialiasing.Antialiasing
-public use GFX.Rendering.Renderer.Renderer
-public use GFX.Rendering.Stats.Stats

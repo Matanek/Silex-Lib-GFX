@@ -1,43 +1,7 @@
-// Installable application capabilities. Configuration types are named beside
-// their plugin because a re-exported declaration does not carry its module.
+// Installable application capabilities. Each configurable plugin owns its
+// nested Settings type.
 public use GFX.Application.FramePacing as FramePacing
 public use GFX.Application.Time as Time
-public use GFX.Assets.Plugin as Assets
-public use GFX.ECS.Plugin as ECS
-public use GFX.FPSCounter.Anchor as FPSCounterAnchor
-public use GFX.FPSCounter.Plugin as FPSCounter
-public use GFX.FPSCounter.Settings as FPSCounterSettings
-public func PerformancePanel(
-    settings:GFX.FPSCounter.PerformanceSettings = GFX.FPSCounter.PerformanceSettings()
-) GFX.FPSCounter.Plugin {
-    return GFX.FPSCounter.Plugin(settings)
-}
-public use GFX.FPSCounter.PerformanceSettings as PerformancePanelSettings
-public use GFX.GPU.Plugin as GPU
-public use GFX.GPU.Plugin.Settings as GPUSettings
 public use GFX.Input.Plugin as Input
-public use GFX.Rendering.Plugin as Rendering
-public use GFX.Rendering.Plugin.Settings as RenderingSettings
-public use GFX.Rendering.Antialiasing.Antialiasing as RenderingAntialiasing
-public use GFX.Scene2D.Grid as Grid2D
-public use GFX.Scene2D.Plugin as Scene2D
-public use GFX.Scene2D.ViewportCamera as ViewportCamera2D
-public use GFX.Scene2D.ViewportCamera.Controls as ViewportCamera2DControls
-public use GFX.Scene2D.ViewportCamera.Settings as ViewportCamera2DSettings
-public use GFX.Scene3D.Grid as Grid3D
-public func FirstPersonCamera3D(
-    settings:GFX.Scene3D.FirstPersonCamera.Settings = GFX.Scene3D.FirstPersonCamera.Settings()
-) GFX.Scene3D.ViewportCamera {
-    return GFX.Scene3D.ViewportCamera(settings)
-}
-public use GFX.Scene3D.FirstPersonCamera.Settings as FirstPersonCamera3DSettings
-public use GFX.Scene3D.Plugin as Scene3D
-public use GFX.Scene3D.ViewportCamera as ViewportCamera3D
-public use GFX.Scene3D.ViewportCamera.Controls as ViewportCamera3DControls
-public use GFX.Scene3D.ViewportCamera.Settings as ViewportCamera3DSettings
-public use GFX.Scene3D.ViewportCamera.View as ViewportCamera3DView
-public use GFX.Viewer.Plugin as Viewer
-public use GFX.Viewer.Settings as ViewerSettings
 public use GFX.Window.Plugin as Window
 public use GFX.Window.Plugin.CloseBehavior as WindowCloseBehavior
-public use GFX.Window.Plugin.Settings as WindowSettings

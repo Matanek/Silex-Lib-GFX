@@ -1,7 +1,10 @@
 {
   "name": "GFX",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "extensions": {
+    "GFX.Assets": {
+      "suite": true
+    },
     "GFX.Physics": {
       "friend": true
     },
@@ -13,13 +16,43 @@
     },
     "GFX.WebView": {
       "suite": true
+    },
+    "GFX.Rendering": {
+      "suite": true
+    },
+    "GFX.Stats": {
+      "suite": true
+    },
+    "GFX.Viewer": {
+      "suite": true
+    },
+    "GFX.Scene2D": {
+      "suite": true
+    },
+    "GFX.Scene3D": {
+      "suite": true
+    },
+    "GFX.Canvas": {
+      "suite": true
+    },
+    "GFX.ECS": {
+      "suite": true
+    },
+    "GFX.GPU": {
+      "friend": true,
+      "suite": true
     }
   },
   "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
-  "requires": { "silex": ">=0.38.34" },
+  "requires": { "silex": ">=0.38.36" },
   "dependencies": {
-    "JSON": "^0.1.0",
     "STD": "^0.16.0"
+  },
+  "devDependencies": {
+    "GFX.Assets": "^0.1.0",
+    "GFX.ECS": "^0.1.0",
+    "GFX.GPU": "^0.1.0",
+    "GFX.Rendering": "^0.1.0"
   },
   "boundary": {
     "macos-arm64": {
@@ -32,11 +65,6 @@
             "CoreServices", "CoreVideo", "ForceFeedback", "GameController",
             "IOKit", "Metal", "QuartzCore", "UniformTypeIdentifiers"
           ]
-        },
-        "SDL3_ttf": {
-          "archive": "Boundary/macos-arm64/libSDL3_ttf.a",
-          "frameworks": ["CoreFoundation", "CoreGraphics", "CoreText"],
-          "requires": ["GFX.SDL3"]
         }
       }
     },
@@ -45,11 +73,6 @@
         "SDL3": {
           "archive": "Boundary/linux-x64/libSDL3.a",
           "libraries": ["dl", "m", "pthread"]
-        },
-        "SDL3_ttf": {
-          "archive": "Boundary/linux-x64/libSDL3_ttf.a",
-          "libraries": ["m", "pthread"],
-          "requires": ["GFX.SDL3"]
         }
       }
     },
@@ -61,11 +84,6 @@
             "advapi32", "gdi32", "imm32", "ole32", "oleaut32", "setupapi",
             "shell32", "user32", "uuid", "version", "winmm"
           ]
-        },
-        "SDL3_ttf": {
-          "archive": "Boundary/windows-x64/SDL3_ttf.lib",
-          "libraries": ["gdi32", "rpcrt4", "usp10"],
-          "requires": ["GFX.SDL3"]
         }
       }
     },
@@ -77,11 +95,6 @@
             "advapi32", "gdi32", "imm32", "ole32", "oleaut32", "setupapi",
             "shell32", "user32", "uuid", "version", "winmm"
           ]
-        },
-        "SDL3_ttf": {
-          "archive": "Boundary/windows-arm64/SDL3_ttf.lib",
-          "libraries": ["gdi32", "rpcrt4", "usp10"],
-          "requires": ["GFX.SDL3"]
         }
       }
     }
@@ -92,11 +105,6 @@
         "path": "Boundary/macos-arm64/libSDL3.a",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-macos-arm64.a",
         "sha256": "9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd"
-      },
-      "SDL3_ttf": {
-        "path": "Boundary/macos-arm64/libSDL3_ttf.a",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-macos-arm64.a",
-        "sha256": "09082a212708697d437eb79f56dc84dc01751fa83116ca6c0cc4aa8a0180dd85"
       }
     },
     "linux-x64": {
@@ -104,11 +112,6 @@
         "path": "Boundary/linux-x64/libSDL3.a",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-linux-x64.a",
         "sha256": "307863a80e696052ba4944d62533598889a08068badeec7e2729f096f4f2eada"
-      },
-      "SDL3_ttf": {
-        "path": "Boundary/linux-x64/libSDL3_ttf.a",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-linux-x64.a",
-        "sha256": "b8af5c4cd8e5b547dbee934369238f529ed57057a8f542570783e8505aa7710d"
       }
     },
     "windows-x64": {
@@ -116,11 +119,6 @@
         "path": "Boundary/windows-x64/SDL3.lib",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-windows-x64.lib",
         "sha256": "e8140461894524526b3fe595fa38a7fdbbc15ea51456e3578b33f7dda3007fae"
-      },
-      "SDL3_ttf": {
-        "path": "Boundary/windows-x64/SDL3_ttf.lib",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-windows-x64.lib",
-        "sha256": "9adebcbbddc05673dd04fa4260ca8f58f4620ff78b5c38c98e8b2792cc7cd9d7"
       }
     },
     "windows-arm64": {
@@ -128,11 +126,6 @@
         "path": "Boundary/windows-arm64/SDL3.lib",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-windows-arm64.lib",
         "sha256": "692a2c16dbb0924c2ce54509e2ac1b5c3043f1c3983e9cf1a47cdcc9a13dab19"
-      },
-      "SDL3_ttf": {
-        "path": "Boundary/windows-arm64/SDL3_ttf.lib",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3_ttf-3.2.2-windows-arm64.lib",
-        "sha256": "36f7b73b740fe70140fb0647db1774d083427ec59e16f3e7b4b311741503bbb0"
       }
     }
   }
