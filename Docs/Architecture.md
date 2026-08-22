@@ -51,7 +51,7 @@ GFX.Scene2D
 └── Scene2D         camera, transform, Canvas placement, sprite, grid, and 2D shaders
 
 GFX.Scene3D
-└── Scene3D         camera, mesh, material, light, selection, and 3D gizmos
+└── Scene3D         camera, viewport axis, mesh, material, light, selection, and 3D gizmos
 
 GFX.Canvas
 └── Canvas          vector drawing intentions, rasterization, surfaces, and text
