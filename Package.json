@@ -1,6 +1,6 @@
 {
   "name": "GFX",
-  "version": "0.38.1",
+  "version": "0.38.2",
   "description": "Modular graphics and application library for windows, input, rendering, and GPU workloads.",
   "authors": ["Matanek"],
   "extensions": {
