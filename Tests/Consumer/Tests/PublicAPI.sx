@@ -1,0 +1,14 @@
+use GFX.Color
+use GFX.Window
+
+test "consume the public GFX window and color API" {
+    assert(Color.bytes(51, 102, 204) == Color.rgb(0.2, 0.4, 0.8))
+    var window = Window(Window.Settings(
+        title:"GFX public API consumer",
+        width:320,
+        height:240,
+        hidden:true,
+    ))
+    assert(window.id().value != 0)
+    assert(window.title() == "GFX public API consumer")
+}
