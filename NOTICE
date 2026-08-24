@@ -3,6 +3,7 @@ Copyright 2026 Matanek and Silex contributors
 
 This product is licensed under the Apache License, Version 2.0.
 
-GFX distributes target-specific SDL3 static artifacts. Its notice is kept in
-the Licenses directory. GFX.Canvas and GFX.Audio own the separately distributed
-SDL3_ttf and SDL3_mixer artifacts.
+GFX distributes target-specific SDL3 static artifacts and Windows GUID archives
+built from the MinGW-w64 sources bundled with Zig 0.16. Their notices are kept
+in the Licenses directory. GFX.Canvas and GFX.Audio own the separately
+distributed SDL3_ttf and SDL3_mixer artifacts.
