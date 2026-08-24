@@ -78,7 +78,7 @@ jobs:
           "$silex" link "$GITHUB_WORKSPACE/GFX" --workspace "$consumer"
           output=$(cd "$consumer" && SDL_VIDEODRIVER=dummy "$silex" test Tests)
           printf '%s\n' "$output"
-          grep -Fxq '1 passed; 0 failed in 1 file' <<< "$output"
+          grep -Fxq '1 passed; 0 failed in 1 files' <<< "$output"
 
   windows-x64:
     if: inputs.target == 'all' || inputs.target == 'windows-x64'
@@ -139,6 +139,6 @@ jobs:
           $output = @(& $silex test Tests)
           $exitCode = $LASTEXITCODE
           $output | ForEach-Object { Write-Output $_ }
-          if ($exitCode -ne 0 -or -not ($output -contains "1 passed; 0 failed in 1 file")) {
+          if ($exitCode -ne 0 -or -not ($output -contains "1 passed; 0 failed in 1 files")) {
             throw "GFX public API consumer failed"
           }
