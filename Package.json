@@ -1,6 +1,6 @@
 {
   "name": "GFX",
-  "version": "0.38.2",
+  "version": "0.39.0",
   "description": "Modular graphics and application library for windows, input, rendering, and GPU workloads.",
   "authors": ["Matanek"],
   "extensions": {
@@ -17,6 +17,9 @@
       "suite": true
     },
     "GFX.WebView": {
+      "suite": true
+    },
+    "GFX.Terminal": {
       "suite": true
     },
     "GFX.Rendering": {

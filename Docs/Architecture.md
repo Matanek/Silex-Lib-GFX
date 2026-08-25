@@ -14,8 +14,8 @@ manifest still declare every package whose modules they import directly.
 
 Capabilities may be distributed as explicitly authorized child packages.
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
-`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Viewer`, and
-`GFX.WebView` are
+`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
+`GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately while it is under development.
 
@@ -77,7 +77,9 @@ owns generic pass orchestration, FrameGraph, multisampling and frame statistics.
 `GFX.Scene2D` owns retained 2D scenes and their renderer. `GFX.Scene3D` owns
 retained 3D scenes, geometry, imported-model
 instantiation, shaders, tone-mapping tables and its renderer. `GFX.Stats` owns
-its FPS and rendering-statistics panels. `GFX.Viewer` owns direct visual-value
+its FPS and rendering-statistics panels. `GFX.Terminal` owns ANSI/VT screen
+emulation, PTY/ConPTY session orchestration through STD, terminal themes and
+Canvas presentation. `GFX.Viewer` owns direct visual-value
 presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
 `GFX.WebView` owns its portable API, application plugin, platform

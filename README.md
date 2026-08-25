@@ -24,8 +24,8 @@ The domains remain independent in the API (`GFX.Scene2D`, `GFX.Scene3D`,
 package. SDL is private infrastructure and does not appear as a public module.
 
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
-`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Viewer`, and
-`GFX.WebView` are
+`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
+`GFX.Viewer`, and `GFX.WebView` are
 official suite extensions with their own packages and release cycles. Assets
 owns portable images, models, sprite sheets, their stores, and the current PNG
 and glTF adapters. ECS owns
