@@ -25,14 +25,16 @@ package. SDL is private infrastructure and does not appear as a public module.
 
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
 `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
-`GFX.Viewer`, and `GFX.WebView` are
+`GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite extensions with their own packages and release cycles. Assets
 owns portable images, models, sprite sheets, their stores, and the current PNG
 and glTF adapters. ECS owns
 typed entities, queries, commands, and Application integration. Rendering owns
 the generic renderer and its frame graph. GPU owns devices, resources,
 pipelines, commands, compute, and window presentation. Viewer opens generated
-images and Canvas drawings through a direct `show` API. An
+images and Canvas drawings through a direct `show` API. GFX.UI establishes
+declarative, type-oriented interface descriptions while
+its layout, rendering and Application integration remain under design. An
 explicit `silex install GFX` installs them with the suite, while an application
 manifest declares directly every package whose modules it imports. Extensions
 contribute only the declarations intended for the open GFX catalogs; Viewer

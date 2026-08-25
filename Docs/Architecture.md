@@ -15,7 +15,7 @@ manifest still declare every package whose modules they import directly.
 Capabilities may be distributed as explicitly authorized child packages.
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
 `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
-`GFX.Viewer`, and `GFX.WebView` are
+`GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately while it is under development.
 
@@ -55,6 +55,9 @@ GFX.Scene3D
 
 GFX.Canvas
 └── Canvas          vector drawing intentions, rasterization, surfaces, and text
+
+GFX.UI
+└── UI              declarative interface descriptions and typed style foundations
 ```
 
 The modules remain organized by capability. A cross-cutting capability may
@@ -82,6 +85,9 @@ emulation, PTY/ConPTY session orchestration through STD, terminal themes and
 Canvas presentation. `GFX.Viewer` owns direct visual-value
 presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
+`GFX.UI` owns declarative interface descriptions and their private retained
+identity independently from an application's game ECS world. Its future layout,
+rendering and scheduling integration remain inside the UI domain.
 `GFX.WebView` owns its portable API, application plugin, platform
 adapters and system-framework boundary. These packages own
 their examples, tests and documentation, depend only on public GFX capabilities,

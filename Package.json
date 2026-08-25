@@ -22,6 +22,9 @@
     "GFX.Terminal": {
       "suite": true
     },
+    "GFX.UI": {
+      "suite": true
+    },
     "GFX.Rendering": {
       "suite": true
     },
