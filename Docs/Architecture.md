@@ -82,13 +82,13 @@ retained 3D scenes, geometry, imported-model
 instantiation, shaders, tone-mapping tables and its renderer. `GFX.Stats` owns
 its FPS and rendering-statistics panels. `GFX.Terminal` owns ANSI/VT screen
 emulation, PTY/ConPTY session orchestration through STD, terminal themes and
-Canvas presentation. `GFX.Viewer` owns direct visual-value
-presentation through `show`, its
+Canvas presentation. `GFX.Viewer` owns direct visual-value and interactive
+Canvas-session presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
 `GFX.UI` owns declarative interface descriptions, their private retained
-identity, controls, constraint layout, image fitting and its retained Canvas
-renderer independently from an application's game ECS world. Interactive
-input, reconciliation and scheduling integration remain inside the UI domain.
+identity, controls, constraint layout, image fitting, retained Canvas renderer
+and input-driven runtime independently from an application's game ECS world.
+Reconciliation and scheduling integration remain inside the UI domain.
 `GFX.WebView` owns its portable API, application plugin, platform
 adapters and system-framework boundary. These packages own
 their examples, tests and documentation, depend only on public GFX capabilities,

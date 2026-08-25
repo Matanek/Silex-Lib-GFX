@@ -32,10 +32,10 @@ and glTF adapters. ECS owns
 typed entities, queries, commands, and Application integration. Rendering owns
 the generic renderer and its frame graph. GPU owns devices, resources,
 pipelines, commands, compute, and window presentation. Viewer opens generated
-images and Canvas drawings through a direct `show` API. GFX.UI establishes
-declarative, type-oriented interface descriptions, controls, constraint layout
-and retained Canvas commands; its interactive Application integration
-remains under design. An
+images, Canvas drawings and interactive Canvas sessions through a direct
+`show` API. GFX.UI provides declarative, type-oriented interface descriptions,
+controls, constraint layout, retained Canvas commands and an input-driven
+runtime independent from an application's ECS World. An
 explicit `silex install GFX` installs them with the suite, while an application
 manifest declares directly every package whose modules it imports. Extensions
 contribute only the declarations intended for the open GFX catalogs; Viewer
