@@ -57,7 +57,7 @@ GFX.Canvas
 └── Canvas          vector drawing intentions, rasterization, surfaces, and text
 
 GFX.UI
-└── UI              declarative interface descriptions and typed style foundations
+└── UI              declarative descriptions, constraint layout, image fitting, and raster rendering
 ```
 
 The modules remain organized by capability. A cross-cutting capability may
@@ -85,9 +85,10 @@ emulation, PTY/ConPTY session orchestration through STD, terminal themes and
 Canvas presentation. `GFX.Viewer` owns direct visual-value
 presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
-`GFX.UI` owns declarative interface descriptions and their private retained
-identity independently from an application's game ECS world. Its future layout,
-rendering and scheduling integration remain inside the UI domain.
+`GFX.UI` owns declarative interface descriptions, their private retained
+identity, constraint layout, image fitting and its initial Canvas-backed raster
+renderer independently from an application's game ECS world. Interactive
+input, reconciliation and scheduling integration remain inside the UI domain.
 `GFX.WebView` owns its portable API, application plugin, platform
 adapters and system-framework boundary. These packages own
 their examples, tests and documentation, depend only on public GFX capabilities,

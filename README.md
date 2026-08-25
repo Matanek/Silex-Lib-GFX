@@ -33,8 +33,9 @@ typed entities, queries, commands, and Application integration. Rendering owns
 the generic renderer and its frame graph. GPU owns devices, resources,
 pipelines, commands, compute, and window presentation. Viewer opens generated
 images and Canvas drawings through a direct `show` API. GFX.UI establishes
-declarative, type-oriented interface descriptions while
-its layout, rendering and Application integration remain under design. An
+declarative, type-oriented interface descriptions, constraint layout and an
+initial Canvas-backed raster renderer; its interactive Application integration
+remains under design. An
 explicit `silex install GFX` installs them with the suite, while an application
 manifest declares directly every package whose modules it imports. Extensions
 contribute only the declarations intended for the open GFX catalogs; Viewer
