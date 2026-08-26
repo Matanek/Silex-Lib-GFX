@@ -43,7 +43,9 @@ keeps its direct API without adding plugin or resource aliases.
 
 Physics remains an optional official extension. Applications that need it
 install `GFX.Physics` separately; its declarations contribute to the open
-components and resources catalogs in the same ownership-preserving way.
+components and resources catalogs in the same ownership-preserving way. Its
+0.5 line uses one native Silex simulation core and owns its migration and
+release evidence in the extension repository.
 
 ## Examples
 

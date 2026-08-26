@@ -17,7 +17,7 @@ Capabilities may be distributed as explicitly authorized child packages.
 `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
 `GFX.Stats`, `GFX.Terminal`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
-installed separately while it is under development.
+installed separately with its own native Silex core and release cycle.
 
 Authorization is a delegation from GFX, not a permanent transfer of its
 namespace. If GFX later supplies `GFX.Physics` itself, its module is canonical.
