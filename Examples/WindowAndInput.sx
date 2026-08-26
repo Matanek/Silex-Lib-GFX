@@ -1,0 +1,30 @@
+use GFX.Input
+use GFX.Window
+
+func main() {
+    var window = Window(Window.Settings(
+        title:"GFX Window and Input",
+        width:960,
+        height:540
+    ))
+    var input = Input()
+    let window_id = window.id()
+
+    while true {
+        // Sleep until an event arrives, with 100 ms as the upper bound.
+        input.wait(100)
+        input.update()
+
+        if input.is_quit_requested() || input.is_pressed(Input.Key.escape) {
+            return
+        }
+        for event in input.events() {
+            match event {
+                window_close_requested(request) => {
+                    if request.window == window_id { return }
+                }
+                else => {}
+            }
+        }
+    }
+}

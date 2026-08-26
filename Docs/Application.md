@@ -38,6 +38,10 @@ that preparation boundary.
 `Application.Time` provides `FrameTime`. `Application.FramePacing` limits a
 loop that does not already have its own presentation mechanism.
 
+[ApplicationWindow.sx](../Examples/ApplicationWindow.sx) is the smallest
+complete windowed application. It adds frame pacing because an otherwise empty
+application has no renderer or presentation step to regulate its loop.
+
 Development overlays such as the FPS and performance panels belong to the
 official `GFX.Stats` suite package. Application remains responsible only for
 plugin composition and scheduling.

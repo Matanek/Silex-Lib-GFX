@@ -20,6 +20,13 @@ additional application wiring. The default automatic behavior stops the
 application when its window requests closure; manual mode keeps the request
 observable through `GFX.Input.State`.
 
+Both ownership models are executable examples:
+
+- [ApplicationWindow.sx](../Examples/ApplicationWindow.sx) delegates the loop
+  and window lifetime to `Application`.
+- [WindowAndInput.sx](../Examples/WindowAndInput.sx) owns `Window`, `Input`,
+  event waiting, updates, and shutdown directly.
+
 The `presentation_handle()` is a deliberate escape hatch for an extension that
 must attach a system surface, such as `GFX.WebView`; the window retains
 ownership and the handle is valid only during its lifetime.

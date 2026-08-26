@@ -1,0 +1,13 @@
+use GFX.Application
+use GFX.Window
+
+func main() {
+    Application()
+        ..add_plugin(Application.FramePacing(60))
+        ..add_plugin(Window.Plugin(Window.Plugin.Settings()
+            ..title = "GFX Application Window"
+            ..width = 960
+            ..height = 540
+        ))
+        ..run()
+}

@@ -45,6 +45,15 @@ Physics remains an optional official extension. Applications that need it
 install `GFX.Physics` separately; its declarations contribute to the open
 components and resources catalogs in the same ownership-preserving way.
 
+## Examples
+
+- [ApplicationWindow.sx](Examples/ApplicationWindow.sx) opens a window through
+  `Application` and `Window.Plugin`.
+- [WindowAndInput.sx](Examples/WindowAndInput.sx) owns a window and its
+  event-driven input loop directly, without `Application`.
+- [Clipboard.sx](Examples/Clipboard.sx) reads and preserves the current system
+  clipboard text.
+
 See [Docs/Architecture.md](Docs/Architecture.md) for domain ownership and
 extension points, and [Docs/Clipboard.md](Docs/Clipboard.md) for the system
 clipboard API.
