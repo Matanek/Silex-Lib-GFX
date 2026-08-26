@@ -1,0 +1,10 @@
+use GFX.Clipboard
+
+test "query the system text clipboard without mutating it" {
+    if Clipboard.has_text() {
+        match Clipboard.try_read_text() {
+            failure(error) => { panic(error.detail) }
+            success(value) => {}
+        }
+    }
+}

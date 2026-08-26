@@ -16,9 +16,6 @@
     "GFX.Audio": {
       "suite": true
     },
-    "GFX.Desktop": {
-      "suite": true
-    },
     "GFX.WebView": {
       "suite": true
     },

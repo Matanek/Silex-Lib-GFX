@@ -1,7 +1,8 @@
 use GFX.Color
+use GFX.Clipboard
 use GFX.Window
 
-test "consume the public GFX window and color API" {
+test "consume the public GFX window color and clipboard API" {
     assert(Color.bytes(51, 102, 204) == Color.rgb(0.2, 0.4, 0.8))
     var window = Window(Window.Settings(
         title:"GFX public API consumer",
@@ -11,4 +12,14 @@ test "consume the public GFX window and color API" {
     ))
     assert(window.id().value != 0)
     assert(window.title() == "GFX public API consumer")
+    match Clipboard.try_read_text() {
+        failure(error) => { assert(error.detail != "") }
+        success(value) => {
+            // Exercise writes without changing the current clipboard text.
+            match Clipboard.try_write_text(value) {
+                failure(error) => { panic(error.detail) }
+                success => {}
+            }
+        }
+    }
 }

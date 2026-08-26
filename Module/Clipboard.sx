@@ -1,0 +1,113 @@
+use Interop.Boundary
+use Interop.C
+
+public struct Error {
+    let detail:str
+}
+
+public func has_text() bool {
+    if !initialize_runtime() { return false }
+    let result = sdl_has_clipboard_text() != 0
+    shutdown_runtime()
+    return result
+}
+
+public func try_read_text() Result<str, Error> {
+    if !initialize_runtime() {
+        return Result<str, Error>.failure(Error(detail:platform_error()))
+    }
+    let address = C.address_bits(sdl_get_clipboard_text())
+    if address == 0 as uint {
+        let detail = platform_error()
+        shutdown_runtime()
+        return Result<str, Error>.failure(Error(detail:detail))
+    }
+    let result = copy_text(address)
+    sdl_free(C.pointer_bits(address))
+    shutdown_runtime()
+    return Result<str, Error>.success(result)
+}
+
+public func read_text() str {
+    match try_read_text() {
+        failure(error) => { panic(error.detail) }
+        success(value) => { return value }
+    }
+}
+
+public func try_write_text(value:str) Result<void, Error> {
+    if !initialize_runtime() {
+        return Result<void, Error>.failure(Error(detail:platform_error()))
+    }
+    if sdl_set_clipboard_text(C.terminated_pointer(value)) == 0 {
+        let detail = platform_error()
+        shutdown_runtime()
+        return Result<void, Error>.failure(Error(detail:detail))
+    }
+    shutdown_runtime()
+    return Result<void, Error>.success()
+}
+
+public func write_text(value:str) {
+    match try_write_text(value) {
+        failure(error) => { panic(error.detail) }
+        success => {}
+    }
+}
+
+func copy_text(address:uint) str {
+    var bytes:uint8[] = []
+    var index = 0
+    while index < 16 * 1024 * 1024 {
+        let byte = C.load<uint8>(address, index as uint)
+        if byte == 0 { return C.string(@bytes[0:bytes.count()]) }
+        bytes.append(byte)
+        index++
+    }
+    panic("GFX received clipboard text larger than 16 MiB")
+}
+
+func platform_error() str {
+    let address = C.address_bits(sdl_get_error())
+    if address == 0 as uint { return "clipboard operation failed" }
+    let detail = copy_text(address)
+    if detail == "" { return "clipboard operation failed" }
+    return detail
+}
+
+func initialize_runtime() bool {
+    return sdl_init_subsystem(0x0000_4020 as uint32) != 0
+}
+
+func shutdown_runtime() {
+    sdl_quit_subsystem(0x0000_4020 as uint32)
+}
+
+let sdl_has_clipboard_text = C.function<func() int32>(
+    library:Boundary.SDL3,
+    name:"SDL_HasClipboardText"
+)
+let sdl_get_clipboard_text = C.function<func() C.Pointer<uint8> >(
+    library:Boundary.SDL3,
+    name:"SDL_GetClipboardText"
+)
+let sdl_set_clipboard_text = C.function<func(C.Pointer<uint8>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_SetClipboardText"
+)
+let sdl_get_error = C.function<func() C.Pointer<uint8> >(
+    library:Boundary.SDL3,
+    name:"SDL_GetError"
+)
+let sdl_free = C.function<func(C.Pointer<uint8>) void>(
+    library:Boundary.SDL3,
+    name:"SDL_free"
+)
+let sdl_init_subsystem = C.function<func(uint32) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_InitSubSystem"
+)
+let sdl_quit_subsystem = C.function<func(uint32) void>(
+    library:Boundary.SDL3,
+    name:"SDL_QuitSubSystem"
+)
