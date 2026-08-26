@@ -13,9 +13,9 @@ suite. In source code, `GFX` remains the namespace parent. Applications with a
 manifest still declare every package whose modules they import directly.
 
 Capabilities may be distributed as explicitly authorized child packages.
-`GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
-`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
-`GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
+`GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.Desktop`,
+`GFX.ECS`, `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
+`GFX.Stats`, `GFX.Terminal`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately while it is under development.
 
@@ -56,6 +56,9 @@ GFX.Scene3D
 GFX.Canvas
 └── Canvas          vector drawing intentions, rasterization, surfaces, and text
 
+GFX.Desktop
+└── Desktop         clipboard and future desktop-shell integrations
+
 GFX.UI
 └── UI              declarative descriptions, controls, constraint layout, and retained Canvas rendering
 ```
@@ -85,6 +88,8 @@ emulation, PTY/ConPTY session orchestration through STD, terminal themes and
 Canvas presentation. `GFX.Viewer` owns direct visual-value and interactive
 Canvas-session presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
+`GFX.Desktop` owns desktop-shell capabilities such as the system clipboard;
+its submodules reuse GFX's native foundation without exposing SDL.
 `GFX.UI` owns declarative interface descriptions, their private retained
 identity, controls, constraint layout, image fitting, retained Canvas renderer
 and input-driven runtime independently from an application's game ECS world.
@@ -140,8 +145,8 @@ world.spawn(ECS.EntityRecipe()
 ## Native infrastructure
 
 SDL is not a domain that users need to learn. GFX owns the `SDL3` provider.
-GFX.GPU privately aliases that provider for direct SDL GPU calls. GFX.Canvas
-owns `SDL3_ttf` and GFX.Audio owns `SDL3_mixer`; both providers privately
+GFX.GPU and GFX.Desktop privately alias that provider for direct SDL calls.
+GFX.Canvas owns `SDL3_ttf` and GFX.Audio owns `SDL3_mixer`; both providers privately
 require `GFX.SDL3`. GFX.WebView owns its operating-system framework boundary.
 
 ```text
@@ -154,6 +159,9 @@ GFX.Canvas/Boundary/<target>/
 
 GFX.Audio/Boundary/<target>/
 └── SDL3_mixer -> GFX.SDL3
+
+GFX.Desktop/Boundary/<target>/
+└── SDL3 -> GFX.SDL3
 
 GFX.GPU/Boundary/<target>/
 └── SDL3 -> GFX.SDL3

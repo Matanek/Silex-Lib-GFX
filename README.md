@@ -23,9 +23,9 @@ The domains remain independent in the API (`GFX.Scene2D`, `GFX.Scene3D`,
 `GFX.GPU`, and so on), whether they live in the core or in an authorized child
 package. SDL is private infrastructure and does not appear as a public module.
 
-`GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`, `GFX.GPU`,
-`GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`, `GFX.Stats`, `GFX.Terminal`,
-`GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
+`GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.Desktop`,
+`GFX.ECS`, `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
+`GFX.Stats`, `GFX.Terminal`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite extensions with their own packages and release cycles. Assets
 owns portable images, models, sprite sheets, their stores, and the current PNG
 and glTF adapters. ECS owns
@@ -33,7 +33,9 @@ typed entities, queries, commands, and Application integration. Rendering owns
 the generic renderer and its frame graph. GPU owns devices, resources,
 pipelines, commands, compute, and window presentation. Viewer opens generated
 images, Canvas drawings and interactive Canvas sessions through a direct
-`show` API. GFX.UI provides declarative, type-oriented interface descriptions,
+`show` API. Desktop owns integrations with the surrounding desktop shell,
+starting with the system text clipboard. GFX.UI provides declarative,
+type-oriented interface descriptions,
 controls, constraint layout, retained Canvas commands and an input-driven
 runtime independent from an application's ECS World. An
 explicit `silex install GFX` installs them with the suite, while an application
