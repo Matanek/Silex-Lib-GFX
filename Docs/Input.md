@@ -23,5 +23,5 @@ next update.
 
 Outside `Application`, create one `Input`, call `wait()` when the program may
 sleep, then call `update()` exactly once before reading that turn's state and
-events. [WindowAndInput.sx](../Examples/WindowAndInput.sx) demonstrates this
-manual event loop, including window-close and Escape handling.
+events. The [direct window/input demonstration](https://github.com/Matanek/Silex-Examples/blob/main/Sources/DirectWindowInputLoop.sx)
+shows this manual event loop, including window-close and Escape handling.

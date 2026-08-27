@@ -86,9 +86,9 @@ owns generic pass orchestration, FrameGraph, multisampling and frame statistics.
 `GFX.Scene2D` owns retained 2D scenes and their renderer. `GFX.Scene3D` owns
 retained 3D scenes, geometry, imported-model
 instantiation, shaders, tone-mapping tables and its renderer. `GFX.Stats` owns
-its FPS and rendering-statistics panels. `GFX.Viewer` owns direct visual-value and interactive
-Canvas-session presentation through `show`, its
-viewer-specific settings, shader, examples, and private application plumbing.
+its FPS and rendering-statistics panels. `GFX.Viewer` owns direct visual-value
+and interactive Canvas-session presentation through `show`, its viewer-specific
+settings, shader, tests, documentation, and private application plumbing.
 `GFX.UI` owns declarative interface descriptions, their private retained
 identity, controls, constraint layout, image fitting, retained Canvas renderer
 and input-driven runtime independently from an application's game ECS world.
@@ -97,10 +97,12 @@ Reconciliation and scheduling integration remain inside the UI domain.
 PTY/ConPTY session orchestration through STD, terminal themes and composable
 custom views. It depends on neither ECS nor scene/rendering packages, and
 process polling remains explicitly owned by its host.
-`GFX.WebView` owns its portable API, application plugin, platform
-adapters and system-framework boundary. These packages own
-their examples, tests and documentation, depend only on public GFX capabilities,
-and contribute their declarations to the parent's open catalogs.
+`GFX.WebView` owns its portable API, application plugin, platform adapters and
+system-framework boundary. These packages own their tests and documentation,
+depend only on public GFX capabilities, and contribute their declarations to
+the parent's open catalogs. Applications promoted for demonstration live in
+`Silex-Examples`; a remaining package `Examples/` directory is migration
+backlog rather than a durable ownership boundary.
 
 ## Umbrella views
 
@@ -183,8 +185,7 @@ Each domain keeps everything needed to understand, use, and replace it:
 GFX.Scene3D/
 ├── Module/           domain API and implementation
 ├── Shaders/          shaders supplied by the domain
-├── Assets/           tone-mapping tables and example models
-├── Examples/         executable usages
+├── Assets/           distributed tone-mapping tables and models
 ├── Tests/            verified contract and isolated consumer
 └── Docs/README.md    domain documentation
 ```

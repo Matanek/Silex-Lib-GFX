@@ -50,14 +50,11 @@ components and resources catalogs in the same ownership-preserving way. Its
 0.5 line uses one native Silex simulation core and owns its migration and
 release evidence in the extension repository.
 
-## Examples
-
-- [ApplicationWindow.sx](Examples/ApplicationWindow.sx) opens a window through
-  `Application` and `Window.Plugin`.
-- [WindowAndInput.sx](Examples/WindowAndInput.sx) owns a window and its
-  event-driven input loop directly, without `Application`.
-- [Clipboard.sx](Examples/Clipboard.sx) reads and preserves the current system
-  clipboard text.
+The visual [application-window](https://github.com/Matanek/Silex-Examples/blob/main/Sources/ApplicationWindow.sx)
+and [direct window/input](https://github.com/Matanek/Silex-Examples/blob/main/Sources/DirectWindowInputLoop.sx)
+applications live in `Silex-Examples`, which owns promoted demonstrations that
+would otherwise duplicate package examples. Focused Clipboard, Application,
+Input, and Window snippets live under [Docs/](Docs/).
 
 See [Docs/Architecture.md](Docs/Architecture.md) for domain ownership and
 extension points, and [Docs/Clipboard.md](Docs/Clipboard.md) for the system
