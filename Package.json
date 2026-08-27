@@ -19,9 +19,6 @@
     "GFX.WebView": {
       "suite": true
     },
-    "GFX.Terminal": {
-      "suite": true
-    },
     "GFX.UI": {
       "suite": true
     },

@@ -15,9 +15,11 @@ manifest still declare every package whose modules they import directly.
 Capabilities may be distributed as explicitly authorized child packages.
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`,
 `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
-`GFX.Stats`, `GFX.Terminal`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
+`GFX.Stats`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately with its own native Silex core and release cycle.
+`GFX.UI.Terminal` is a nested extension authorized by `GFX.UI`; installing the
+UI suite adds it without making it a direct child of the GFX core.
 
 Authorization is a delegation from GFX, not a permanent transfer of its
 namespace. If GFX later supplies `GFX.Physics` itself, its module is canonical.
@@ -59,6 +61,9 @@ GFX.Canvas
 
 GFX.UI
 └── UI              declarative descriptions, controls, constraint layout, and retained Canvas rendering
+
+GFX.UI.Terminal
+└── UI.Terminal     application-console and PTY/ConPTY controls for UI trees
 ```
 
 The modules remain organized by capability. A cross-cutting capability may
@@ -81,15 +86,17 @@ owns generic pass orchestration, FrameGraph, multisampling and frame statistics.
 `GFX.Scene2D` owns retained 2D scenes and their renderer. `GFX.Scene3D` owns
 retained 3D scenes, geometry, imported-model
 instantiation, shaders, tone-mapping tables and its renderer. `GFX.Stats` owns
-its FPS and rendering-statistics panels. `GFX.Terminal` owns ANSI/VT screen
-emulation, PTY/ConPTY session orchestration through STD, terminal themes and
-Canvas presentation. `GFX.Viewer` owns direct visual-value and interactive
+its FPS and rendering-statistics panels. `GFX.Viewer` owns direct visual-value and interactive
 Canvas-session presentation through `show`, its
 viewer-specific settings, shader, examples, and private application plumbing.
 `GFX.UI` owns declarative interface descriptions, their private retained
 identity, controls, constraint layout, image fitting, retained Canvas renderer
 and input-driven runtime independently from an application's game ECS world.
 Reconciliation and scheduling integration remain inside the UI domain.
+`GFX.UI.Terminal` extends that domain with ANSI/VT screen emulation,
+PTY/ConPTY session orchestration through STD, terminal themes and composable
+custom views. It depends on neither ECS nor scene/rendering packages, and
+process polling remains explicitly owned by its host.
 `GFX.WebView` owns its portable API, application plugin, platform
 adapters and system-framework boundary. These packages own
 their examples, tests and documentation, depend only on public GFX capabilities,
