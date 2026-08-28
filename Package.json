@@ -1,7 +1,10 @@
 {
   "name": "GFX",
   "version": "0.39.0",
-  "description": "Modular graphics and application library for windows, input, rendering, and GPU workloads.",
+  "description": {
+    "en": "Modular graphics and application library for windows, input, rendering, and GPU workloads.",
+    "fr": "Bibliothèque modulaire de graphisme et d’applications pour les fenêtres, les entrées, le rendu et les tâches GPU."
+  },
   "authors": ["Matanek"],
   "extensions": {
     "GFX.Assets": {
@@ -49,7 +52,7 @@
     }
   },
   "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
-  "requires": { "silex": ">=0.39.0" },
+  "requires": { "silex": ">=0.42.0" },
   "dependencies": {
     "STD": "^0.16.0"
   },
