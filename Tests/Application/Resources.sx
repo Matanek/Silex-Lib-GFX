@@ -69,3 +69,44 @@ test "isolate and mutate application resources" {
     second_resources.clear()
     assert(trace.next == 4)
 }
+
+test "scope resources without copying or owning the parent" {
+    var application = Application()
+    var resources = application.resources()
+    resources.insert(Counter(value:40))
+
+    var scoped = resources.scope()
+    assert(scoped.has<Counter>())
+    if true {
+        var inherited:&Counter = scoped.get_mut<Counter>()
+        inherited.value += 2
+    }
+    if true {
+        let global:@Counter = resources.get<Counter>()
+        assert(global.value == 42)
+    }
+
+    scoped.insert(Counter(value:2))
+    if true {
+        let local_resource:@Counter = scoped.get<Counter>()
+        let global:@Counter = resources.get<Counter>()
+        assert(local_resource.value == 2)
+        assert(global.value == 42)
+    }
+
+    let removed = scoped.remove<Counter>()
+    assert(removed != null)
+    if true {
+        let inherited:@Counter = scoped.get<Counter>()
+        assert(inherited.value == 42)
+    }
+    assert(scoped.remove<Counter>() == null)
+
+    scoped.insert(Counter(value:7))
+    scoped.clear()
+    assert(scoped.has<Counter>())
+    if true {
+        let inherited:@Counter = scoped.get<Counter>()
+        assert(inherited.value == 42)
+    }
+}

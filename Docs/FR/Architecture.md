@@ -9,9 +9,9 @@ silex install GFX
 ```
 
 Le manifeste d’une application déclare chaque package qu’elle importe.
-Animation, Assets, Audio, Canvas, ECS, GPU, Rendering, Scene2D, Scene3D, Stats,
-UI, Viewer et WebView sont membres de la suite. Physics évolue séparément et
-UI.Terminal est autorisé par UI.
+`GFX.Application`, Animation, Assets, Audio, Canvas, ECS, GPU, Rendering,
+Scene2D, Scene3D, Stats, UI, Viewer et WebView sont membres de la suite.
+Physics évolue séparément et UI.Terminal est autorisé par UI.
 
 L’autorisation délègue un espace de noms sans en transférer la propriété. Une
 fusion exacte n’est possible qu’avec `merge: true`, reste additive et refuse
@@ -25,6 +25,9 @@ GFX
 ├── Clipboard       operating-system UTF-8 text clipboard
 ├── Input           events, keyboard, and pointer
 └── Window          windows, displays, and system presentation
+
+GFX.Application
+└── Application     isolated scene context merged into the canonical module
 
 GFX.Assets
 └── Assets          portable images, models, sprite sheets, stores, and format adapters

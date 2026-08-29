@@ -33,6 +33,10 @@ public intrinsic class Resources {
 
     // Removes every resource and releases their values in reverse insertion order.
     func clear()
+
+    // Creates an empty child store whose missing reads fall back to this store.
+    // Removing or clearing values from the child never changes this parent.
+    func scope() Resources
 }
 
 public enum Schedule {

@@ -35,6 +35,12 @@ resource before starting the application can call `prepare()` explicitly after
 adding every plugin, then access `resources()`. No plugin can be added after
 that preparation boundary.
 
+`Resources.scope()` creates an empty child store. A local resource shadows a
+parent resource of the same type; a locally missing read consults the parent
+without copying its value. `remove` and `clear` affect local values only. This
+primitive supports shorter-lived execution contexts, including scenes from the
+`GFX.Application` package.
+
 `Application.Time` provides `FrameTime`. `Application.FramePacing` limits a
 loop that does not already have its own presentation mechanism.
 

@@ -13,8 +13,8 @@ suite. In source code, `GFX` remains the namespace parent. Applications with a
 manifest still declare every package whose modules they import directly.
 
 Capabilities may be distributed as explicitly authorized child packages.
-`GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`,
-`GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
+`GFX.Application`, `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`,
+`GFX.ECS`, `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
 `GFX.Stats`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately with its own native Silex core and release cycle.
@@ -36,6 +36,9 @@ GFX
 ├── Clipboard       operating-system UTF-8 text clipboard
 ├── Input           events, keyboard, and pointer
 └── Window          windows, displays, and system presentation
+
+GFX.Application
+└── Application     isolated scene context merged into the canonical module
 
 GFX.Assets
 └── Assets          portable images, models, sprite sheets, stores, and format adapters
@@ -66,10 +69,13 @@ GFX.UI.Terminal
 └── UI.Terminal     application-console and PTY/ConPTY controls for UI trees
 ```
 
-The modules remain organized by capability. A cross-cutting capability may
-depend on a more fundamental one, but it does not become the owner of its
-consumers' concepts. Rendering owns and orchestrates its FrameGraph under
-`GFX.Rendering.FrameGraph`, while a 2D grid, a 3D material, and their shaders
+The modules remain organized by capability. `GFX.Application` adds the
+isolated scene context to the exact canonical Application module through
+additive merge permission; it depends only on GFX and GFX.ECS. A cross-cutting
+capability may depend on a more fundamental one, but it does not become the
+owner of its consumers' concepts. Rendering owns and orchestrates its
+FrameGraph under `GFX.Rendering.FrameGraph`, while a 2D grid, a 3D material,
+and their shaders
 remain in their scene domains.
 
 `GFX.Animation` owns its timelines, easing vocabulary, playback component and

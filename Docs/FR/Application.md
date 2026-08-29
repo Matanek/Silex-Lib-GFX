@@ -34,5 +34,11 @@ identifiant n’est construit qu’une fois.
 être ajouté après cette frontière. `Application.Time` fournit `FrameTime` et
 `Application.FramePacing` limite une boucle sans mécanisme de présentation.
 
+`Resources.scope()` crée un magasin enfant vide. Une ressource locale masque
+la ressource parente de même type ; une lecture absente localement consulte le
+parent sans copier sa valeur. `remove` et `clear` ne retirent que les valeurs
+locales. Cette primitive sert aux contextes de durée de vie plus courte, dont
+les scènes fournies par le package `GFX.Application`.
+
 Les panneaux de développement appartiennent à `GFX.Stats`, pas au socle
 Application.
