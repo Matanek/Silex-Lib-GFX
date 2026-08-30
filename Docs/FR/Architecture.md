@@ -9,9 +9,9 @@ silex install GFX
 ```
 
 Le manifeste d’une application déclare chaque package qu’elle importe.
-Animation, Assets, Audio, Canvas, ECS, GPU, Rendering, Scene2D, Scene3D, Stats,
-UI, Viewer et WebView sont membres de la suite. Physics évolue séparément et
-UI.Terminal est autorisé par UI.
+Animation, Assets, Audio, Canvas, ECS, Font, GPU, Rendering, Scene2D, Scene3D,
+Stats, UI, Viewer et WebView sont membres de la suite. Physics évolue
+séparément et UI.Terminal est autorisé par UI.
 
 L’autorisation délègue un espace de noms sans en transférer la propriété. Une
 fusion exacte n’est possible qu’avec `merge: true`, reste additive et refuse
@@ -34,6 +34,9 @@ GFX.GPU
 
 GFX.ECS
 └── ECS             world, entities, components, queries, and commands
+
+GFX.Font
+└── Font            portable font faces and private FreeType/HarfBuzz boundary
 
 GFX.Rendering
 ├── Renderer        generic rendering host and orchestration
@@ -97,8 +100,9 @@ et les collisions dans ces catalogues.
 ## Infrastructure native
 
 SDL est privé. GFX possède SDL3 pour fenêtres, entrées et presse-papiers.
-Canvas possède SDL3_ttf, Audio SDL3_mixer, GPU un alias privé de SDL3 et WebView
-ses frameworks système.
+Font possède une ABI C portable privée au-dessus de FreeType et HarfBuzz.
+Canvas conserve SDL3_ttf jusqu’à sa migration vers Font ; Audio possède
+SDL3_mixer, GPU un alias privé de SDL3 et WebView ses frameworks système.
 
 ```text
 Package.json
@@ -113,6 +117,11 @@ GFX.Audio/Boundary/<target>/
 
 GFX.GPU/Boundary/<target>/
 └── SDL3 -> GFX.SDL3
+
+GFX.Font/Boundary/<target>/
+├── SilexFont -> FreeType, HarfBuzz
+├── FreeType
+└── HarfBuzz
 
 GFX.Assets
 └── SDL3 -> GFX.SDL3

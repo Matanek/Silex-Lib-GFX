@@ -14,7 +14,7 @@ manifest still declare every package whose modules they import directly.
 
 Capabilities may be distributed as explicitly authorized child packages.
 `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`, `GFX.ECS`,
-`GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
+`GFX.Font`, `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
 `GFX.Stats`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately with its own native Silex core and release cycle.
@@ -45,6 +45,9 @@ GFX.GPU
 
 GFX.ECS
 └── ECS             world, entities, components, queries, and commands
+
+GFX.Font
+└── Font            portable font faces and private FreeType/HarfBuzz boundary
 
 GFX.Rendering
 ├── Renderer        generic rendering host and orchestration
@@ -96,7 +99,8 @@ Reconciliation and scheduling integration remain inside the UI domain.
 `GFX.UI.Terminal` extends that domain with ANSI/VT screen emulation,
 PTY/ConPTY session orchestration through STD, terminal themes and composable
 custom views. It depends on neither ECS nor scene/rendering packages, and
-process polling remains explicitly owned by its host.
+process polling remains explicitly owned by its host. `GFX.Font` owns portable
+font faces and the versioned C boundary over FreeType and HarfBuzz.
 `GFX.WebView` owns its portable API, application plugin, platform adapters and
 system-framework boundary. These packages own their tests and documentation,
 depend only on public GFX capabilities, and contribute their declarations to
@@ -152,8 +156,10 @@ world.spawn(ECS.EntityRecipe()
 SDL is not a domain that users need to learn. GFX owns the `SDL3` provider and
 uses it directly for core capabilities such as windows, input, and clipboard.
 GFX.GPU privately aliases that provider for direct SDL calls.
-GFX.Canvas owns `SDL3_ttf` and GFX.Audio owns `SDL3_mixer`; both providers privately
-require `GFX.SDL3`. GFX.WebView owns its operating-system framework boundary.
+GFX.Font owns a portable private C ABI over FreeType and HarfBuzz. GFX.Canvas
+retains `SDL3_ttf` until its Font migration, and GFX.Audio owns `SDL3_mixer`;
+both SDL add-on providers privately require `GFX.SDL3`. GFX.WebView owns its
+operating-system framework boundary.
 
 ```text
 Package.json
@@ -168,6 +174,11 @@ GFX.Audio/Boundary/<target>/
 
 GFX.GPU/Boundary/<target>/
 └── SDL3 -> GFX.SDL3
+
+GFX.Font/Boundary/<target>/
+├── SilexFont -> FreeType, HarfBuzz
+├── FreeType
+└── HarfBuzz
 
 GFX.Assets
 └── SDL3 -> GFX.SDL3

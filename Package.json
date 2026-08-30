@@ -46,6 +46,9 @@
     "GFX.ECS": {
       "suite": true
     },
+    "GFX.Font": {
+      "suite": true
+    },
     "GFX.GPU": {
       "friend": true,
       "suite": true
