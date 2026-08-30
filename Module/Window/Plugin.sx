@@ -1,5 +1,3 @@
-use Interop.C
-use Interop.Boundary
 use GFX.Application.Plugin as PluginProtocol
 use GFX.Application
 use GFX.Application.Schedule
@@ -111,7 +109,6 @@ public struct Plugin:PluginProtocol {
         application.add_resource(ClosePolicy(self.settings.close_behavior))
         application.add_system(Schedule.startup, start_window)
         application.add_after_system(Schedule.startup, present_without_renderer)
-        application.add_system(Schedule.pre_update, pump_window_events)
         application.add_after_system(Schedule.pre_update, handle_close_request)
         application.add_system(Schedule.shutdown, stop_window)
     }
@@ -146,10 +143,6 @@ func present_without_renderer(application:Application) {
     panic("GFX.Window.Plugin could not present its window")
 }
 
-func pump_window_events() {
-    sdl_pump_events()
-}
-
 func handle_close_request(application:Application) {
     var resources = application.resources()
     let policy = resources.get<ClosePolicy>()
@@ -182,8 +175,3 @@ func stop_window(application:Application) {
     var close_policy = resources.remove<ClosePolicy>()
     assert(close_policy != null)
 }
-
-let sdl_pump_events = C.function<func() void>(
-    library:Boundary.SDL3,
-    name:"SDL_PumpEvents"
-)

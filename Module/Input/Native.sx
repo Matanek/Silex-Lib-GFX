@@ -7,17 +7,9 @@ use GFX.Input.Keyboard
 use GFX.Input.Pointer
 use GFX.Input.Events
 
-public func watch_lifecycle(context:uint, raw:uint) int32 {
-    let kind = C.load<uint32>(raw, 0 as uint)
-    if kind < 0x101 || kind > 0x106 { return 1 }
-    let timestamp = Events.Timestamp(nanoseconds:C.load<uint>(raw, 8 as uint))
+public func watch_event(context:uint, raw:uint) int32 {
     var watcher = C.object_from_address<Watcher>(context)
-    if kind == 0x101 { watcher.record(Events.Event.terminating(Events.Meta(timestamp:timestamp))) }
-    if kind == 0x102 { watcher.record(Events.Event.low_memory(Events.Meta(timestamp:timestamp))) }
-    if kind == 0x103 { watcher.record(Events.Event.will_enter_background(Events.Meta(timestamp:timestamp))) }
-    if kind == 0x104 { watcher.record(Events.Event.did_enter_background(Events.Meta(timestamp:timestamp))) }
-    if kind == 0x105 { watcher.record(Events.Event.will_enter_foreground(Events.Meta(timestamp:timestamp))) }
-    if kind == 0x106 { watcher.record(Events.Event.did_enter_foreground(Events.Meta(timestamp:timestamp))) }
+    if let event = event_at(raw) { watcher.record(event) }
     return 1
 }
 
@@ -28,14 +20,14 @@ public class Watcher {
     init() {
         self.spin = 0
         self.pending = []
-        let callback:func(uint, uint) int32 = watch_lifecycle
+        let callback:func(uint, uint) int32 = watch_event
         if sdl_add_event_watch(C.pointer_bits(C.function_address(callback)), C.pointer_bits(C.object_address(self))) == 0 {
-            panic("GFX.Input could not observe lifecycle events")
+            panic("GFX.Input could not observe platform events")
         }
     }
 
     drop {
-        let callback:func(uint, uint) int32 = watch_lifecycle
+        let callback:func(uint, uint) int32 = watch_event
         sdl_remove_event_watch(C.pointer_bits(C.function_address(callback)), C.pointer_bits(C.object_address(self)))
     }
 
@@ -142,40 +134,50 @@ func free_event_storage(address:uint) {
 func poll_event_at(address:uint) Events.Event? {
     while true {
         if sdl_poll_event_at(C.pointer_bits(address)) == 0 { return null }
-        let kind = C.load<uint32>(address, 0 as uint)
-        let timestamp = Events.Timestamp(nanoseconds:C.load<uint>(address, 8 as uint))
-
-        if kind == 0 || kind == 0xffff || kind == 0x7fff_ffff || kind == 0x4000 || kind == 0x4001 || kind == 0x4002 || kind == 0x4003 || kind == 0x7f00 { continue }
-
-        if kind == 0x100 { return Events.Event.quit(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x101 { return Events.Event.terminating(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x102 { return Events.Event.low_memory(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x103 { return Events.Event.will_enter_background(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x104 { return Events.Event.did_enter_background(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x105 { return Events.Event.will_enter_foreground(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x106 { return Events.Event.did_enter_foreground(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x107 { return Events.Event.locale_changed(Events.Meta(timestamp:timestamp)) }
-        if kind == 0x108 { return Events.Event.system_theme_changed(Events.SystemThemeEvent(theme:system_theme(sdl_get_system_theme()), timestamp:timestamp)) }
-
-        if kind >= 0x151 && kind <= 0x158 { return display_event(address, kind, timestamp) }
-        if kind >= 0x202 && kind <= 0x21a { return window_event(address, kind, timestamp) }
-        if kind >= 0x300 && kind <= 0x309 { return keyboard_event(address, kind, timestamp) }
-        if kind >= 0x400 && kind <= 0x405 { return mouse_event(address, kind, timestamp) }
-        if kind >= 0x600 && kind <= 0x608 { return joystick_event(address, kind, timestamp) }
-        if kind >= 0x650 && kind <= 0x65b { return gamepad_event(address, kind, timestamp) }
-        if kind >= 0x700 && kind <= 0x703 { return touch_event(address, kind, timestamp) }
-        if kind >= 0x710 && kind <= 0x712 { return pinch_event(address, kind, timestamp) }
-        if kind == 0x900 { return clipboard_event(address, timestamp) }
-        if kind >= 0x1000 && kind <= 0x1004 { return drop_event(address, kind, timestamp) }
-        if kind >= 0x1100 && kind <= 0x1102 { return audio_event(address, kind, timestamp) }
-        if kind == 0x1200 { return sensor_event(address, timestamp) }
-        if kind >= 0x1300 && kind <= 0x1307 { return pen_event(address, kind, timestamp) }
-        if kind >= 0x1400 && kind <= 0x1403 { return camera_event(address, kind, timestamp) }
-        if kind >= 0x2000 && kind <= 0x2002 { return render_event(address, kind, timestamp) }
-        if kind >= 0x8000 && kind < 0xffff { return custom_event(address, kind, timestamp) }
-        return Events.Event.unknown(Events.UnknownEvent(kind:kind, timestamp:timestamp))
+        if let event = event_at(address) { return event }
     }
     return null
+}
+
+func pump_events() { sdl_pump_events() }
+
+func drain_events(address:uint) {
+    while sdl_poll_event_at(C.pointer_bits(address)) != 0 {}
+}
+
+func event_at(address:uint) Events.Event? {
+    let kind = C.load<uint32>(address, 0 as uint)
+    let timestamp = Events.Timestamp(nanoseconds:C.load<uint>(address, 8 as uint))
+
+    if kind == 0 || kind == 0xffff || kind == 0x7fff_ffff || kind == 0x4000 || kind == 0x4001 || kind == 0x4002 || kind == 0x4003 || kind == 0x7f00 { return null }
+
+    if kind == 0x100 { return Events.Event.quit(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x101 { return Events.Event.terminating(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x102 { return Events.Event.low_memory(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x103 { return Events.Event.will_enter_background(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x104 { return Events.Event.did_enter_background(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x105 { return Events.Event.will_enter_foreground(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x106 { return Events.Event.did_enter_foreground(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x107 { return Events.Event.locale_changed(Events.Meta(timestamp:timestamp)) }
+    if kind == 0x108 { return Events.Event.system_theme_changed(Events.SystemThemeEvent(theme:system_theme(sdl_get_system_theme()), timestamp:timestamp)) }
+
+    if kind >= 0x151 && kind <= 0x158 { return display_event(address, kind, timestamp) }
+    if kind >= 0x202 && kind <= 0x21a { return window_event(address, kind, timestamp) }
+    if kind >= 0x300 && kind <= 0x309 { return keyboard_event(address, kind, timestamp) }
+    if kind >= 0x400 && kind <= 0x405 { return mouse_event(address, kind, timestamp) }
+    if kind >= 0x600 && kind <= 0x608 { return joystick_event(address, kind, timestamp) }
+    if kind >= 0x650 && kind <= 0x65b { return gamepad_event(address, kind, timestamp) }
+    if kind >= 0x700 && kind <= 0x703 { return touch_event(address, kind, timestamp) }
+    if kind >= 0x710 && kind <= 0x712 { return pinch_event(address, kind, timestamp) }
+    if kind == 0x900 { return clipboard_event(address, timestamp) }
+    if kind >= 0x1000 && kind <= 0x1004 { return drop_event(address, kind, timestamp) }
+    if kind >= 0x1100 && kind <= 0x1102 { return audio_event(address, kind, timestamp) }
+    if kind == 0x1200 { return sensor_event(address, timestamp) }
+    if kind >= 0x1300 && kind <= 0x1307 { return pen_event(address, kind, timestamp) }
+    if kind >= 0x1400 && kind <= 0x1403 { return camera_event(address, kind, timestamp) }
+    if kind >= 0x2000 && kind <= 0x2002 { return render_event(address, kind, timestamp) }
+    if kind >= 0x8000 && kind < 0xffff { return custom_event(address, kind, timestamp) }
+    return Events.Event.unknown(Events.UnknownEvent(kind:kind, timestamp:timestamp))
 }
 
 public func wait_for_event(timeout_milliseconds:int) {
@@ -970,6 +972,7 @@ func function_key(value:int32) Keyboard.Key {
 
 let sdl_poll_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PollEvent")
 let sdl_poll_event_at = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_PollEvent")
+let sdl_pump_events = C.function<func() void>(library:Boundary.SDL3, name:"SDL_PumpEvents")
 let sdl_malloc = C.function<func(C.Size) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_malloc")
 let sdl_wait_event_timeout = C.function<func(C.Pointer<uint8>, int32) int32>(library:Boundary.SDL3, name:"SDL_WaitEventTimeout")
 let sdl_get_global_mouse_state = C.function<func(C.MutablePointer<float32>, C.MutablePointer<float32>) uint32>(library:Boundary.SDL3, name:"SDL_GetGlobalMouseState")

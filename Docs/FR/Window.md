@@ -18,6 +18,10 @@ var window = Window(Window.Settings(
 `Input.Plugin`. Par défaut, une demande de fermeture arrête l’application ; le
 mode manuel conserve la demande dans `GFX.Input.State`.
 
+Plusieurs fenêtres peuvent appartenir à des Bundles distincts dans la même
+boucle. L’exemple [Bundle/MultipleWindows](https://github.com/Matanek/Silex-Examples/blob/main/Sources/Bundle/MultipleWindows.sx)
+montre leur fermeture indépendante.
+
 `presentation_handle()` est une échappatoire explicite pour une extension qui
 attache une surface système, comme `GFX.WebView`. La fenêtre reste propriétaire
 et le handle n’est valide que pendant sa durée de vie. Les écrans sont exposés

@@ -118,3 +118,20 @@ test "translate SDL events into input state" {
         match events[6] { quit(meta) => { assert(meta.timestamp.nanoseconds >= 0 as uint) }; else => { panic("expected quit") } }
     }
 }
+
+test "broadcast SDL events to simultaneous input contexts" {
+    var window = Window(Window.Settings(title:"Shared Input Test", hidden:true))
+    var first = Input()
+    var second = Input()
+
+    first.update()
+    second.update()
+    push_key_event(0x300, window.id().value, 5, 0, false, 45 as uint)
+    first.update()
+    second.update()
+
+    assert(first.is_down(Input.Key.b))
+    assert(first.is_pressed(Input.Key.b))
+    assert(second.is_down(Input.Key.b))
+    assert(second.is_pressed(Input.Key.b))
+}

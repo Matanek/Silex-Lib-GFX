@@ -20,6 +20,10 @@ additional application wiring. The default automatic behavior stops the
 application when its window requests closure; manual mode keeps the request
 observable through `GFX.Input.State`.
 
+Several windows may belong to separate Bundles in the same loop. The
+[Bundle/MultipleWindows demonstration](https://github.com/Matanek/Silex-Examples/blob/main/Sources/Bundle/MultipleWindows.sx)
+shows their independent closure.
+
 Both ownership models are executable examples:
 
 - The [application-window demonstration](https://github.com/Matanek/Silex-Examples/blob/main/Sources/ApplicationWindow.sx)

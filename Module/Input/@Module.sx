@@ -274,15 +274,6 @@ public class State {
         self.append(event)
     }
 
-    module func handle_watched(event:Event) {
-        var index = 0
-        while index < self.frame_event_count {
-            if same_lifecycle_event(self.frame_events[index], event) { return }
-            index++
-        }
-        self.handle(event)
-    }
-
     func append(event:Event) {
         if self.frame_event_count < self.frame_events.count() {
             self.frame_events[self.frame_event_count] = event
@@ -541,15 +532,11 @@ public class State {
 }
 
 public class Input {
-    static var active:bool = false
     var current_state:State
     var lifecycle_watcher:Native.Watcher?
     var event_storage:uint
 
     init() {
-        if Input.active {
-            panic("GFX.Input is already active")
-        }
         initialize_runtime()
         self.current_state = State()
         self.lifecycle_watcher = Native.Watcher()
@@ -558,11 +545,9 @@ public class Input {
             shutdown_runtime()
             panic("GFX.Input could not allocate event storage")
         }
-        Input.active = true
     }
 
     drop {
-        Input.active = false
         self.lifecycle_watcher = null
         Native.free_event_storage(self.event_storage)
         self.event_storage = 0 as uint
@@ -584,16 +569,10 @@ public class Input {
 
     module func update_state(state:&State) {
         state.begin_frame()
-        while true {
-            let pending = Native.poll_event_at(self.event_storage)
-            if let event = pending {
-                state.handle(event)
-            } else {
-                if let watcher = self.lifecycle_watcher {
-                    for event in watcher.take() { state.handle_watched(event) }
-                }
-                return
-            }
+        Native.pump_events()
+        Native.drain_events(self.event_storage)
+        if let watcher = self.lifecycle_watcher {
+            for event in watcher.take() { state.handle(event) }
         }
     }
 
@@ -675,25 +654,6 @@ func contains_key(values:Key[], key:Key) bool {
     for value in values { if value == key { return true } }
     return false
 }
-
-func same_lifecycle_event(first:Event, second:Event) bool {
-    return match first {
-        terminating(a) => same_terminating(second, a.timestamp)
-        low_memory(a) => same_low_memory(second, a.timestamp)
-        will_enter_background(a) => same_will_enter_background(second, a.timestamp)
-        did_enter_background(a) => same_did_enter_background(second, a.timestamp)
-        will_enter_foreground(a) => same_will_enter_foreground(second, a.timestamp)
-        did_enter_foreground(a) => same_did_enter_foreground(second, a.timestamp)
-        else => false
-    }
-}
-
-func same_terminating(event:Event, timestamp:Events.Timestamp) bool { return match event { terminating(value) => value.timestamp == timestamp; else => false } }
-func same_low_memory(event:Event, timestamp:Events.Timestamp) bool { return match event { low_memory(value) => value.timestamp == timestamp; else => false } }
-func same_will_enter_background(event:Event, timestamp:Events.Timestamp) bool { return match event { will_enter_background(value) => value.timestamp == timestamp; else => false } }
-func same_did_enter_background(event:Event, timestamp:Events.Timestamp) bool { return match event { did_enter_background(value) => value.timestamp == timestamp; else => false } }
-func same_will_enter_foreground(event:Event, timestamp:Events.Timestamp) bool { return match event { will_enter_foreground(value) => value.timestamp == timestamp; else => false } }
-func same_did_enter_foreground(event:Event, timestamp:Events.Timestamp) bool { return match event { did_enter_foreground(value) => value.timestamp == timestamp; else => false } }
 
 func contains_mouse_button(values:MouseButton[], button:MouseButton) bool {
     for value in values { if value == button { return true } }
