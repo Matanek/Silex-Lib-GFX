@@ -34,6 +34,10 @@ public intrinsic class Resources {
     // Removes every resource and releases their values in reverse insertion order.
     func clear()
 
+    // Permanently invalidates this store after clearing its local values. Used
+    // by scene ownership boundaries so escaped aliases cannot reach a parent.
+    module func invalidate()
+
     // Creates an empty child store whose missing reads fall back to this store.
     // Removing or clearing values from the child never changes this parent.
     func scope() Resources
