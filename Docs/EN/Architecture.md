@@ -124,6 +124,11 @@ Domain modules remain available when an application wants a focused import.
 Dimensional suffixes appear in `Components` and `Plugins` because those two
 umbrellas deliberately place the 2D and 3D vocabularies side by side.
 
+Every installable Plugin has a direct, unambiguous alias under `GFX.Plugins`,
+even when its owning domain organizes it as a nested type. Completing
+`Plugins.` therefore discovers the whole installable surface, including
+`Plugins.Scene2D` and `Plugins.Scene2DContent`.
+
 The GFX manifest opens exactly these three modules as reexport-only catalogs.
 An authorized child package may contribute declarations that it owns from its
 portable principal module. The compiler rejects executable declarations,

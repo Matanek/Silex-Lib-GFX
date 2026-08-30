@@ -71,6 +71,12 @@ souvent utilisées ensemble. Ce sont des vues de réexport, pas de nouveaux
 propriétaires. Les suffixes dimensionnels y distinguent les vocabulaires 2D et
 3D placés côte à côte.
 
+Chaque Plugin installable possède un alias direct et non ambigu sous
+`GFX.Plugins`, même lorsque son domaine propriétaire l’organise comme un type
+imbriqué. L’auto-complétion de `Plugins.` suffit ainsi à découvrir toute la
+surface installable, par exemple `Plugins.Scene2D` et
+`Plugins.Scene2DContent`.
+
 ```silex
 use GFX.Components
 use GFX.ECS
