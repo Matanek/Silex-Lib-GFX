@@ -75,7 +75,7 @@ Chaque Plugin installable possède un alias direct et non ambigu sous
 `GFX.Plugins`, même lorsque son domaine propriétaire l’organise comme un type
 imbriqué. L’auto-complétion de `Plugins.` suffit ainsi à découvrir toute la
 surface installable, par exemple `Plugins.Scene2D` et
-`Plugins.Scene2DContent`.
+`Plugins.BundleManager`.
 
 ```silex
 use GFX.Components

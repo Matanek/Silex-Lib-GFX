@@ -127,7 +127,7 @@ umbrellas deliberately place the 2D and 3D vocabularies side by side.
 Every installable Plugin has a direct, unambiguous alias under `GFX.Plugins`,
 even when its owning domain organizes it as a nested type. Completing
 `Plugins.` therefore discovers the whole installable surface, including
-`Plugins.Scene2D` and `Plugins.Scene2DContent`.
+`Plugins.Scene2D` and `Plugins.BundleManager`.
 
 The GFX manifest opens exactly these three modules as reexport-only catalogs.
 An authorized child package may contribute declarations that it owns from its

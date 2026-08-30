@@ -59,6 +59,13 @@ public protocol Plugin {
     func build(application:&Application)
 }
 
+// Keeps the erased Plugin family concrete in applications that only use
+// Bundle resource and system isolation without installing a Plugin.
+struct EmptyPlugin:Plugin {
+    func id() str { return "GFX.Application.EmptyPlugin" }
+    func build(application:&Application) {}
+}
+
 class RegisteredSystem {
     let schedule:Schedule
     let after:bool
@@ -160,10 +167,13 @@ public class Controller {
 }
 
 public class Application {
+    private var parent_application_address:uint
     private var resource_store:Resources
     private var registered_systems:RegisteredSystem[]
     private var requested_plugin_ids:str[]
     private var requested_plugins:Plugin[]
+    private var bundle_plugin_ids:str[]
+    private var bundle_plugins:Plugin[]
     private var installed_plugin_ids:str[]
     private var installing_plugins:str[]
     private var resolving_plugins:bool
@@ -177,10 +187,13 @@ public class Application {
     private var query_parallel_dispatches:int
 
     init() {
+        self.parent_application_address = 0
         self.resource_store = Resources()
         self.registered_systems = []
         self.requested_plugin_ids = []
         self.requested_plugins = []
+        self.bundle_plugin_ids = []
+        self.bundle_plugins = []
         self.installed_plugin_ids = []
         self.installing_plugins = []
         self.resolving_plugins = false
@@ -196,10 +209,13 @@ public class Application {
     }
 
     init(worker_count:int) {
+        self.parent_application_address = 0
         self.resource_store = Resources()
         self.registered_systems = []
         self.requested_plugin_ids = []
         self.requested_plugins = []
+        self.bundle_plugin_ids = []
+        self.bundle_plugins = []
         self.installed_plugin_ids = []
         self.installing_plugins = []
         self.resolving_plugins = false
@@ -212,6 +228,17 @@ public class Application {
         self.query_local_dispatches = 0
         self.query_parallel_dispatches = 0
         self.resource_store.insert(Controller())
+    }
+
+    // Creates an independently scheduled child context whose missing resource
+    // reads fall back to its parent. Bundle is the public ownership boundary.
+    module static func scoped(parent:Application) Application {
+        var context = Application()
+        context.parent_application_address = C.object_address(parent)
+        context.resource_store.clear()
+        context.resource_store = parent.resources().scope()
+        context.resource_store.insert(Controller())
+        return context
     }
 
     func resources() Resources {
@@ -263,11 +290,36 @@ public class Application {
     }
 
     func has_plugin(id:str) bool {
-        return contains(self.installed_plugin_ids, id) || contains(self.requested_plugin_ids, id)
+        if contains(self.installed_plugin_ids, id) || contains(self.requested_plugin_ids, id) {
+            return true
+        }
+        return self.inherits_plugin(id)
+    }
+
+    // Returns whether a parent context provides this Plugin. Plugin authors
+    // use this to keep process-wide capabilities in the parent while adding
+    // only their local systems and resources to a Bundle.
+    func inherits_plugin(id:str) bool {
+        if self.parent_application_address == 0 { return false }
+        var parent = C.object_from_address<Application>(self.parent_application_address)
+        return parent.has_plugin(id)
     }
 
     func installed_plugins() str[] {
         return self.installed_plugin_ids
+    }
+
+    // Makes the same ordinary Plugin available in every child Bundle. The
+    // Plugin can branch on inherits_plugin() when only its local systems and
+    // resources belong in the child context.
+    func extend_bundles<T:Plugin>(plugin:T) Application {
+        let id = plugin.id()
+        if contains(self.bundle_plugin_ids, id) { return self }
+        self.resource_store.retain_class(plugin)
+        self.bundle_plugin_ids.append(id)
+        var candidate:Plugin = plugin
+        self.bundle_plugins.append(candidate)
+        return self
     }
 
     func add_system(schedule:Schedule, callback:func(Application)) Application {
@@ -368,9 +420,7 @@ public class Application {
         if self.configuration_locked {
             panic("Application can only run once")
         }
-        self.prepare_plugins()
-        self.configuration_locked = true
-        self.build_schedule_plans()
+        self.seal()
         return self.current_runner(self)
     }
 
@@ -443,6 +493,39 @@ public class Application {
         var resources = self.resource_store
         var controller:&Controller = resources.get_mut<Controller>()
         controller.start()
+    }
+
+    module func seal() {
+        self.prepare_plugins()
+        self.configuration_locked = true
+        self.build_schedule_plans()
+    }
+
+    module func inherit_bundle_plugins() {
+        if self.parent_application_address == 0 { return }
+        var parent = C.object_from_address<Application>(self.parent_application_address)
+        var target = self
+        parent.provide_bundle_plugins(target)
+    }
+
+    module func invalidate_resources() {
+        self.resource_store.invalidate()
+    }
+
+    private func provide_bundle_plugins(target:&Application) {
+        if self.parent_application_address != 0 {
+            var parent = C.object_from_address<Application>(self.parent_application_address)
+            parent.provide_bundle_plugins(target)
+        }
+        for plugin in self.bundle_plugins { target.request_inherited_plugin(plugin) }
+    }
+
+    private func request_inherited_plugin(plugin:Plugin) {
+        var candidate = plugin
+        let id = candidate.id()
+        if contains(self.requested_plugin_ids, id) { return }
+        self.requested_plugin_ids.append(id)
+        self.requested_plugins.append(candidate)
     }
 
     package func scheduler_plan_build_count() int { return self.schedule_plan_builds }
