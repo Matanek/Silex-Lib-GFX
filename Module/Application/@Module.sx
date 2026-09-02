@@ -245,6 +245,12 @@ public class Application {
         return self.resource_store
     }
 
+    // Compiler hook used by injected systems to borrow the store without
+    // retaining the complete typed resource graph once per system execution.
+    module func __silex_system_resources() @Resources {
+        return self.resource_store
+    }
+
     func add_resource<T>(value:T) Application {
         if self.configuration_locked {
             panic("Application cannot add a resource after run")
@@ -478,20 +484,17 @@ public class Application {
     }
 
     func stop() {
-        var resources = self.resource_store
-        var controller:&Controller = resources.get_mut<Controller>()
+        var controller:&Controller = self.resource_store.get_mut<Controller>()
         controller.stop()
     }
 
     func is_running() bool {
-        var resources = self.resource_store
-        let controller:@Controller = resources.get<Controller>()
+        let controller:@Controller = self.resource_store.get<Controller>()
         return controller.is_running()
     }
 
     module func start() {
-        var resources = self.resource_store
-        var controller:&Controller = resources.get_mut<Controller>()
+        var controller:&Controller = self.resource_store.get_mut<Controller>()
         controller.start()
     }
 
