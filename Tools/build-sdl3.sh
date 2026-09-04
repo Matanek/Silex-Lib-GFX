@@ -42,7 +42,6 @@ case "$target" in
         archive_name="SDL3-3.4.10-linux-arm64.a"
         cmake_target_arguments=(
             -DCMAKE_C_FLAGS=-mno-outline-atomics
-            -DSDL_LIBC=OFF
         )
         ;;
     *)
