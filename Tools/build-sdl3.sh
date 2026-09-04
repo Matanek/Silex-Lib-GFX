@@ -79,8 +79,10 @@ else
     readelf -h "$output" | grep -Fq 'Machine:                           AArch64'
 fi
 
+symbols="$build_dir/exported-symbols.txt"
+nm -g "$output" > "$symbols"
 for symbol in SDL_Init SDL_CreateWindow SDL_GetClipboardText SDL_CreateGPUDevice; do
-    nm -g "$output" | grep -Eq "(^|[[:space:]_])${symbol}$" || {
+    grep -Eq "(^|[[:space:]_])${symbol}$" "$symbols" || {
         echo "missing required SDL symbol: $symbol" >&2
         exit 1
     }
@@ -92,4 +94,3 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
     shasum -a 256 "$output"
 fi
-
