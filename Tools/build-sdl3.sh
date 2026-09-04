@@ -84,7 +84,9 @@ cp "$archive" "$output"
 if [[ "$target" == "macos-x64" ]]; then
     lipo -info "$output" | grep -Fq 'architecture: x86_64'
 else
-    readelf -h "$output" | grep -Fq 'Machine:                           AArch64'
+    header="$build_dir/archive-header.txt"
+    readelf -h "$output" > "$header"
+    grep -Fq 'Machine:                           AArch64' "$header"
 fi
 
 symbols="$build_dir/exported-symbols.txt"
