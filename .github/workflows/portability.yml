@@ -248,8 +248,13 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y bison ninja-build patchelf
+          # Match the provenance workflow until its checked asset is released.
+          canonical_parent="$(cd "$RUNNER_WORKSPACE/.." && pwd)/Silex-Toolchain-Assets/Silex-Toolchain-Assets"
+          canonical_source="$canonical_parent/upstream"
+          mkdir -p "$canonical_parent"
+          mv "$GITHUB_WORKSPACE/_shadercross" "$canonical_source"
           _toolchain-assets/Scripts/build-shadercross-linux-arm64.sh \
-            "$GITHUB_WORKSPACE/_shadercross" \
+            "$canonical_source" \
             "${{ steps.shadercross-sdl.outputs.prefix }}" \
             "$RUNNER_TEMP"
           echo "${{ env.SHADERCROSS_LINUX_ARM64_SHA256 }}  $RUNNER_TEMP/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz" \
@@ -257,6 +262,7 @@ jobs:
           mkdir -p "$HOME/.silex/toolchain/downloads"
           cp "$RUNNER_TEMP/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz" \
             "$HOME/.silex/toolchain/downloads/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz"
+          mv "$canonical_source" "$GITHUB_WORKSPACE/_shadercross"
 
       - name: Build the native Silex compiler
         if: inputs.target == 'all' || inputs.target == matrix.target
