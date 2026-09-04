@@ -53,6 +53,12 @@ esac
 build_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/silex-sdl3-$target"
 rm -rf -- "$build_dir"
 
+# Apple libtool otherwise records the build time in every archive member.
+# GNU binutils already defaults to deterministic archives; keeping the same
+# environment on both hosts makes the reproducibility contract explicit.
+export SOURCE_DATE_EPOCH=0
+export ZERO_AR_DATE=1
+
 cmake -S "$source_dir" -B "$build_dir" -GNinja \
     -DCMAKE_BUILD_TYPE=Release \
     -DSDL_EXAMPLES=OFF \
