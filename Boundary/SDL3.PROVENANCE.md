@@ -25,7 +25,7 @@ The Linux archive uses the pinned Ubuntu 22.04 image
 on the native ARM64 runner. This avoids the glibc 2.38-only C23 redirects from
 the runner host. `-mno-outline-atomics` also keeps compiler helper symbols out
 of the static boundary. The macOS archive reproduced the same checksum in runs
-33891223038 and 33891534080. `Boundary/SDL3.SHA256SUMS.txt` records the complete
+33891534080 and 33891915253. `Boundary/SDL3.SHA256SUMS.txt` records the complete
 six-target set; the workflow requires the recorded checksum before preserving
 either candidate.
 
