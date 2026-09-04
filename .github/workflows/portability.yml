@@ -208,6 +208,7 @@ jobs:
         run: |
           set -euo pipefail
           GFX/Tools/build-sdl3.sh "$GITHUB_WORKSPACE/_SDL" macos-x64 "$RUNNER_TEMP/sdl3"
+          mkdir -p GFX/Boundary/macos-x64
           cp "$RUNNER_TEMP/sdl3/SDL3-3.4.10-macos-x64.a" GFX/Boundary/macos-x64/libSDL3.a
 
       - name: Prepare the Linux ARM64 SDL3 candidate
@@ -237,6 +238,7 @@ jobs:
               /workspace/GFX/Tools/build-sdl3.sh \
                 /workspace/_SDL linux-arm64 /runner-temp/sdl3
             '
+          mkdir -p GFX/Boundary/linux-arm64
           cp "$RUNNER_TEMP/sdl3/SDL3-3.4.10-linux-arm64.a" GFX/Boundary/linux-arm64/libSDL3.a
 
       - name: Prepare the native Linux ARM64 Shadercross candidate
