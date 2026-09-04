@@ -40,7 +40,10 @@ case "$target" in
             *) echo "linux-arm64 must be built on a native ARM64 host" >&2; exit 1 ;;
         esac
         archive_name="SDL3-3.4.10-linux-arm64.a"
-        cmake_target_arguments=()
+        cmake_target_arguments=(
+            -DCMAKE_C_FLAGS=-mno-outline-atomics
+            -DSDL_LIBC=OFF
+        )
         ;;
     *)
         echo "unsupported SDL target: $target" >&2
