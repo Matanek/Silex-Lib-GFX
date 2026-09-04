@@ -1,0 +1,27 @@
+use Interop.Boundary
+use Interop.C
+use GFX.Input
+
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) int32>(
+    library:Boundary.SDL3,
+    name:"SDL_PushEvent"
+)
+
+test "consume a native event through the public input adapter" {
+    var input = Input()
+    input.update()
+
+    var storage:uint[16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    let stored_kind = C.store<uint32>(address, 0 as uint, 0x100 as uint32)
+    let stored_timestamp = C.store<uint>(address, 8 as uint, 1 as uint)
+    assert(sdl_push_event(C.mutable_pointer(storage)) != 0)
+
+    input.update()
+    let events = input.events()
+    assert(events.count() == 1)
+    match events[0] {
+        application_quit(value) => { assert(value.timestamp == 1) }
+        else => { panic("expected an application quit event") }
+    }
+}
