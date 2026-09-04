@@ -83,6 +83,27 @@
         }
       }
     },
+    "macos-x64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/macos-x64/libSDL3.a",
+          "frameworks": [
+            "AudioToolbox", "AVFoundation", "Carbon", "Cocoa", "CoreAudio",
+            "CoreFoundation", "CoreHaptics", "CoreMedia", "CoreMotion",
+            "CoreServices", "CoreVideo", "ForceFeedback", "GameController",
+            "IOKit", "Metal", "QuartzCore", "UniformTypeIdentifiers"
+          ]
+        }
+      }
+    },
+    "linux-arm64": {
+      "providers": {
+        "SDL3": {
+          "archive": "Boundary/linux-arm64/libSDL3.a",
+          "libraries": ["dl", "m", "pthread"]
+        }
+      }
+    },
     "linux-x64": {
       "providers": {
         "SDL3": {
@@ -128,6 +149,20 @@
         "path": "Boundary/macos-arm64/libSDL3.a",
         "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-macos-arm64.a",
         "sha256": "9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd"
+      }
+    },
+    "macos-x64": {
+      "SDL3": {
+        "path": "Boundary/macos-x64/libSDL3.a",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.2/SDL3-3.4.10-macos-x64.a",
+        "sha256": "2d61a1c57af4828e5563bbf1cc17df7335f2e5f291c1dea3d1e0b46d97050ae0"
+      }
+    },
+    "linux-arm64": {
+      "SDL3": {
+        "path": "Boundary/linux-arm64/libSDL3.a",
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.2/SDL3-3.4.10-linux-arm64.a",
+        "sha256": "937ac55efcc9a78afddd17320ada9e03704a8a470ff8e74990743ad73762f436"
       }
     },
     "linux-x64": {

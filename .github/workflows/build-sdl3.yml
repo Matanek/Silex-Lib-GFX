@@ -109,6 +109,20 @@ jobs:
                 /workspace/_SDL linux-arm64 /runner-temp/sdl3
             '
 
+      - name: Verify the recorded SDL3 checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=$(awk -v name="${{ matrix.archive }}" '$2 == name { print $1 }' \
+            GFX/Boundary/SDL3.SHA256SUMS.txt)
+          test -n "$expected"
+          if command -v sha256sum >/dev/null 2>&1; then
+            actual=$(sha256sum "$RUNNER_TEMP/sdl3/${{ matrix.archive }}" | cut -d ' ' -f 1)
+          else
+            actual=$(shasum -a 256 "$RUNNER_TEMP/sdl3/${{ matrix.archive }}" | cut -d ' ' -f 1)
+          fi
+          test "$actual" = "$expected"
+
       - name: Preserve the SDL3 candidate
         uses: actions/upload-artifact@v4
         with:
