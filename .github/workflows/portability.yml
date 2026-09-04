@@ -35,6 +35,7 @@ env:
   TOOLCHAIN_ASSETS_CHECKPOINT: ec5fba291f8f9dd4a7a24af98d4c6d3f920572ed
   SDL_REVISION: 8e37db5e797b6167f3a00d697d816a684bd259c7
   SHADERCROSS_REVISION: e55cf5e31ced6f3d1be5cc6d0c50e99384f9f4ba
+  SHADERCROSS_LINUX_ARM64_SHA256: 0b1fab54e52b22f055831b7e6e5e613e1fb21c0cc38d20057d9dd065b442cfbb
 
 jobs:
   native:
@@ -151,7 +152,7 @@ jobs:
         uses: libsdl-org/setup-sdl@afd98199e97f9c2aa739474be7e0886d149a5e47
         with:
           cmake-generator: Ninja
-          discriminator: gfx-portability-linux-arm64
+          discriminator: shadercross-linux-arm64
           install-linux-dependencies: true
           version: ${{ env.SDL_REVISION }}
 
@@ -251,6 +252,8 @@ jobs:
             "$GITHUB_WORKSPACE/_shadercross" \
             "${{ steps.shadercross-sdl.outputs.prefix }}" \
             "$RUNNER_TEMP"
+          echo "${{ env.SHADERCROSS_LINUX_ARM64_SHA256 }}  $RUNNER_TEMP/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz" \
+            | sha256sum -c -
           mkdir -p "$HOME/.silex/toolchain/downloads"
           cp "$RUNNER_TEMP/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz" \
             "$HOME/.silex/toolchain/downloads/Shadercross-3.0.0-e55cf5e-linux-arm64.tar.gz"
