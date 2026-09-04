@@ -29,8 +29,10 @@ jobs:
         include:
           - target: macos-x64
             runner: macos-15-intel
+            archive: SDL3-3.4.10-macos-x64.a
           - target: linux-arm64
             runner: ubuntu-24.04-arm
+            archive: SDL3-3.4.10-linux-arm64.a
 
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
@@ -49,24 +51,25 @@ jobs:
           ref: ${{ env.SDL_REVISION }}
           path: _SDL
 
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
+      - name: Select the recorded Xcode toolchain
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            build-essential cmake git make ninja-build pkg-config \
-            libasound2-dev libaudio-dev libdbus-1-dev libdecor-0-dev \
-            libdrm-dev libegl1-mesa-dev libfribidi-dev libgbm-dev \
-            libgl1-mesa-dev libgles2-mesa-dev libibus-1.0-dev \
-            libjack-dev libpipewire-0.3-dev libpulse-dev libsndio-dev \
-            libthai-dev libudev-dev liburing-dev libusb-1.0-0-dev \
-            libwayland-dev libx11-dev libxext-dev libxcursor-dev \
-            libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
-            libxss-dev libxtst-dev wayland-protocols
+          sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+          xcodebuild -version
 
-      - name: Build and inspect SDL3
+      - name: Record the native build toolchain
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --version
+          cc --version
+          ninja --version
+
+      - name: Build and inspect SDL3 on macOS X64
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
@@ -74,6 +77,37 @@ jobs:
             "$GITHUB_WORKSPACE/_SDL" \
             "${{ matrix.target }}" \
             "$RUNNER_TEMP/sdl3"
+
+      - name: Build and inspect SDL3 in the Linux compatibility baseline
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm64 \
+            -e RUNNER_TEMP=/runner-temp \
+            -v "$GITHUB_WORKSPACE:/workspace:ro" \
+            -v "$RUNNER_TEMP:/runner-temp" \
+            ubuntu:22.04 bash -lc '
+              set -euo pipefail
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -y
+              apt-get install -y \
+                build-essential cmake file git make ninja-build pkg-config \
+                libasound2-dev libaudio-dev libdbus-1-dev libdecor-0-dev \
+                libdrm-dev libegl1-mesa-dev libfribidi-dev libgbm-dev \
+                libgl1-mesa-dev libgles2-mesa-dev libibus-1.0-dev \
+                libjack-dev libpipewire-0.3-dev libpulse-dev libsndio-dev \
+                libthai-dev libudev-dev liburing-dev libusb-1.0-0-dev \
+                libwayland-dev libx11-dev libxext-dev libxcursor-dev \
+                libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
+                libxss-dev libxtst-dev wayland-protocols
+              git config --global --add safe.directory /workspace/_SDL
+              cmake --version
+              cc --version
+              ninja --version
+              /workspace/GFX/Tools/build-sdl3.sh \
+                /workspace/_SDL linux-arm64 /runner-temp/sdl3
+            '
 
       - name: Preserve the SDL3 candidate
         uses: actions/upload-artifact@v4
