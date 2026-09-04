@@ -1,0 +1,84 @@
+name: Build missing SDL3 desktop archives
+
+run-name: Build missing SDL3 desktop archives
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - spec-desktop-platform-portability-06
+    paths:
+      - .github/workflows/build-sdl3.yml
+      - Tools/build-sdl3.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gfx-build-sdl3-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SDL_REVISION: 8e37db5e797b6167f3a00d697d816a684bd259c7
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-x64
+            runner: macos-15-intel
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out GFX
+        uses: actions/checkout@v6
+        with:
+          path: GFX
+
+      - name: Check out SDL 3.4.10
+        uses: actions/checkout@v6
+        with:
+          repository: libsdl-org/SDL
+          ref: ${{ env.SDL_REVISION }}
+          path: _SDL
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential cmake git make ninja-build pkg-config \
+            libasound2-dev libaudio-dev libdbus-1-dev libdecor-0-dev \
+            libdrm-dev libegl1-mesa-dev libfribidi-dev libgbm-dev \
+            libgl1-mesa-dev libgles2-mesa-dev libibus-1.0-dev \
+            libjack-dev libpipewire-0.3-dev libpulse-dev libsndio-dev \
+            libthai-dev libudev-dev liburing-dev libusb-1.0-0-dev \
+            libwayland-dev libx11-dev libxext-dev libxcursor-dev \
+            libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
+            libxss-dev libxtst-dev wayland-protocols
+
+      - name: Build and inspect SDL3
+        shell: bash
+        run: |
+          set -euo pipefail
+          GFX/Tools/build-sdl3.sh \
+            "$GITHUB_WORKSPACE/_SDL" \
+            "${{ matrix.target }}" \
+            "$RUNNER_TEMP/sdl3"
+
+      - name: Preserve the SDL3 candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdl3-${{ matrix.target }}
+          path: ${{ runner.temp }}/sdl3/*
+          retention-days: 7
+          if-no-files-found: error
