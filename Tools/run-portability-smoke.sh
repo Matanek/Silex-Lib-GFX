@@ -75,6 +75,28 @@ compile_and_run() {
     echo "PASS $target $name"
 }
 
+compile_and_run_surface() {
+    local executable="$temporary_dir/surface$extension"
+    local output="$temporary_dir/surface.log"
+
+    "$silex" compile "$gpu_dir/Smokes/Surface.sx" \
+        --target "$target" --release --nocache -o "$executable"
+    if "$executable" >"$output" 2>&1; then
+        cat "$output"
+        echo "PASS $target surface"
+        return
+    else
+        local status=$?
+        cat "$output" >&2
+        if [[ "$target" == "macos-x64" ]] && \
+            grep -Fq "Device does not meet the hardware requirements for SDL_GPU Metal" "$output"; then
+            echo "SKIP $target surface runtime: GitHub runner exposes no compatible Metal device"
+            return
+        fi
+        return "$status"
+    fi
+}
+
 compile_and_run boundary "$gpu_dir/Smokes/Boundary.sx"
 compile_and_run shader "$gpu_dir/Smokes/Shader.sx"
-compile_and_run surface "$gpu_dir/Smokes/Surface.sx"
+compile_and_run_surface
