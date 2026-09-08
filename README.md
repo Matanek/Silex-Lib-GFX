@@ -1,7 +1,7 @@
 # GFX
 
-`GFX` est le socle modulaire des applications graphiques Silex : boucle
-d’application, fenêtres, entrées, presse-papiers et valeurs communes.
+`GFX` is the modular foundation for Silex graphics applications: application
+loop, windows, input, clipboard, and shared values.
 
 ```text
 silex install GFX
@@ -9,7 +9,7 @@ silex install GFX
 
 ## Documentation
 
-- [Documentation française](Docs/FR/README.md)
+- [French documentation](Docs/FR/README.md)
 - [English documentation](Docs/EN/README.md)
 
-Le package nécessite Silex 0.43.0 ou une version ultérieure.
+The package requires Silex 0.43.0 or newer.
