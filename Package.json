@@ -1,6 +1,6 @@
 {
   "name": "GFX",
-  "version": "0.39.1",
+  "version": "0.40.0",
   "description": {
     "en": "Modular graphics and application library for windows, input, rendering, and GPU workloads.",
     "fr": "Bibliothèque modulaire de graphisme et d’applications pour les fenêtres, les entrées, le rendu et les tâches GPU."
@@ -59,15 +59,15 @@
     }
   },
   "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
-  "requires": { "silex": ">=0.43.0" },
+  "requires": { "silex": ">=0.44.0" },
   "dependencies": {
-    "STD": "^0.16.0"
+    "STD": "^0.22.0"
   },
   "devDependencies": {
-    "GFX.Assets": "^0.1.0",
-    "GFX.ECS": "^0.1.0",
-    "GFX.GPU": "^0.1.0",
-    "GFX.Rendering": "^0.1.0"
+    "GFX.Assets": "^0.3.0",
+    "GFX.ECS": "^0.2.0",
+    "GFX.GPU": "^0.3.0",
+    "GFX.Rendering": "^0.4.0"
   },
   "boundary": {
     "macos-arm64": {
