@@ -44,6 +44,9 @@
     "GFX.Scene3D": {
       "suite": true
     },
+    "GFX.Nodes": {
+      "suite": true
+    },
     "GFX.Canvas": {
       "suite": true
     },

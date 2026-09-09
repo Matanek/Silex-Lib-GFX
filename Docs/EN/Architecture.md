@@ -14,8 +14,8 @@ manifest still declare every package whose modules they import directly.
 
 Capabilities may be distributed as explicitly authorized child packages.
 `GFX.Application`, `GFX.Animation`, `GFX.Assets`, `GFX.Audio`, `GFX.Canvas`,
-`GFX.ECS`, `GFX.Font`, `GFX.GPU`, `GFX.Rendering`, `GFX.Scene2D`, `GFX.Scene3D`,
-`GFX.Stats`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
+`GFX.ECS`, `GFX.Font`, `GFX.GPU`, `GFX.Nodes`, `GFX.Rendering`, `GFX.Scene2D`,
+`GFX.Scene3D`, `GFX.Stats`, `GFX.UI`, `GFX.Viewer`, and `GFX.WebView` are
 official suite members; `GFX.Physics` evolves independently and remains
 installed separately with its own native Silex core and release cycle.
 `GFX.UI.Terminal` is a nested extension authorized by `GFX.UI`; installing the
@@ -49,6 +49,9 @@ GFX.GPU
 GFX.ECS
 └── ECS             world, entities, components, queries, and commands
 
+GFX.Nodes
+└── Nodes           object scene tree and lifecycle backed by Application/ECS
+
 GFX.Font
 └── Font            portable font faces and private FreeType/HarfBuzz boundary
 
@@ -72,7 +75,10 @@ GFX.UI.Terminal
 └── UI.Terminal     application-console and PTY/ConPTY controls for UI trees
 ```
 
-The modules remain organized by capability. `GFX.Application` adds the
+The modules remain organized by capability. `GFX.Nodes` provides an object
+facade over Application and ECS: its generic `Node` owns no transform, while
+`Node2D` and `Node3D` use the transforms owned by Scene2D and Scene3D,
+respectively. `GFX.Application` adds the
 isolated scene context to the exact canonical Application module through
 additive merge permission; it depends only on GFX and GFX.ECS. A cross-cutting
 capability may depend on a more fundamental one, but it does not become the

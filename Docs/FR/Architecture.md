@@ -9,9 +9,9 @@ silex install GFX
 ```
 
 Le manifeste d’une application déclare chaque package qu’elle importe.
-`GFX.Application`, Animation, Assets, Audio, Canvas, ECS, Font, GPU, Rendering,
-Scene2D, Scene3D, Stats, UI, Viewer et WebView sont membres de la suite. Physics
-évolue séparément et UI.Terminal est autorisé par UI.
+`GFX.Application`, Animation, Assets, Audio, Canvas, ECS, Font, GPU, Nodes,
+Rendering, Scene2D, Scene3D, Stats, UI, Viewer et WebView sont membres de la
+suite. Physics évolue séparément et UI.Terminal est autorisé par UI.
 
 L’autorisation délègue un espace de noms sans en transférer la propriété. Une
 fusion exacte n’est possible qu’avec `merge: true`, reste additive et refuse
@@ -38,6 +38,9 @@ GFX.GPU
 GFX.ECS
 └── ECS             world, entities, components, queries, and commands
 
+GFX.Nodes
+└── Nodes           object scene tree and lifecycle backed by Application/ECS
+
 GFX.Font
 └── Font            portable font faces and private FreeType/HarfBuzz boundary
 
@@ -62,8 +65,11 @@ GFX.UI.Terminal
 ```
 
 Chaque domaine possède ses valeurs, implémentations, ressources et points
-d’extension. Rendering orchestre le FrameGraph générique, tandis que géométrie,
-matériaux et shaders restent dans les scènes. Les packages officiels dépendent
+d’extension. Nodes fournit une façade objet au-dessus d’Application et ECS :
+son `Node` générique ne possède aucun transform, tandis que `Node2D` et `Node3D`
+emploient les transforms appartenant respectivement à Scene2D et Scene3D.
+Rendering orchestre le FrameGraph générique, tandis que géométrie, matériaux
+et shaders restent dans les scènes. Les packages officiels dépendent
 seulement des capacités publiques du socle et contribuent leurs propres
 déclarations aux catalogues ouverts.
 

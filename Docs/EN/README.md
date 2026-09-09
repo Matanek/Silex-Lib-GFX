@@ -17,7 +17,7 @@ func main() {
 
 Domains remain independent in the public API. The `GFX.Application` extension
 adds scenes to the application domain; the other official extensions include
-Animation, Assets, Audio, Canvas, ECS, GPU, Rendering, Scene2D, Scene3D, Stats,
+Animation, Assets, Audio, Canvas, ECS, GPU, Nodes, Rendering, Scene2D, Scene3D, Stats,
 UI, Viewer, and WebView. Installing the GFX suite installs its direct
 extensions, while an application manifest still declares every package whose
 modules it imports. Physics is installed separately. `GFX.UI.Terminal` is a
