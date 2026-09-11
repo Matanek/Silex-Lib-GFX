@@ -1,3 +1,6 @@
+public use GFX.Application.ProcessMode.ProcessMode
+public use GFX.Application.ProcessMode.should_process
+public use GFX.Application.Simulation.Simulation
 use Interop.C
 use STD.Threading
 
@@ -74,6 +77,7 @@ class RegisteredSystem {
     let reads:str[]
     let writes:str[]
     let flags:uint
+    let process_mode:ProcessMode
 
     init(
         schedule:Schedule,
@@ -82,7 +86,8 @@ class RegisteredSystem {
         typed_callback:func(Application, int),
         reads:str[],
         writes:str[],
-        flags:uint
+        flags:uint,
+        process_mode:ProcessMode
     ) {
         self.schedule = schedule
         self.after = after
@@ -91,6 +96,17 @@ class RegisteredSystem {
         self.reads = reads
         self.writes = writes
         self.flags = flags
+        self.process_mode = process_mode
+    }
+
+    func is_active(paused:bool) bool {
+        if self.schedule == Schedule.initialize || self.schedule == Schedule.startup ||
+            self.schedule == Schedule.shutdown || self.schedule == Schedule.finalize
+        { return true }
+        if self.process_mode == ProcessMode.inherit && self.schedule == Schedule.render {
+            return true
+        }
+        return should_process(self.process_mode, paused)
     }
 
     func has_flag(flag:uint) bool { return (self.flags & flag) != 0 }
@@ -206,6 +222,7 @@ public class Application {
         self.query_local_dispatches = 0
         self.query_parallel_dispatches = 0
         self.resource_store.insert(Controller())
+        self.resource_store.insert(Simulation())
     }
 
     init(worker_count:int) {
@@ -228,6 +245,7 @@ public class Application {
         self.query_local_dispatches = 0
         self.query_parallel_dispatches = 0
         self.resource_store.insert(Controller())
+        self.resource_store.insert(Simulation())
     }
 
     // Creates an independently scheduled child context whose missing resource
@@ -238,6 +256,7 @@ public class Application {
         context.resource_store.clear()
         context.resource_store = parent.resources().scope()
         context.resource_store.insert(Controller())
+        context.resource_store.insert(Simulation())
         return context
     }
 
@@ -328,44 +347,44 @@ public class Application {
         return self
     }
 
-    func add_system(schedule:Schedule, callback:func(Application)) Application {
+    func add_system(schedule:Schedule, callback:func(Application), process_mode:ProcessMode = ProcessMode.inherit) Application {
+        return self.__silex_add_callback(schedule, callback, false, process_mode)
+    }
+
+    func add_system<System>(schedule:Schedule, callback:System, process_mode:ProcessMode = ProcessMode.inherit) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    func add_after_system(schedule:Schedule, callback:func(Application), process_mode:ProcessMode = ProcessMode.inherit) Application {
+        return self.__silex_add_callback(schedule, callback, true, process_mode)
+    }
+
+    func add_after_system<System>(schedule:Schedule, callback:System, process_mode:ProcessMode = ProcessMode.inherit) Application {
+        panic("typed system registration was not specialized")
+    }
+
+    // Forward a whole-context callback without passing through generic system
+    // registration again (Bundle delegates this already-resolved signature).
+    module func __silex_add_callback(
+        schedule:Schedule,
+        callback:func(Application),
+        after:bool,
+        process_mode:ProcessMode
+    ) Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
         }
         self.registered_systems.append(RegisteredSystem(
             schedule:schedule,
-            after:false,
+            after:after,
             callback:callback,
             typed_callback:ignore_typed_system,
             reads:[],
             writes:[],
-            flags:11 as uint
+            flags:11 as uint,
+            process_mode:process_mode
         ))
         return self
-    }
-
-    func add_system<System>(schedule:Schedule, callback:System) Application {
-        panic("typed system registration was not specialized")
-    }
-
-    func add_after_system(schedule:Schedule, callback:func(Application)) Application {
-        if self.configuration_locked {
-            panic("Application cannot add a system after run")
-        }
-        self.registered_systems.append(RegisteredSystem(
-            schedule:schedule,
-            after:true,
-            callback:callback,
-            typed_callback:ignore_typed_system,
-            reads:[],
-            writes:[],
-            flags:11 as uint
-        ))
-        return self
-    }
-
-    func add_after_system<System>(schedule:Schedule, callback:System) Application {
-        panic("typed system registration was not specialized")
     }
 
     module func __silex_add_system(
@@ -374,7 +393,8 @@ public class Application {
         after:bool,
         reads:str[],
         writes:str[],
-        flags:uint
+        flags:uint,
+        process_mode:ProcessMode = ProcessMode.inherit
     ) Application {
         if self.configuration_locked {
             panic("Application cannot add a system after run")
@@ -386,7 +406,8 @@ public class Application {
             typed_callback:callback,
             reads:reads,
             writes:writes,
-            flags:flags + 16
+            flags:flags + 16,
+            process_mode:process_mode
         ))
         return self
     }
@@ -569,7 +590,7 @@ public class Application {
             var index = self.registered_systems.count() - 1
             while index >= 0 {
                 var system = self.registered_systems[index]
-                if system.schedule == schedule && system.after == after {
+                if system.schedule == schedule && system.after == after && system.is_active(self.simulation_paused()) {
                     system.execute(self, index)
                 }
                 index--
@@ -580,7 +601,7 @@ public class Application {
         var index = 0
         while index < self.registered_systems.count() {
             var system = self.registered_systems[index]
-            if system.schedule == schedule && system.after == after {
+            if system.schedule == schedule && system.after == after && system.is_active(self.simulation_paused()) {
                 system.execute(self, index)
             }
             index++
@@ -651,10 +672,17 @@ public class Application {
         }
     }
 
+    private func simulation_paused() bool {
+        return self.resource_store.get<Simulation>().is_paused()
+    }
+
     private func run_stage(stage:SystemStage) {
+        // One decision per joined stage: a worker may request the next stage's
+        // pause, but cannot change which peers have already been dispatched.
+        let paused = self.simulation_paused()
         var has_parallel_system = false
         for system_index in stage.systems {
-            if self.registered_systems[system_index].has_flag(4) {
+            if self.registered_systems[system_index].is_active(paused) && self.registered_systems[system_index].has_flag(4) {
                 has_parallel_system = true
                 break
             }
@@ -662,7 +690,7 @@ public class Application {
         if !has_parallel_system {
             for system_index in stage.systems {
                 var system = self.registered_systems[system_index]
-                system.execute(self, system_index)
+                if system.is_active(paused) { system.execute(self, system_index) }
             }
             return
         }
@@ -670,7 +698,7 @@ public class Application {
         var fences:Threading.Fence[] = []
         for system_index in stage.systems {
             var system = self.registered_systems[system_index]
-            if system.has_flag(4) {
+            if system.is_active(paused) && system.has_flag(4) {
                 var handle = self.executor.submit(SystemJob(
                     application_address:C.object_address(self),
                     system:system,
@@ -682,7 +710,7 @@ public class Application {
         }
         for system_index in stage.systems {
             var system = self.registered_systems[system_index]
-            if !system.has_flag(4) { system.execute(self, system_index) }
+            if system.is_active(paused) && !system.has_flag(4) { system.execute(self, system_index) }
         }
         for fence in fences { fence.complete() }
         var handle_index = 0

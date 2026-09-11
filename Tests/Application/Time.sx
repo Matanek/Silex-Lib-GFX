@@ -11,3 +11,26 @@ test "add the frame time resource" {
     let time:@FrameTime = resources.get<FrameTime>()
     assert(time.delta == 0.0)
 }
+
+test "simulation time freezes while the application clock keeps ticking" {
+    var application = Application()..add_plugin(TimePlugin())
+    application.run_schedule(Application.Schedule.pre_update)
+    var resources = application.resources()
+    let before = resources.get<Application.Simulation>().elapsed()
+    {
+        var simulation = resources.get_mut<Application.Simulation>()
+        simulation.pause()
+    }
+    for _ in 0...3 { application.run_schedule(Application.Schedule.pre_update) }
+    assert(resources.get<Application.Simulation>().elapsed() == before)
+    assert(resources.get<Application.Simulation>().delta() == 0.0)
+    {
+        var simulation = resources.get_mut<Application.Simulation>()
+        simulation.resume()
+    }
+    application.run_schedule(Application.Schedule.pre_update)
+    let simulation = resources.get<Application.Simulation>()
+    assert(simulation.elapsed() >= before)
+    assert(simulation.delta() >= 0.0)
+    assert(simulation.delta() == resources.get<FrameTime>().delta)
+}

@@ -1,0 +1,79 @@
+use GFX.Application
+
+struct PauseTrace {
+    var gameplay:int = 0
+    var service:int = 0
+    var menu:int = 0
+    var rendered:int = 0
+    var startup:int = 0
+    var shutdown:int = 0
+}
+
+func gameplay(trace:&PauseTrace) { trace.gameplay++ }
+func service(trace:&PauseTrace) { trace.service++ }
+func menu(trace:&PauseTrace) { trace.menu++ }
+func render(trace:&PauseTrace) { trace.rendered++ }
+func startup(trace:&PauseTrace) { trace.startup++ }
+func shutdown(trace:&PauseTrace) { trace.shutdown++ }
+
+func set_paused(application:Application, paused:bool) {
+    var resources = application.resources()
+    var simulation = resources.get_mut<Application.Simulation>()
+    if paused { simulation.pause() } else { simulation.resume() }
+}
+
+func exercise_pause(application:Application) int {
+    application.run_schedule(Application.Schedule.startup)
+    application.run_schedule(Application.Schedule.update)
+    application.run_schedule(Application.Schedule.render)
+    set_paused(application, true)
+    for _ in 0...2 {
+        application.run_schedule(Application.Schedule.update)
+        application.run_schedule(Application.Schedule.render)
+    }
+    set_paused(application, false)
+    application.run_schedule(Application.Schedule.update)
+    application.run_schedule(Application.Schedule.render)
+    set_paused(application, true)
+    application.run_schedule(Application.Schedule.shutdown)
+    return 0
+}
+
+test "pause simulation systems while services rendering and lifecycle continue" {
+    var application = Application(2)
+        ..add_resource(PauseTrace())
+        ..add_system(Application.Schedule.startup, startup)
+        ..add_system(Application.Schedule.update, gameplay)
+        ..add_system(Application.Schedule.update, service, process_mode:Application.ProcessMode.always)
+        ..add_after_system(Application.Schedule.update, menu, process_mode:Application.ProcessMode.when_paused)
+        ..add_system(Application.Schedule.render, render)
+        ..add_system(Application.Schedule.shutdown, shutdown)
+        ..with_runner(exercise_pause)
+    assert(application.run() == 0)
+    let trace = application.resources().get<PauseTrace>()
+    assert(trace.gameplay == 2)
+    assert(trace.service == 4)
+    assert(trace.menu == 2)
+    assert(trace.rendered == 4)
+    assert(trace.startup == 1 && trace.shutdown == 1)
+}
+
+func request_pause(simulation:&Application.Simulation) { simulation.pause() }
+func verify_pause(simulation:@Application.Simulation, trace:&PauseTrace) {
+    assert(simulation.is_paused())
+    trace.menu++
+}
+func one_update(application:Application) int {
+    application.run_schedule(Application.Schedule.update)
+    return 0
+}
+
+test "worker pause requests apply before the next dependent stage" {
+    var application = Application(2)
+        ..add_resource(PauseTrace())
+        ..add_system(Application.Schedule.update, request_pause)
+        ..add_system(Application.Schedule.update, verify_pause, process_mode:Application.ProcessMode.when_paused)
+        ..with_runner(one_update)
+    assert(application.run() == 0)
+    assert(application.resources().get<PauseTrace>().menu == 1)
+}

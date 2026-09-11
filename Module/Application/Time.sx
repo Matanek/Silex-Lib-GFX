@@ -8,7 +8,8 @@ public struct Time:PluginProtocol {
 
     func build(application:&Application) {
         application.add_resource(FrameTime())
-        application.add_system(Schedule.pre_update, advance_time)
+        application.add_system(Schedule.pre_update, advance_time, process_mode:Application.ProcessMode.always)
+        application.add_system(Schedule.pre_update, advance_simulation, process_mode:Application.ProcessMode.always)
         application.add_system(Schedule.shutdown, stop_time)
     }
 }
@@ -21,4 +22,8 @@ func stop_time(application:Application) {
     var resources = application.resources()
     var removed = resources.remove<FrameTime>()
     assert(removed != null)
+}
+
+func advance_simulation(time:@FrameTime, simulation:&Application.Simulation) {
+    simulation.advance(time.delta)
 }

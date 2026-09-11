@@ -52,3 +52,65 @@ its loop.
 Development overlays such as the FPS and performance panels belong to the
 official `GFX.Stats` suite package. Application remains responsible only for
 plugin composition and scheduling.
+
+## Pause the game
+
+Every Application owns an `Application.Simulation` resource. Its `pause()`,
+`resume()` and `is_paused()` methods control game updates while the loop keeps
+running. `Application.Controller.stop()` still exits that loop and runs the
+shutdown stages.
+
+This program toggles pause and resume with Escape:
+
+```silex
+use GFX.Application
+use GFX.Input
+use GFX.Plugins
+
+func pause_menu(input:@Input.State, simulation:&Application.Simulation) {
+    if input.is_pressed(Input.Key.escape) {
+        if simulation.is_paused() { simulation.resume() }
+        else { simulation.pause() }
+    }
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window())
+        ..add_system(Application.Schedule.update, pause_menu,
+            process_mode:Application.ProcessMode.always)
+        ..run()
+}
+```
+
+`add_system` and `add_after_system` accept an optional third `process_mode`
+argument, both for callbacks receiving the Application and for systems with
+injected parameters:
+
+| Mode | Execution |
+| --- | --- |
+| `inherit` (default) | Updates pause; rendering continues. |
+| `pausable` | Only while the simulation is active. |
+| `always` | With or without a pause, for example to listen for Escape. |
+| `when_paused` | Only during a pause, for example for the menu. |
+| `disabled` | No execution in recurring stages. |
+
+This rule covers `pre_update`, `update`, `post_update` and `render`.
+`initialize`, `startup`, `shutdown` and `finalize` always execute. Built-in
+services keep processing input, window closure, rendering, UI hosted by Viewer
+and WebView messages. Already issued ECS commands still flush. Pausing does not
+lock the World: `always` systems can still modify it. Audio already playing
+also continues.
+
+The decision is taken before each group of systems that can execute together.
+A request does not interrupt work already dispatched; the next group observes
+the new state. `Application.should_process(mode, paused)` lets a plugin apply
+the same rules to its own objects; outside a hierarchy or rendering context,
+`inherit` is equivalent to `pausable` in this helper.
+
+With `Application.Time`, `Simulation.delta()` is zero while paused and
+`Simulation.elapsed()` stays frozen. The clock advances once in `pre_update`;
+resuming uses the current delta without accumulating the pause duration.
+`FrameTime` remains the application's real time for UI and services. A plugin
+can either leave its systems paused by default or declare them `always` and
+filter its objects, as Nodes and Animation do.

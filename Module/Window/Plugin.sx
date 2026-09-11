@@ -109,7 +109,7 @@ public struct Plugin:PluginProtocol {
         application.add_resource(ClosePolicy(self.settings.close_behavior))
         application.add_system(Schedule.startup, start_window)
         application.add_after_system(Schedule.startup, present_without_renderer)
-        application.add_after_system(Schedule.pre_update, handle_close_request)
+        application.add_after_system(Schedule.pre_update, handle_close_request, process_mode:GFX.Application.ProcessMode.always)
         application.add_system(Schedule.shutdown, stop_window)
     }
 }

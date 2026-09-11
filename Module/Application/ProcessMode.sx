@@ -1,0 +1,17 @@
+public enum ProcessMode {
+    inherit
+    pausable
+    always
+    when_paused
+    disabled
+}
+
+public func should_process(mode:ProcessMode, paused:bool) bool {
+    match mode {
+        inherit => { return !paused }
+        pausable => { return !paused }
+        always => { return true }
+        when_paused => { return paused }
+        disabled => { return false }
+    }
+}

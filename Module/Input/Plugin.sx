@@ -10,7 +10,7 @@ public struct Plugin:PluginProtocol {
 
     func build(application:&Application) {
         application.add_system(Schedule.startup, start_input)
-        application.add_after_system(Schedule.pre_update, update_input)
+        application.add_after_system(Schedule.pre_update, update_input, process_mode:GFX.Application.ProcessMode.always)
         application.add_system(Schedule.shutdown, stop_input)
     }
 }

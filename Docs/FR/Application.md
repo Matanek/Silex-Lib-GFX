@@ -42,3 +42,65 @@ les scènes fournies par le package `GFX.Application`.
 
 Les panneaux de développement appartiennent à `GFX.Stats`, pas au socle
 Application.
+
+## Mettre le jeu en pause
+
+Chaque Application possède une ressource `Application.Simulation`. Ses méthodes
+`pause()`, `resume()` et `is_paused()` contrôlent les mises à jour du jeu tout en
+laissant tourner la boucle. `Application.Controller.stop()` conserve son rôle :
+quitter cette boucle et exécuter les étapes de fermeture.
+
+Ce programme utilise Échap pour alterner pause et reprise :
+
+```silex
+use GFX.Application
+use GFX.Input
+use GFX.Plugins
+
+func pause_menu(input:@Input.State, simulation:&Application.Simulation) {
+    if input.is_pressed(Input.Key.escape) {
+        if simulation.is_paused() { simulation.resume() }
+        else { simulation.pause() }
+    }
+}
+
+func main() {
+    Application()
+        ..add_plugin(Plugins.Window())
+        ..add_system(Application.Schedule.update, pause_menu,
+            process_mode:Application.ProcessMode.always)
+        ..run()
+}
+```
+
+`add_system` et `add_after_system` acceptent un troisième argument optionnel
+`process_mode`, pour les callbacks recevant l’Application comme pour les systèmes
+à paramètres injectés :
+
+| Mode | Exécution |
+| --- | --- |
+| `inherit` (par défaut) | Mises à jour suspendues pendant la pause ; rendu maintenu. |
+| `pausable` | Uniquement lorsque la simulation est active. |
+| `always` | Avec ou sans pause, par exemple pour écouter Échap. |
+| `when_paused` | Uniquement pendant la pause, par exemple pour le menu. |
+| `disabled` | Aucune exécution aux étapes récurrentes. |
+
+La règle concerne `pre_update`, `update`, `post_update` et `render`. Les étapes
+`initialize`, `startup`, `shutdown` et `finalize` s’exécutent toujours. Les
+services intégrés continuent à traiter les entrées, la fermeture de fenêtre, le
+rendu, l’UI hébergée par Viewer et les messages WebView. Les commandes ECS déjà
+émises sont encore appliquées. La pause ne verrouille pas le World : les systèmes
+`always` peuvent continuer à le modifier. L’audio déjà lancé continue aussi.
+
+La décision est prise avant chaque groupe de systèmes pouvant s’exécuter
+ensemble. Une demande ne coupe pas les travaux déjà lancés ; le groupe suivant
+observe le nouvel état. `Application.should_process(mode, paused)` permet à un
+plugin d’appliquer les mêmes règles à ses propres objets ; hors contexte de
+hiérarchie ou de rendu, `inherit` y équivaut à `pausable`.
+
+Avec `Application.Time`, `Simulation.delta()` vaut zéro pendant la pause et
+`Simulation.elapsed()` reste figé. L’horloge avance une fois en `pre_update` ;
+la reprise utilise le delta courant, sans accumuler la durée de la pause.
+`FrameTime` reste le temps réel de l’application pour l’UI et les services.
+Un plugin doit soit laisser ses systèmes suspendus par défaut, soit les déclarer
+`always` et filtrer ses objets, comme le font Nodes et Animation.

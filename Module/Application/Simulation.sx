@@ -1,0 +1,23 @@
+// One simulation clock and pause state per Application or Bundle context.
+public class Simulation {
+    private var paused:bool = false
+    private var current_delta:float = 0.0
+    private var current_elapsed:float = 0.0
+
+    func pause() { self.paused = true }
+    func resume() { self.paused = false }
+    func is_paused() bool { return self.paused }
+    func delta() float {
+        if self.paused { return 0.0 }
+        return self.current_delta
+    }
+    func elapsed() float { return self.current_elapsed }
+
+    module func advance(delta:float) {
+        self.current_delta = 0.0
+        if !self.paused {
+            self.current_delta = delta
+            self.current_elapsed += delta
+        }
+    }
+}
