@@ -196,6 +196,7 @@ public class Application {
     private var plugins_prepared:bool
     private var current_runner:func(Application) int
     private var configuration_locked:bool
+    private var resources_invalidated:bool = false
     private var executor:Threading.Executor
     private var schedule_plans:SchedulePlan[]
     private var schedule_plan_builds:int
@@ -279,7 +280,7 @@ public class Application {
     }
 
     drop {
-        self.resource_store.clear()
+        if !self.resources_invalidated { self.resource_store.clear() }
     }
 
     func add_plugin<T:Plugin>(plugin:T) Application {
@@ -533,6 +534,8 @@ public class Application {
     }
 
     module func invalidate_resources() {
+        if self.resources_invalidated { return }
+        self.resources_invalidated = true
         self.resource_store.invalidate()
     }
 
