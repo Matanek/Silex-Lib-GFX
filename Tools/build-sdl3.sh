@@ -19,6 +19,19 @@ if [[ "$actual_revision" != "$expected_revision" ]]; then
 fi
 
 case "$target" in
+    macos-arm64)
+        [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || {
+            echo "macos-arm64 must be built on a native macOS ARM64 host" >&2
+            exit 1
+        }
+        archive_name="SDL3-3.4.10-macos-arm64.a"
+        cmake_target_arguments=(
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+            -DCMAKE_C_FLAGS=-fno-sanitize=all
+            -DCMAKE_OBJC_FLAGS=-fno-sanitize=all
+        )
+        ;;
     macos-x64)
         [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "x86_64" ]] || {
             echo "macos-x64 must be built on a native macOS X64 host" >&2
@@ -53,13 +66,19 @@ esac
 build_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/silex-sdl3-$target"
 rm -rf -- "$build_dir"
 
+if command -v ninja >/dev/null 2>&1; then
+    cmake_generator=Ninja
+else
+    cmake_generator='Unix Makefiles'
+fi
+
 # Apple libtool otherwise records the build time in every archive member.
 # GNU binutils already defaults to deterministic archives; keeping the same
 # environment on both hosts makes the reproducibility contract explicit.
 export SOURCE_DATE_EPOCH=0
 export ZERO_AR_DATE=1
 
-cmake -S "$source_dir" -B "$build_dir" -GNinja \
+cmake -S "$source_dir" -B "$build_dir" -G "$cmake_generator" \
     -DCMAKE_BUILD_TYPE=Release \
     -DSDL_EXAMPLES=OFF \
     -DSDL_INSTALL=OFF \
@@ -81,8 +100,9 @@ mkdir -p "$output_dir"
 output="$output_dir/$archive_name"
 cp "$archive" "$output"
 
-if [[ "$target" == "macos-x64" ]]; then
-    lipo -info "$output" | grep -Fq 'architecture: x86_64'
+if [[ "$target" == macos-* ]]; then
+    architecture="${target#macos-}"
+    lipo -info "$output" | grep -Fq "architecture: $architecture"
 else
     header="$build_dir/archive-header.txt"
     readelf -h "$output" > "$header"
@@ -90,7 +110,24 @@ else
 fi
 
 symbols="$build_dir/exported-symbols.txt"
-nm -g "$output" > "$symbols"
+all_symbols="$build_dir/all-global-symbols.txt"
+nm -g "$output" > "$all_symbols"
+if grep -Eq '(^|[[:space:]])_+ubsan_handle_' "$all_symbols"; then
+    echo "SDL archive must not reference the UBSan runtime" >&2
+    exit 1
+fi
+
+if [[ "$target" == macos-* ]]; then
+    nm -gU "$output" > "$symbols"
+    for symbol in sinf cosf tanf asinf acosf atan2f expf logf powf sqrtf; do
+        if grep -Eq "(^|[[:space:]])_${symbol}$" "$symbols"; then
+            echo "SDL archive must not define the system math symbol: $symbol" >&2
+            exit 1
+        fi
+    done
+else
+    nm -g --defined-only "$output" > "$symbols"
+fi
 for symbol in SDL_Init SDL_CreateWindow SDL_GetClipboardText SDL_CreateGPUDevice; do
     grep -Eq "(^|[[:space:]_])${symbol}$" "$symbols" || {
         echo "missing required SDL symbol: $symbol" >&2

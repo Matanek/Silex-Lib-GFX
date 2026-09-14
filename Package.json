@@ -114,8 +114,8 @@
     "macos-arm64": {
       "SDL3": {
         "path": "Boundary/macos-arm64/libSDL3.a",
-        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.1/SDL3-3.4.10-macos-arm64.a",
-        "sha256": "9c6a0ce402ed4232d644ac9966da5baad937773bb2765d41a4a068f9970618cd"
+        "url": "https://github.com/Matanek/Silex-Lib-GFX/releases/download/sdl3-3.4.10-silex.2/SDL3-3.4.10-macos-arm64.a",
+        "sha256": "6baa6830c8a52dba6c86aff5992066fd67c7625369356531f4517b1bfc55150f"
       }
     },
     "macos-x64": {
