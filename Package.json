@@ -7,59 +7,23 @@
   },
   "authors": ["Matanek"],
   "extensions": {
-    "GFX.Application": {
-      "merge": true,
-      "suite": true
-    },
-    "GFX.Assets": {
-      "suite": true
-    },
-    "GFX.Physics": {
-      "friend": true
-    },
-    "GFX.Animation": {
-      "suite": true
-    },
-    "GFX.Audio": {
-      "suite": true
-    },
-    "GFX.WebView": {
-      "suite": true
-    },
-    "GFX.UI": {
-      "suite": true
-    },
-    "GFX.Rendering": {
-      "suite": true
-    },
-    "GFX.Stats": {
-      "suite": true
-    },
-    "GFX.Viewer": {
-      "suite": true
-    },
-    "GFX.Scene2D": {
-      "suite": true
-    },
-    "GFX.Scene3D": {
-      "suite": true
-    },
-    "GFX.Nodes": {
-      "suite": true
-    },
-    "GFX.Canvas": {
-      "suite": true
-    },
-    "GFX.ECS": {
-      "suite": true
-    },
-    "GFX.Font": {
-      "suite": true
-    },
-    "GFX.GPU": {
-      "friend": true,
-      "suite": true
-    }
+    "GFX.Application": { "merge": true, "suite": true },
+    "GFX.Assets": { "suite": true },
+    "GFX.Physics": { "friend": true },
+    "GFX.Animation": { "suite": true },
+    "GFX.Audio": { "suite": true },
+    "GFX.WebView": { "suite": true },
+    "GFX.UI": { "suite": true },
+    "GFX.Rendering": { "suite": true },
+    "GFX.Stats": { "suite": true },
+    "GFX.Viewer": { "suite": true },
+    "GFX.Scene2D": { "suite": true },
+    "GFX.Scene3D": { "suite": true },
+    "GFX.Nodes": { "suite": true },
+    "GFX.Canvas": { "suite": true },
+    "GFX.ECS": { "suite": true },
+    "GFX.Font": { "suite": true },
+    "GFX.GPU": { "friend": true, "suite": true }
   },
   "catalogs": ["GFX.Components", "GFX.Plugins", "GFX.Resources"],
   "requires": { "silex": ">=0.44.0" },
