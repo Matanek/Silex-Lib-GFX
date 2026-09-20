@@ -45,6 +45,9 @@ func observe(input:@InputState) {
     assert(!input.is_down(Input.Key.space))
     assert(input.mouse_wheel().y == 1.0)
     assert(input.is_down(Input.MouseButton.right))
+    assert(input.is_pressed(Input.MouseButton.right))
+    assert(!input.is_pressed(Input.MouseButton.left))
+    assert(!input.is_down(Input.MouseButton.middle))
     assert(input.mouse_delta().x == 12.0)
     assert(input.mouse_delta().y == -4.0)
 }

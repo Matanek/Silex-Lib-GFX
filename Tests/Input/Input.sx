@@ -48,6 +48,8 @@ test "translate SDL events into input state" {
 
     assert(input.is_down(Input.Key.a))
     assert(input.is_pressed(Input.Key.a))
+    assert(!input.is_pressed(Input.Key.b))
+    assert(!input.is_down(Input.Key.escape))
     assert(!input.is_released(Input.Key.a))
     assert(!input.is_quit_requested())
     if true {
@@ -83,6 +85,9 @@ test "translate SDL events into input state" {
     assert(!input.is_released(Input.Key.a))
     assert(input.is_down(Input.MouseButton.left))
     assert(input.is_pressed(Input.MouseButton.left))
+    assert(!input.is_pressed(Input.MouseButton.right))
+    assert(!input.is_pressed(Input.MouseButton.middle))
+    assert(!input.is_down(Input.MouseButton.right))
     assert(!input.is_released(Input.MouseButton.left))
     assert(!input.is_quit_requested())
 
@@ -98,9 +103,11 @@ test "translate SDL events into input state" {
     assert(!input.is_down(Input.Key.a))
     assert(!input.is_pressed(Input.Key.a))
     assert(input.is_released(Input.Key.a))
+    assert(!input.is_released(Input.Key.b))
     assert(!input.is_down(Input.MouseButton.left))
     assert(!input.is_pressed(Input.MouseButton.left))
     assert(input.is_released(Input.MouseButton.left))
+    assert(!input.is_released(Input.MouseButton.right))
     assert(input.is_quit_requested())
     if true {
         let events = input.events()
