@@ -70,6 +70,8 @@ struct EmptyPlugin:Plugin {
 }
 
 class RegisteredSystem {
+    var plugin_id:str = ""
+    var lifecycle_executed:bool = false
     let schedule:Schedule
     let after:bool
     let callback:func(Application)
@@ -112,6 +114,9 @@ class RegisteredSystem {
     func has_flag(flag:uint) bool { return (self.flags & flag) != 0 }
 
     func execute(application:Application, order:int) {
+        if self.schedule == Schedule.initialize || self.schedule == Schedule.startup {
+            self.lifecycle_executed = true
+        }
         if self.has_flag(16) {
             self.typed_callback(application, order)
         } else {
@@ -197,6 +202,16 @@ public class Application {
     private var current_runner:func(Application) int
     private var configuration_locked:bool
     private var resources_invalidated:bool = false
+    private var dependency_owners:str[] = []
+    private var dependency_ids:str[] = []
+    private var pending_plugins:Plugin[] = []
+    private var dependencies_changed:bool = false
+    private var active_plugin:str = ""
+    private var schedule_depth:int = 0
+    private var activating_plugins:bool = false
+    private var initialized:bool = false
+    private var started:bool = false
+    private var stopping:bool = false
     private var executor:Threading.Executor
     private var schedule_plans:SchedulePlan[]
     private var schedule_plan_builds:int
@@ -272,7 +287,7 @@ public class Application {
     }
 
     func add_resource<T>(value:T) Application {
-        if self.configuration_locked {
+        if self.configuration_locked && !self.resolving_plugins {
             panic("Application cannot add a resource after run")
         }
         self.resource_store.insert(move value)
@@ -286,6 +301,7 @@ public class Application {
     func add_plugin<T:Plugin>(plugin:T) Application {
         if self.resolving_plugins {
             let id = plugin.id()
+            self.record_dependency(self.building_plugin(), id)
             if !contains(self.requested_plugin_ids, id) {
                 self.resource_store.retain_class(plugin)
                 self.requested_plugin_ids.append(id)
@@ -308,6 +324,37 @@ public class Application {
         self.requested_plugin_ids.append(id)
         self.requested_plugins.append(plugin)
         return self
+    }
+
+    // A dependency discovered by a running plugin is installed after the current
+    // schedule, when its systems and resource borrows have all completed.
+    func require_plugin<T:Plugin>(plugin:T) Application {
+        if self.stopping { panic("Application cannot require a plugin during shutdown") }
+        if !self.plugins_prepared || self.resolving_plugins { return self.add_plugin(plugin) }
+        self.record_dependency(self.active_plugin, plugin.id())
+        if contains(self.requested_plugin_ids, plugin.id()) { return self }
+        self.resource_store.retain_class(plugin)
+        self.requested_plugin_ids.append(plugin.id())
+        self.requested_plugins.append(plugin)
+        self.pending_plugins.append(plugin)
+        return self
+    }
+
+    private func building_plugin() str {
+        if self.installing_plugins.is_empty() { return "" }
+        return self.installing_plugins[self.installing_plugins.count() - 1]
+    }
+
+    private func record_dependency(owner:str, dependency:str) {
+        if owner == "" || owner == dependency { return }
+        var index = 0
+        while index < self.dependency_ids.count() {
+            if self.dependency_owners[index] == owner && self.dependency_ids[index] == dependency { return }
+            index++
+        }
+        self.dependency_owners.append(owner)
+        self.dependency_ids.append(dependency)
+        if self.plugins_prepared { self.dependencies_changed = true }
     }
 
     // Compatibility alias. New code should use the canonical add_plugin name.
@@ -372,7 +419,7 @@ public class Application {
         after:bool,
         process_mode:ProcessMode
     ) Application {
-        if self.configuration_locked {
+        if self.configuration_locked && !self.resolving_plugins {
             panic("Application cannot add a system after run")
         }
         self.registered_systems.append(RegisteredSystem(
@@ -384,7 +431,7 @@ public class Application {
             writes:[],
             flags:11 as uint,
             process_mode:process_mode
-        ))
+        )..plugin_id = self.building_plugin())
         return self
     }
 
@@ -397,7 +444,7 @@ public class Application {
         flags:uint,
         process_mode:ProcessMode = ProcessMode.inherit
     ) Application {
-        if self.configuration_locked {
+        if self.configuration_locked && !self.resolving_plugins {
             panic("Application cannot add a system after run")
         }
         self.registered_systems.append(RegisteredSystem(
@@ -409,7 +456,7 @@ public class Application {
             writes:writes,
             flags:flags + 16,
             process_mode:process_mode
-        ))
+        )..plugin_id = self.building_plugin())
         return self
     }
 
@@ -454,6 +501,7 @@ public class Application {
 
     func prepare() Application {
         self.prepare_plugins()
+        self.activate_pending_plugins()
         return self
     }
 
@@ -495,6 +543,9 @@ public class Application {
 
     func run_schedule(schedule:Schedule) {
         self.prepare_plugins()
+        if schedule == Schedule.shutdown || schedule == Schedule.finalize { self.stopping = true }
+        if !self.stopping { self.activate_pending_plugins() }
+        self.schedule_depth++
         let reversed = schedule == Schedule.shutdown || schedule == Schedule.finalize
         if !reversed && self.configuration_locked {
             self.run_plan(schedule, false)
@@ -503,6 +554,84 @@ public class Application {
             self.run_systems(schedule, false, reversed)
             self.run_systems(schedule, true, reversed)
         }
+        if schedule == Schedule.initialize { self.initialized = true }
+        if schedule == Schedule.startup { self.started = true }
+        self.schedule_depth--
+        if !self.stopping { self.activate_pending_plugins() }
+    }
+
+    private func activate_pending_plugins() {
+        if self.schedule_depth != 0 || self.activating_plugins { return }
+        if self.pending_plugins.is_empty() && !self.dependencies_changed { return }
+        self.activating_plugins = true
+        while !self.pending_plugins.is_empty() || self.dependencies_changed {
+            self.dependencies_changed = false
+            var pending = self.pending_plugins
+            self.pending_plugins = []
+            self.resolving_plugins = true
+            for var plugin in pending { self.resolve_plugin(plugin.id(), plugin) }
+            self.resolving_plugins = false
+            self.order_plugin_systems()
+            self.dependencies_changed = false
+            // Startup callbacks may drive another schedule on this context.
+            if self.configuration_locked { self.build_schedule_plans() }
+            // Catch up only the lifecycle callbacks introduced by this batch.
+            if self.initialized { self.start_pending_systems(Schedule.initialize) }
+            if !self.pending_plugins.is_empty() || self.dependencies_changed { continue }
+            if self.started { self.start_pending_systems(Schedule.startup) }
+        }
+        self.activating_plugins = false
+    }
+
+    private func order_plugin_systems() {
+        var ordered_ids:str[] = []
+        while ordered_ids.count() < self.installed_plugin_ids.count() {
+            let previous_count = ordered_ids.count()
+            for id in self.installed_plugin_ids {
+                if contains(ordered_ids, id) { continue }
+                var ready = true
+                var index = 0
+                while index < self.dependency_ids.count() {
+                    if self.dependency_owners[index] == id &&
+                        !contains(ordered_ids, self.dependency_ids[index])
+                    { ready = false }
+                    index++
+                }
+                if ready { ordered_ids.append(id) }
+            }
+            if ordered_ids.count() == previous_count { panic("Application plugin dependency cycle") }
+        }
+        var ordered_systems:RegisteredSystem[] = []
+        for id in ordered_ids {
+            for system in self.registered_systems {
+                if system.plugin_id == id { ordered_systems.append(system) }
+            }
+        }
+        for system in self.registered_systems {
+            if system.plugin_id == "" { ordered_systems.append(system) }
+        }
+        self.registered_systems = ordered_systems
+        self.installed_plugin_ids = ordered_ids
+    }
+
+    private func start_pending_systems(schedule:Schedule) {
+        for after in [false, true] {
+            var index = 0
+            while index < self.registered_systems.count() {
+                var system = self.registered_systems[index]
+                if system.schedule == schedule && system.after == after && !system.lifecycle_executed {
+                    self.execute_system(system, index)
+                }
+                index++
+            }
+        }
+    }
+
+    private func execute_system(system:RegisteredSystem, index:int) {
+        let previous_plugin = self.active_plugin
+        self.active_plugin = system.plugin_id
+        system.execute(self, index)
+        self.active_plugin = previous_plugin
     }
 
     func stop() {
@@ -594,7 +723,7 @@ public class Application {
             while index >= 0 {
                 var system = self.registered_systems[index]
                 if system.schedule == schedule && system.after == after && system.is_active(self.simulation_paused()) {
-                    system.execute(self, index)
+                    self.execute_system(system, index)
                 }
                 index--
             }
@@ -605,7 +734,7 @@ public class Application {
         while index < self.registered_systems.count() {
             var system = self.registered_systems[index]
             if system.schedule == schedule && system.after == after && system.is_active(self.simulation_paused()) {
-                system.execute(self, index)
+                self.execute_system(system, index)
             }
             index++
         }
@@ -693,7 +822,7 @@ public class Application {
         if !has_parallel_system {
             for system_index in stage.systems {
                 var system = self.registered_systems[system_index]
-                if system.is_active(paused) { system.execute(self, system_index) }
+                if system.is_active(paused) { self.execute_system(system, system_index) }
             }
             return
         }
@@ -713,7 +842,7 @@ public class Application {
         }
         for system_index in stage.systems {
             var system = self.registered_systems[system_index]
-            if system.is_active(paused) && !system.has_flag(4) { system.execute(self, system_index) }
+            if system.is_active(paused) && !system.has_flag(4) { self.execute_system(system, system_index) }
         }
         for fence in fences { fence.complete() }
         var handle_index = 0

@@ -30,9 +30,20 @@ toujours l’instance de repli, indépendamment de l’ordre des appels. Chaque
 identifiant n’est construit qu’une fois.
 
 `run` prépare automatiquement l’application. Appelez `prepare()` avant
-`resources()` si une ressource est nécessaire plus tôt ; aucun plugin ne peut
-être ajouté après cette frontière. `Application.Time` fournit `FrameTime` et
-`Application.FramePacing` limite une boucle sans mécanisme de présentation.
+`resources()` si une ressource est nécessaire plus tôt ; `add_plugin` ne peut
+plus modifier la configuration après cette frontière. `Application.Time` fournit
+`FrameTime` et `Application.FramePacing` limite une boucle sans mécanisme de
+présentation.
+
+Un plugin dont les besoins évoluent pendant l’exécution peut appeler
+`application.require_plugin(plugin)` depuis un callback Application. La demande
+est résolue à la fin de l’étape courante, après la fin de tous ses systèmes.
+Seuls les nouveaux callbacks `initialize` et `startup` déjà dus sont exécutés ;
+les services existants conservent leur état. Le plan des systèmes est recalculé
+uniquement quand les dépendances changent. À l’arrêt, le plugin demandeur est
+arrêté avant ses dépendances. Les demandes sont refusées pendant l’arrêt.
+Une instance explicitement configurée avant la préparation reste prioritaire.
+Hors d’un callback, `prepare()` ou l’étape suivante traite la demande.
 
 `Resources.scope()` crée un magasin enfant vide. Une ressource locale masque
 la ressource parente de même type ; une lecture absente localement consulte le

@@ -33,7 +33,17 @@ on call order. Each plugin identifier is built only once.
 `run` performs this preparation automatically. Code that needs a plugin-owned
 resource before starting the application can call `prepare()` explicitly after
 adding every plugin, then access `resources()`. No plugin can be added after
-that preparation boundary.
+that preparation boundary with `add_plugin`.
+
+A plugin whose needs change during execution can call
+`application.require_plugin(plugin)` from an Application callback. The request
+is resolved at the end of the current stage, after all its systems finish.
+Only newly introduced `initialize` and `startup` callbacks that are already due
+are executed; existing services keep their state. The system plan is rebuilt
+only when dependencies change. During shutdown, the requesting plugin stops
+before its dependencies. Requests during shutdown are rejected. An instance
+explicitly configured before preparation remains authoritative. Outside a
+callback, `prepare()` or the next stage processes the request.
 
 `Resources.scope()` creates an empty child store. A local resource shadows a
 parent resource of the same type; a locally missing read consults the parent

@@ -1,0 +1,125 @@
+use GFX.Application
+
+class Trace {
+    var values:int[] = []
+}
+
+struct Dependency:Application.Plugin {
+    let marker:int = 1
+    func id() str { return "Dynamic.Dependency" }
+    func build(application:&Application) {
+        application.add_resource(self)
+        application.add_system(Application.Schedule.initialize, initialize_dependency)
+        application.add_system(Application.Schedule.startup, start_dependency)
+        application.add_system(Application.Schedule.update, update_dependency)
+        application.add_system(Application.Schedule.shutdown, stop_dependency)
+    }
+}
+
+func initialize_dependency(trace:&Trace) { trace.values.append(1) }
+func start_dependency(trace:&Trace, dependency:@Dependency) { trace.values.append(dependency.marker) }
+func update_dependency(trace:&Trace) { trace.values.append(3) }
+func stop_dependency(trace:&Trace) { trace.values.append(6) }
+
+struct Owner:Application.Plugin {
+    func id() str { return "Dynamic.Owner" }
+    func build(application:&Application) {
+        application.add_system(Application.Schedule.startup, start_owner)
+        application.add_system(Application.Schedule.update, update_owner)
+        application.add_system(Application.Schedule.shutdown, stop_owner)
+    }
+}
+
+func start_owner(application:Application) {
+    application.require_plugin(Dependency(marker:2))
+    var resources = application.resources()
+    var trace = resources.get_mut<Trace>()
+    trace.values.append(0)
+}
+func update_owner(application:Application) {
+    application.require_plugin(Dependency(marker:99))
+    var resources = application.resources()
+    var trace = resources.get_mut<Trace>()
+    trace.values.append(4)
+    application.stop()
+}
+func stop_owner(trace:&Trace) { trace.values.append(5) }
+
+test "start a discovered dependency once and stop its owner first" {
+    var trace = Trace()
+    var application = Application()..add_resource(trace)..add_plugin(Owner())
+    assert(application.run() == 0)
+    assert_trace(trace, [0, 1, 2, 3, 4, 5, 6])
+}
+
+test "keep explicit dependency settings and reorder late dependency ownership" {
+    var trace = Trace()
+    var application = Application()..add_resource(trace)
+        ..add_plugin(Owner())..add_plugin(Dependency(marker:7))
+    assert(application.run() == 0)
+    assert_trace(trace, [1, 0, 7, 3, 4, 5, 6])
+}
+
+test "activate requirements between manually driven schedules" {
+    var trace = Trace()
+    var application = Application()..add_resource(trace)..add_plugin(Owner())
+    application.run_schedule(Application.Schedule.initialize)
+    application.run_schedule(Application.Schedule.startup)
+    application.run_schedule(Application.Schedule.update)
+    application.run_schedule(Application.Schedule.shutdown)
+    assert_trace(trace, [0, 1, 2, 3, 4, 5, 6])
+}
+
+func assert_trace(trace:Trace, expected:int[]) {
+    assert(trace.values.count() == expected.count())
+    var index = 0
+    for value in expected {
+        assert(trace.values[index] == value)
+        index++
+    }
+}
+
+struct Nested:Application.Plugin {
+    func id() str { return "Dynamic.Nested" }
+    func build(application:&Application) {
+        application.add_system(Application.Schedule.startup, start_nested)
+        application.add_system(Application.Schedule.post_update, nested_post_update)
+    }
+}
+
+func start_nested(application:Application) {
+    application.run_schedule(Application.Schedule.post_update)
+    application.stop()
+}
+func nested_post_update(trace:&Trace) { trace.values.append(9) }
+func request_nested(application:Application) { application.require_plugin(Nested()) }
+
+test "a newly started plugin can drive a schedule with the updated system plan" {
+    var trace = Trace()
+    var application = Application()..add_resource(trace)
+        ..add_system(Application.Schedule.startup, request_nested)
+    assert(application.run() == 0)
+    assert_trace(trace, [9])
+}
+
+struct Initializer:Application.Plugin {
+    func id() str { return "Dynamic.Initializer" }
+    func build(application:&Application) {
+        application.add_system(Application.Schedule.initialize, request_from_initialize)
+        application.add_system(Application.Schedule.startup, start_initializer)
+    }
+}
+func request_from_initialize(application:Application) { application.require_plugin(Dependency(marker:2)) }
+func start_initializer(application:Application) {
+    assert(application.resources().has<Dependency>())
+    application.stop()
+}
+func request_initializer(application:Application) { application.require_plugin(Initializer()) }
+
+test "finish dependencies discovered during initialization before starting the plugin" {
+    var trace = Trace()
+    var application = Application()..add_resource(trace)
+        ..add_system(Application.Schedule.startup, request_initializer)
+    assert(application.run() == 0)
+    assert_trace(trace, [1, 2, 6])
+}
