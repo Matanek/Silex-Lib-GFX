@@ -532,6 +532,7 @@ public class State {
 }
 
 public class Input {
+    private var runner_managed_events:bool = false
     var current_state:State
     var lifecycle_watcher:Native.Watcher?
     var event_storage:uint
@@ -569,11 +570,19 @@ public class Input {
 
     module func update_state(state:&State) {
         state.begin_frame()
-        Native.pump_events()
-        Native.drain_events(self.event_storage)
+        if !self.runner_managed_events { self.__silex_pump_events() }
         if let watcher = self.lifecycle_watcher {
             for event in watcher.take() { state.handle(event) }
         }
+    }
+
+    // The default runner pumps outside all schedule/resource borrows so native
+    // live-resize callbacks can execute a complete frame without recursive polling.
+    package func __silex_manage_events(enabled:bool) { self.runner_managed_events = enabled }
+
+    package func __silex_pump_events() {
+        Native.pump_events()
+        Native.drain_events(self.event_storage)
     }
 
     func state() State {

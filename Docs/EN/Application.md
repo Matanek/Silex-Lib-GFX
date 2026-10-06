@@ -63,6 +63,16 @@ Development overlays such as the FPS and performance panels belong to the
 official `GFX.Stats` suite package. Application remains responsible only for
 plugin composition and scheduling.
 
+The default runner pumps native events before `pre_update`. During live
+resizing, native redraw requests on the main thread can run `pre_update`,
+`update`, `post_update`, and `render` before pumping returns. Layout and
+rendering therefore follow the current size while dragging. Bundle windows
+share this pump; scheduled systems and their jobs have finished before it
+starts. An event caused by rendering does not recursively start another frame.
+This integration belongs to the default runner: `with_runner` keeps its
+contract and responsibility for driving events in a custom loop.
+Direct calls to `Input.update()` continue to pump events themselves.
+
 ## Pause the game
 
 Every Application owns an `Application.Simulation` resource. Its `pause()`,

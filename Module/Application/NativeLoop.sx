@@ -1,0 +1,113 @@
+use GFX.Application
+use GFX.Application.Schedule
+use GFX.Input
+use Interop.C
+use Interop.Boundary
+
+// Only the runner's platform-pump interval is reentrant. All scheduled jobs
+// have joined before it starts; no Input state or schedule is being mutated.
+package class FrameLoop {
+    private var application:Application
+    private var watching:bool = false
+    private var pumping:bool = false
+    private var drawing:bool = false
+    private var inputs:Input[] = []
+
+    package init(application:Application) {
+        self.application = application
+        application.start()
+    }
+
+    module func poll() {
+        if !self.inputs.is_empty() {
+            var input = self.inputs[0]
+            self.pump(func() {
+                input.__silex_pump_events()
+            })
+        }
+    }
+
+    // Child Application scopes inherit this driver. Pump SDL once for all
+    // Input instances, including windows owned only by child Bundles.
+    package func attach(input:Input) {
+        self.inputs.append(input)
+        input.__silex_manage_events(true)
+        if self.watching { return }
+        let callback:func(uint, uint) int32 = exposed_event
+        if sdl_add_event_watch(C.pointer_bits(C.function_address(callback)),
+            C.pointer_bits(C.object_address(self))) == 0 {
+            panic("GFX.Application could not observe live window redraws")
+        }
+        self.watching = true
+    }
+
+    package func detach(input:&Input) {
+        var kept:Input[] = []
+        for current in self.inputs { if current != input { kept.append(current) } }
+        self.inputs = kept
+        input.__silex_manage_events(false)
+        if self.inputs.is_empty() { self.stop_watching() }
+    }
+
+    package func pump(callback:func()) {
+        self.pumping = true
+        callback()
+        self.pumping = false
+    }
+
+    module func frame() {
+        var application = self.application
+        application.run_schedule(Schedule.pre_update)
+        application.run_schedule(Schedule.update)
+        application.run_schedule(Schedule.post_update)
+        application.run_schedule(Schedule.render)
+    }
+
+    package func expose(live:bool) {
+        if !live || !self.pumping || self.drawing { return }
+        var application = self.application
+        if !application.is_running() { return }
+        self.drawing = true
+        self.frame()
+        self.drawing = false
+    }
+
+    module func close() {
+        self.stop_watching()
+        for retained in self.inputs {
+            var input = retained
+            input.__silex_manage_events(false)
+        }
+        self.inputs.clear()
+        var application = self.application
+        var resources = application.resources()
+        if resources.has<FrameLoop>() { var removed = resources.remove<FrameLoop>() }
+    }
+
+    private func stop_watching() {
+        if !self.watching { return }
+        let callback:func(uint, uint) int32 = exposed_event
+        sdl_remove_event_watch(C.pointer_bits(C.function_address(callback)),
+            C.pointer_bits(C.object_address(self)))
+        self.watching = false
+    }
+
+    drop { self.close() }
+}
+
+func exposed_event(context:uint, raw:uint) int32 {
+    // Watches may also run on worker threads. Check before touching Silex objects.
+    if C.load<uint32>(raw, 0 as uint) != 0x204 as uint32 { return 1 }
+    if C.load<int32>(raw, 20 as uint) == 0 { return 1 }
+    if sdl_is_main_thread() == 0 { return 1 }
+    var loop = C.object_from_address<FrameLoop>(context)
+    loop.expose(true)
+    return 1
+}
+
+let sdl_add_event_watch = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) int32>(
+    library:Boundary.SDL3, name:"SDL_AddEventWatch")
+let sdl_remove_event_watch = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) void>(
+    library:Boundary.SDL3, name:"SDL_RemoveEventWatch")
+let sdl_is_main_thread = C.function<func() int32>(
+    library:Boundary.SDL3, name:"SDL_IsMainThread")

@@ -3,6 +3,7 @@ use GFX.Application
 use GFX.Application.Schedule
 use GFX.Input as InputApi
 use GFX.Input.State as InputState
+use GFX.Application.NativeLoop.FrameLoop
 
 public struct Plugin:PluginProtocol {
 
@@ -21,6 +22,7 @@ func start_input(application:Application) {
     var state = input.state()
     resources.insert(state)
     resources.insert(input)
+    if var loop = resources.try_get_mut<FrameLoop>() { loop.attach(input) }
 }
 
 func update_input(input:&InputApi, state:&InputState) {
@@ -29,6 +31,10 @@ func update_input(input:&InputApi, state:&InputState) {
 
 func stop_input(application:Application) {
     var resources = application.resources()
+    if var loop = resources.try_get_mut<FrameLoop>() {
+        var input = resources.get_mut<InputApi>()
+        loop.detach(input)
+    }
     var removed_state = resources.remove<InputState>()
     assert(removed_state != null)
     var removed_input = resources.remove<InputApi>()

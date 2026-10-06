@@ -1,0 +1,73 @@
+use GFX.Application
+use GFX.Application.NativeLoop.FrameLoop
+
+class Probe {
+    var steps:str = ""
+    var rendered:int = 0
+    var loop:FrameLoop? = null
+}
+
+func before(probe:&Probe) { probe.steps += "P" }
+func update(probe:&Probe) { probe.steps += "U" }
+func after(probe:&Probe) { probe.steps += "A" }
+func render(probe:&Probe) {
+    probe.steps += "R"
+    probe.rendered++
+    // Presentation can itself expose the window; never recursively render.
+    if var loop = probe.loop { loop.expose(true) }
+}
+
+test "complete live frames while the platform pump has not returned" {
+    var application = Application()
+    var probe = Probe()
+    application.add_resource(probe)
+    application.add_system(Application.Schedule.pre_update, before)
+    application.add_system(Application.Schedule.update, update)
+    application.add_system(Application.Schedule.post_update, after)
+    application.add_system(Application.Schedule.render, render)
+    var loop = FrameLoop(application)
+    probe.loop = loop
+    loop.expose(true)
+    assert(probe.rendered == 0)
+    loop.pump(func() {
+        loop.expose(false)
+        assert(probe.rendered == 0)
+        loop.expose(true)
+        assert(probe.steps == "PUAR")
+        loop.expose(true)
+        assert(probe.steps == "PUARPUAR")
+    })
+    assert(probe.rendered == 2)
+    loop.expose(true)
+    assert(probe.rendered == 2)
+    probe.loop = null
+}
+
+test "a stopped application does not redraw from the platform pump" {
+    var application = Application()
+    var probe = Probe()
+    application.add_resource(probe)
+    application.add_system(Application.Schedule.render, render)
+    var loop = FrameLoop(application)
+    var resources = application.resources()
+    var controller = resources.get_mut<Application.Controller>()
+    controller.stop()
+    loop.pump(func() { loop.expose(true) })
+    assert(probe.rendered == 0)
+}
+
+func inspect_driver(application:Application) {
+    var resources = application.resources()
+    assert(resources.has<FrameLoop>())
+}
+
+func finish_frame(controller:&Application.Controller) { controller.stop() }
+
+test "release the default driver before shutdown without requiring a window" {
+    var application = Application()
+    application.add_system(Application.Schedule.startup, inspect_driver)
+    application.add_system(Application.Schedule.update, finish_frame)
+    application.run()
+    var resources = application.resources()
+    assert(!resources.has<FrameLoop>())
+}

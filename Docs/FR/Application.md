@@ -54,6 +54,17 @@ les scènes fournies par le package `GFX.Application`.
 Les panneaux de développement appartiennent à `GFX.Stats`, pas au socle
 Application.
 
+Le runner par défaut pompe les événements natifs avant `pre_update`. Pendant
+un redimensionnement continu, les demandes natives de rafraîchissement sur le
+thread principal peuvent exécuter `pre_update`, `update`, `post_update` et
+`render` avant que le pompage ne retourne. Le layout et le rendu suivent ainsi
+la taille courante pendant le glissement. Les fenêtres des Bundles partagent
+ce pompage ; les systèmes et leurs jobs sont terminés avant son entrée.
+Un événement provoqué par le rendu ne relance pas récursivement une frame.
+Cette intégration appartient au runner par défaut : `with_runner` conserve
+son contrat et la responsabilité de piloter les événements dans une boucle
+personnalisée. `Input.update()` employé directement continue à pomper lui-même.
+
 ## Mettre le jeu en pause
 
 Chaque Application possède une ressource `Application.Simulation`. Ses méthodes

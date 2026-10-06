@@ -3,6 +3,7 @@ public use GFX.Application.ProcessMode.should_process
 public use GFX.Application.Simulation.Simulation
 use Interop.C
 use STD.Threading
+use GFX.Application.NativeLoop.FrameLoop
 
 // Stores one application-owned value per concrete type. The compiler provides
 // the storage and implementations while this declaration defines the public API.
@@ -892,17 +893,18 @@ func index_of(values:@str[], expected:str) int {
 }
 
 func run_default(application:Application) int {
-    application.start()
+    var loop = FrameLoop(application)
+    var resources = application.resources()
+    resources.insert(loop)
     application.run_schedule(Schedule.initialize)
     application.run_schedule(Schedule.startup)
 
     while application.is_running() {
-        application.run_schedule(Schedule.pre_update)
-        application.run_schedule(Schedule.update)
-        application.run_schedule(Schedule.post_update)
-        application.run_schedule(Schedule.render)
+        loop.poll()
+        if application.is_running() { loop.frame() }
     }
 
+    loop.close()
     application.run_schedule(Schedule.shutdown)
     application.run_schedule(Schedule.finalize)
     return 0
