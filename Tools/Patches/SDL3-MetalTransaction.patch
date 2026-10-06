@@ -1,0 +1,41 @@
+--- a/src/gpu/metal/SDL_gpu_metal.m
++++ b/src/gpu/metal/SDL_gpu_metal.m
+@@ -3672,6 +3672,8 @@
+     windowData->layer = (__bridge CAMetalLayer *)(SDL_Metal_GetLayer(windowData->view));
+     windowData->layer.device = renderer->device;
+ #ifdef SDL_PLATFORM_MACOS
++    // Present in the Core Animation transaction that updates window geometry.
++    windowData->layer.presentsWithTransaction = YES;
+     if (@available(macOS 10.13, *)) {
+         windowData->layer.displaySyncEnabled = (presentMode != SDL_GPU_PRESENTMODE_IMMEDIATE);
+         windowData->presentMode = presentMode;
+@@ -4074,8 +4076,10 @@
+         // Enqueue present requests, if applicable
+         for (Uint32 i = 0; i < metalCommandBuffer->windowDataCount; i += 1) {
+             MetalWindowData *windowData = metalCommandBuffer->windowDatas[i];
++#ifndef SDL_PLATFORM_MACOS
+             [metalCommandBuffer->handle presentDrawable:windowData->drawable];
+             windowData->drawable = nil;
++#endif
+
+             windowData->inFlightFences[windowData->frameCounter] = (SDL_GPUFence *)metalCommandBuffer->fence;
+
+@@ -4091,6 +4095,18 @@
+
+         // Submit the command buffer
+         [metalCommandBuffer->handle commit];
++#ifdef SDL_PLATFORM_MACOS
++        // Transaction presentation requires a scheduled command buffer.
++        // Offscreen submissions retain their asynchronous path.
++        if (metalCommandBuffer->windowDataCount > 0) {
++            [metalCommandBuffer->handle waitUntilScheduled];
++            for (Uint32 i = 0; i < metalCommandBuffer->windowDataCount; i += 1) {
++                MetalWindowData *windowData = metalCommandBuffer->windowDatas[i];
++                [windowData->drawable present];
++                windowData->drawable = nil;
++            }
++        }
++#endif
+         metalCommandBuffer->handle = nil;
+
+         // Mark the command buffer as submitted

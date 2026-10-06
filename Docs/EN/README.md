@@ -29,6 +29,8 @@ packages contribute only their owned declarations to the open `Components`,
 
 ## Guides
 
+- [Rebuild the local SDL provider](NativeProvider.md)
+
 - [Application](Application.md)
 - [Architecture and extension model](Architecture.md)
 - [Clipboard](Clipboard.md)

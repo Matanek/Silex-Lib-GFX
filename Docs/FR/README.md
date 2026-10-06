@@ -29,6 +29,8 @@ ouverts `Components`, `Resources` et `Plugins`.
 
 ## Guides
 
+- [Reconstruire le provider SDL local](NativeProvider.md)
+
 - [Application](Application.md)
 - [Architecture et modèle d’extension](Architecture.md)
 - [Presse-papiers](Clipboard.md)

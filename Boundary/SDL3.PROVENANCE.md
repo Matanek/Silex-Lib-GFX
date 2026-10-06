@@ -15,7 +15,7 @@ normalizes archive timestamps, checks the architecture and the SDL window,
 clipboard, and GPU symbols, rejects UBSan references and macOS definitions of
 system math symbols, then prints its SHA-256 checksum.
 
-The three native candidates currently recorded are:
+The three historical unpatched native candidates were:
 
 | Target | Native runner | Archive SHA-256 |
 |---|---|---|
@@ -47,3 +47,36 @@ workflow regenerates the `macos-x64` and `linux-arm64` candidates before
 linking them. The `macos-arm64` candidate is supplied from the local native
 build recorded above. The public GFX API and SDL provider name remain
 unchanged.
+
+## Local Metal transaction provider
+
+The macOS ARM64 local candidate now uses `ad562386909a16ba586e2026c8861b5a2ab4bf569a03776694772b0119959390`. It is built by
+`Tools/build-sdl3-metal.sh` from the same pinned SDL commit with
+`Tools/Patches/SDL3-MetalTransaction.patch`. This is explicitly an altered
+upstream source; SDL's license and attribution are retained. The earlier table
+records historical unpatched assets and their hosted qualification, not this
+new candidate. The ARM64 manifest has no download URL until a new immutable
+asset is deliberately published; the installer checks the local checksum.
+
+The patch sets `presentsWithTransaction`, commits and waits until the command
+buffer is scheduled before presenting each window drawable. It removes the
+command-buffer present call on macOS only, preserves fences/frame counters,
+and adds no wait for offscreen-only submissions. It preserves SDL's thread
+contract: acquire/submit a command buffer on its acquiring thread, and acquire
+window drawables on the window-creating thread. The manually accepted ARM64
+comparison used the same presentation sequence with an additional diagnostic
+log; the production patch removes that log and changes comments only.
+
+macOS Intel has not been natively qualified for this patch and retains its
+previous manifest/archive. Linux and Windows are unchanged. The upstream
+`build-sdl3.sh` and its checksum workflow remain historical baseline builders;
+they do not install this variant. See the reconstruction guide in
+`Docs/EN/NativeProvider.md`. No remote publication or package version change
+is part of this local correction.
+
+The corrected ARM64 archive was reproduced byte for byte twice on the local
+reference toolchain: Xcode 27.0 (27A266a), Apple Clang 21.0.0
+(clang-2100.3.34.2), CMake 3.31.2. The builder uses the baseline static Release
+options, macOS deployment target 11.0, disables sanitizers, and normalizes
+archive timestamps. A different toolchain may produce different bytes; do not
+install a non-matching archive without separately qualifying its provenance.
