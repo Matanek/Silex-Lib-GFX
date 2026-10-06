@@ -69,6 +69,9 @@ resizing, native redraw requests on the main thread can run `pre_update`,
 rendering therefore follow the current size while dragging. Bundle windows
 share this pump; scheduled systems and their jobs have finished before it
 starts. An event caused by rendering does not recursively start another frame.
+A pixel-size change redraws as soon as the native drawable is ready, without
+waiting for the next periodic redraw request. A logical-size change alone does
+not trigger this early redraw.
 This integration belongs to the default runner: `with_runner` keeps its
 contract and responsibility for driving events in a custom loop.
 Direct calls to `Input.update()` continue to pump events themselves.

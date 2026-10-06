@@ -14,7 +14,10 @@ func render(probe:&Probe) {
     probe.steps += "R"
     probe.rendered++
     // Presentation can itself expose the window; never recursively render.
-    if var loop = probe.loop { loop.expose(true) }
+    if var loop = probe.loop {
+        loop.expose(true)
+        loop.window_event(0x207 as uint32, false)
+    }
 }
 
 test "complete live frames while the platform pump has not returned" {
@@ -52,13 +55,45 @@ test "a stopped application does not redraw from the platform pump" {
     var resources = application.resources()
     var controller = resources.get_mut<Application.Controller>()
     controller.stop()
-    loop.pump(func() { loop.expose(true) })
+    loop.pump(func() {
+        loop.expose(true)
+        loop.window_event(0x207 as uint32, false)
+    })
     assert(probe.rendered == 0)
 }
 
 func inspect_driver(application:Application) {
     var resources = application.resources()
     assert(resources.has<FrameLoop>())
+}
+
+test "redraw a changed drawable before the next timed live expose" {
+    var application = Application()
+    var probe = Probe()
+    application.add_resource(probe)
+    application.add_system(Application.Schedule.pre_update, before)
+    application.add_system(Application.Schedule.update, update)
+    application.add_system(Application.Schedule.post_update, after)
+    application.add_system(Application.Schedule.render, render)
+    var loop = FrameLoop(application)
+    probe.loop = loop
+    loop.window_event(0x207 as uint32, false)
+    assert(probe.rendered == 0)
+    loop.pump(func() {
+        // Logical resize precedes the native drawable's own resize watchers.
+        loop.window_event(0x206 as uint32, false)
+        assert(probe.rendered == 0)
+        // No 60 Hz exposed event has arrived yet: the new drawable is ready.
+        loop.window_event(0x207 as uint32, false)
+        assert(probe.steps == "PUAR")
+        loop.window_event(0x207 as uint32, false)
+        assert(probe.steps == "PUARPUAR")
+        loop.window_event(0x204 as uint32, false)
+        assert(probe.rendered == 2)
+        loop.window_event(0x204 as uint32, true)
+        assert(probe.rendered == 3)
+    })
+    probe.loop = null
 }
 
 func finish_frame(controller:&Application.Controller) { controller.stop() }

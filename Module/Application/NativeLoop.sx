@@ -72,6 +72,15 @@ package class FrameLoop {
         self.drawing = false
     }
 
+    package func window_event(kind:uint32, live:bool) {
+        // SDL's early window watchers have updated the native drawable before
+        // a pixel-size event reaches this ordinary watch. Redraw now instead
+        // of letting the compositor stretch an old frame until its next timer.
+        // A logical-size event is too early: the drawable may still be old.
+        if kind == 0x207 as uint32 { self.expose(true) }
+        elif kind == 0x204 as uint32 { self.expose(live) }
+    }
+
     module func close() {
         self.stop_watching()
         for retained in self.inputs {
@@ -97,11 +106,13 @@ package class FrameLoop {
 
 func exposed_event(context:uint, raw:uint) int32 {
     // Watches may also run on worker threads. Check before touching Silex objects.
-    if C.load<uint32>(raw, 0 as uint) != 0x204 as uint32 { return 1 }
-    if C.load<int32>(raw, 20 as uint) == 0 { return 1 }
+    let kind = C.load<uint32>(raw, 0 as uint)
+    if kind != 0x204 as uint32 && kind != 0x207 as uint32 { return 1 }
+    let live = kind == 0x204 as uint32 && C.load<int32>(raw, 20 as uint) != 0
+    if kind == 0x204 as uint32 && !live { return 1 }
     if sdl_is_main_thread() == 0 { return 1 }
     var loop = C.object_from_address<FrameLoop>(context)
-    loop.expose(true)
+    loop.window_event(kind, live)
     return 1
 }
 

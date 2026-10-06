@@ -61,6 +61,9 @@ thread principal peuvent exécuter `pre_update`, `update`, `post_update` et
 la taille courante pendant le glissement. Les fenêtres des Bundles partagent
 ce pompage ; les systèmes et leurs jobs sont terminés avant son entrée.
 Un événement provoqué par le rendu ne relance pas récursivement une frame.
+Un changement de taille en pixels redessine dès que la surface native est prête,
+sans attendre la prochaine demande périodique de rafraîchissement. Le changement
+de taille logique seul ne déclenche pas ce redessin anticipé.
 Cette intégration appartient au runner par défaut : `with_runner` conserve
 son contrat et la responsabilité de piloter les événements dans une boucle
 personnalisée. `Input.update()` employé directement continue à pomper lui-même.
