@@ -1,0 +1,12 @@
+use GFX.Window
+// Compile and link only: this fixture deliberately creates a visible window.
+// Native interaction is left to the user's UIPanels candidate.
+func main() {
+    var window = Window(Window.Settings(title:"System cursors", width:400, height:200))
+    assert(window.cursor() == Window.Cursor.standard)
+    window.set_cursor(Window.Cursor.resize_horizontal)
+    assert(window.cursor() == Window.Cursor.resize_horizontal)
+    window.set_cursor(Window.Cursor.resize_vertical)
+    assert(window.cursor() == Window.Cursor.resize_vertical)
+    window.set_cursor(Window.Cursor.standard)
+}

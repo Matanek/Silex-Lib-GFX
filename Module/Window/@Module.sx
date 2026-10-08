@@ -44,6 +44,12 @@ public struct State {
     let modal:bool
 }
 
+public enum Cursor {
+    standard
+    resize_horizontal
+    resize_vertical
+}
+
 public enum Attention {
     none
     brief
@@ -98,6 +104,10 @@ public class Window {
     private let handle:uint
     private var current_title:str
     private var current_parent:Window?
+    private var desired_cursor:Cursor = Cursor.standard
+    private var cursor_active:bool = false
+    private var horizontal_cursor:uint = 0
+    private var vertical_cursor:uint = 0
 
     init(settings:Settings = Settings()) {
         validate_size(settings.width, settings.height)
@@ -139,6 +149,13 @@ public class Window {
     }
 
     drop {
+        let active = C.address_bits(sdl_get_cursor())
+        if (self.horizontal_cursor != 0 && active == self.horizontal_cursor) ||
+            (self.vertical_cursor != 0 && active == self.vertical_cursor) {
+            let restored = sdl_set_cursor(sdl_get_default_cursor())
+        }
+        if self.horizontal_cursor != 0 { sdl_destroy_cursor(C.pointer_bits(self.horizontal_cursor)) }
+        if self.vertical_cursor != 0 { sdl_destroy_cursor(C.pointer_bits(self.vertical_cursor)) }
         destroy(self.handle)
         shutdown_runtime()
     }
@@ -337,6 +354,30 @@ public class Window {
         let address = C.address_bits(sdl_get_window_mouse_rect(C.pointer_bits(self.handle)))
         if address == 0 as uint { return null }
         return read_rect(address)
+    }
+
+    func cursor() Cursor { return self.desired_cursor }
+
+    // Call on the application thread. Only the mouse-focused window applies
+    // the preference; allocate a native shape once, and release it at drop.
+    func set_cursor(value:Cursor) {
+        let changed = self.desired_cursor != value
+        self.desired_cursor = value
+        if C.address_bits(sdl_get_mouse_focus()) != self.handle {
+            self.cursor_active = false
+            return
+        }
+        if !changed && self.cursor_active { return }
+        var handle = C.address_bits(sdl_get_default_cursor())
+        if value == Cursor.resize_horizontal {
+            if self.horizontal_cursor == 0 { self.horizontal_cursor = create_cursor(7) }
+            handle = self.horizontal_cursor
+        } elif value == Cursor.resize_vertical {
+            if self.vertical_cursor == 0 { self.vertical_cursor = create_cursor(8) }
+            handle = self.vertical_cursor
+        }
+        require_action(sdl_set_cursor(C.pointer_bits(handle)) != 0, "change its pointer cursor")
+        self.cursor_active = true
     }
 
     func warp_mouse(position:Math.Vec2) { sdl_warp_mouse(C.pointer_bits(self.handle), position.x as float32, position.y as float32) }
@@ -763,3 +804,15 @@ func shutdown_runtime() { sdl_quit_subsystem(0x0000_4020 as uint32) }
 
 let sdl_init_subsystem = C.function<func(uint32) int32>(library:Boundary.SDL3, name:"SDL_InitSubSystem")
 let sdl_quit_subsystem = C.function<func(uint32) void>(library:Boundary.SDL3, name:"SDL_QuitSubSystem")
+
+func create_cursor(shape:int32) uint {
+    let handle = C.address_bits(sdl_create_system_cursor(shape))
+    if handle == 0 { panic("GFX.Window could not create a system cursor") }
+    return handle
+}
+let sdl_create_system_cursor = C.function<func(int32) C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_CreateSystemCursor")
+let sdl_set_cursor = C.function<func(C.Pointer<uint8>) int32>(library:Boundary.SDL3, name:"SDL_SetCursor")
+let sdl_get_cursor = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetCursor")
+let sdl_get_default_cursor = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetDefaultCursor")
+let sdl_get_mouse_focus = C.function<func() C.Pointer<uint8> >(library:Boundary.SDL3, name:"SDL_GetMouseFocus")
+let sdl_destroy_cursor = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SDL3, name:"SDL_DestroyCursor")

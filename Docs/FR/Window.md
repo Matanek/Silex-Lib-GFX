@@ -26,3 +26,14 @@ montre leur fermeture indépendante.
 attache une surface système, comme `GFX.WebView`. La fenêtre reste propriétaire
 et le handle n’est valide que pendant sa durée de vie. Les écrans sont exposés
 par `GFX.Window.Display`. Le rythme de boucle appartient à `GFX.Application`.
+
+## Curseur du pointeur
+
+`window.set_cursor(Window.Cursor.standard)`, `resize_horizontal` et
+`resize_vertical` choisissent la forme système. Appelez cette méthode sur le
+thread applicatif après le traitement des événements, y compris lorsque le
+pointeur entre à nouveau dans la fenêtre. `window.cursor()` lit la préférence.
+Seule la fenêtre sous le pointeur applique sa préférence : les autres fenêtres
+et applications gardent leur curseur. Une forme est créée à la première
+utilisation puis réutilisée ; la fenêtre la libère à sa destruction. Aucun
+handle natif n’est exposé.

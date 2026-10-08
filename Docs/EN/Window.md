@@ -37,3 +37,13 @@ ownership and the handle is valid only during its lifetime.
 
 Displays are available through `GFX.Window.Display`. `GFX.Application` owns
 loop pacing: that setting is not part of the Window domain.
+
+## Pointer cursor
+
+`window.set_cursor(Window.Cursor.standard)`, `resize_horizontal` and
+`resize_vertical` select the system shape. Call this method on the application
+thread after processing events, including when the pointer enters the window
+again. `window.cursor()` reads the preference. Only the window under the pointer
+applies its preference: other windows and applications keep their cursor.
+A shape is created on first use and reused; the window frees it when destroyed.
+No native handle is exposed.
