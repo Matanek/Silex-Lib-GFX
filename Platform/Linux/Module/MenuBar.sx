@@ -1,0 +1,15 @@
+func available() bool { return false }
+func target(context:uint, callback:uint) uint { return 0 as uint }
+func menu(label:str) uint { return 0 as uint }
+func item(menu:uint, target:uint, label:str, action:int, key:str, modifiers:uint, separator:bool, enabled:bool) uint { return 0 as uint }
+func install(menu:uint) bool { return false }
+func set_enabled(item:uint, enabled:bool) {}
+func set_key(item:uint, key:str) {}
+func set_submenu(item:uint, submenu:uint) {}
+func remove(roots:uint[], root:uint, target:uint) {}
+func context(target:uint) uint { return 0 as uint }
+func action(item:uint) int { return -1 }
+func repeated_key() bool { return false }
+func wake() {}
+
+func retain(item:uint) {}

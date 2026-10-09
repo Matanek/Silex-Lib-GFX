@@ -35,6 +35,7 @@ GFX
 ├── Application     loop, resources, systems, plugins, time, and pacing
 ├── Clipboard       operating-system UTF-8 text clipboard
 ├── Input           events, keyboard, and pointer
+├── MenuBar         optional macOS application menu bar
 └── Window          windows, displays, and system presentation
 
 GFX.Application

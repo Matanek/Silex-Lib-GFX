@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MenuBar adds an optional macOS system bar with host-dispatched actions, submenus, availability and shortcuts while preserving existing system menus. Linux/Windows decline installation without graphics effects.
+
 - Add window-owned system resize cursors with lazy allocation, reuse and cleanup; only the mouse-focused window applies its preference.
 
 - The local macOS ARM64 Metal provider synchronizes presentation with the window’s Core Animation transaction, preventing the previous image from stretching during resize. The patched SDL build recipe and checksum are recorded; publication and macOS Intel qualification remain pending. Linux/Windows archives are unchanged.

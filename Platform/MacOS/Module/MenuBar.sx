@@ -1,0 +1,129 @@
+use Interop.C
+use Interop.Boundary
+
+class MenuWake { static var event:uint32 = 0 as uint32 }
+func available() bool { return true }
+func target(context:uint, callback:uint) uint {
+    // Never initialize NSApplication or SDL here; the presenter owns startup.
+    if sdl_was_init(32 as uint32) == 0 as uint32 || sdl_main_thread() == 0 { return 0 as uint }
+    var type = system_class("SilexMenuTarget")
+    if type == 0 as uint {
+        type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSObject")), C.terminated_pointer("SilexMenuTarget"), 0 as uint))
+        if type == 0 as uint { return 0 as uint }
+        if add_method(C.pointer_bits(type), C.pointer_bits(selector("silexMenuAction:")), C.pointer_bits(callback), C.terminated_pointer("v@:@")) == 0 { return 0 as uint }
+        register_class(C.pointer_bits(type))
+    }
+    MenuWake.event = sdl_register_events(1 as int32)
+    if MenuWake.event == 4294967295 as uint32 { return 0 as uint }
+    let target = object(type, "new")
+    set_associated(C.pointer_bits(target), C.pointer_bits(selector("silexMenuContext")), C.pointer_bits(context), 0 as uint)
+    return target
+}
+func menu(label:str) uint {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    let result = send_object(object(system_class("NSMenu"), "alloc"), selector("initWithTitle:"), string(label))
+    send_bool(result, selector("setAutoenablesItems:"), 0 as uint8)
+    drain(pool); return result
+}
+func item(menu:uint, target:uint, label:str, action:int, key:str, modifiers:uint, separator:bool, enabled:bool) uint {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var result:uint = 0 as uint
+    if separator { result = object(system_class("NSMenuItem"), "separatorItem") }
+    else {
+        var callback = 0 as uint
+        if action >= 0 { callback = selector("silexMenuAction:") }
+        result = send_item(object(system_class("NSMenuItem"), "alloc"), selector("initWithTitle:action:keyEquivalent:"), string(label), callback, string(key))
+        send_void_object(result, selector("setTarget:"), target)
+        send_int(result, selector("setTag:"), action)
+        send_uint(result, selector("setKeyEquivalentModifierMask:"), modifiers)
+        var active:uint8 = 0; if enabled { active = 1 }
+        send_bool(result, selector("setEnabled:"), active)
+    }
+    send_void_object(menu, selector("addItem:"), result)
+    if !separator { send_void(result, selector("release")) }
+    drain(pool); return result
+}
+func install(menu:uint) bool {
+    let app = object(system_class("NSApplication"), "sharedApplication")
+    let main = object(app, "mainMenu")
+    if main == 0 as uint { return false }
+    var index = 0
+    if send_integer(main, selector("numberOfItems")) > 0 { index = 1 }
+    while send_integer(menu, selector("numberOfItems")) > 0 {
+        let item = send_index(menu, selector("itemAtIndex:"), 0)
+        let retained = object(item, "retain")
+        send_void_object(menu, selector("removeItem:"), item)
+        send_insert(main, selector("insertItem:atIndex:"), item, index)
+        send_void(item, selector("release")); index++
+    }
+    return true
+}
+func set_enabled(item:uint, enabled:bool) {
+    var value:uint8 = 0; if enabled { value = 1 }
+    send_bool(item, selector("setEnabled:"), value)
+}
+func set_key(item:uint, key:str) {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    send_void_object(item, selector("setKeyEquivalent:"), string(key)); drain(pool)
+}
+func set_submenu(item:uint, submenu:uint) {
+    send_void_object(item, selector("setSubmenu:"), submenu)
+    send_void(submenu, selector("release"))
+}
+func remove(roots:uint[], root:uint, target:uint) {
+    // Removal follows presentation teardown on its main thread, before SDL_Quit.
+    if sdl_main_thread() == 0 { return }
+    set_associated(C.pointer_bits(target), C.pointer_bits(selector("silexMenuContext")), C.pointer_bits(0 as uint), 0 as uint)
+    for item in roots {
+        let parent = object(item, "menu")
+        if parent != 0 as uint { send_void_object(parent, selector("removeItem:"), item) }
+        send_void(item, selector("release"))
+    }
+    send_void(root, selector("release")); send_void(target, selector("release"))
+}
+func context(target:uint) uint {
+    return C.address_bits(get_associated(C.pointer_bits(target), C.pointer_bits(selector("silexMenuContext"))))
+}
+func action(item:uint) int { return send_integer(item, selector("tag")) }
+func repeated_key() bool {
+    let event = object(object(system_class("NSApplication"), "sharedApplication"), "currentEvent")
+    if event == 0 as uint || send_integer(event, selector("type")) != 10 { return false }
+    return send_read_bool(event, selector("isARepeat")) != 0
+}
+func wake() {
+    // A menu click may produce no SDL input event. Wake an event-driven presenter.
+    var event:uint[16] = [0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint, 0 as uint]
+    event[0] = MenuWake.event as uint
+    let pushed = sdl_push_event(C.mutable_pointer(event[0]))
+}
+func selector(name:str) uint { return C.address_bits(register_selector(C.terminated_pointer(name))) }
+func system_class(name:str) uint { return C.address_bits(get_class(C.terminated_pointer(name))) }
+func object(receiver:uint, name:str) uint { return send(receiver, selector(name)) }
+func string(value:str) uint { return send_object(system_class("NSString"), selector("stringWithUTF8String:"), C.address_bits(C.terminated_pointer(value))) }
+func drain(pool:uint) { send_void(pool, selector("drain")) }
+let get_class = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_getClass")
+let register_selector = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"sel_registerName")
+let send = C.function<func(uint, uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_object = C.function<func(uint, uint, uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_item = C.function<func(uint, uint, uint, uint, uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_integer = C.function<func(uint, uint) int>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_index = C.function<func(uint, uint, int) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_void = C.function<func(uint, uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_void_object = C.function<func(uint, uint, uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_int = C.function<func(uint, uint, int) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_uint = C.function<func(uint, uint, uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_bool = C.function<func(uint, uint, uint8) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_read_bool = C.function<func(uint, uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_insert = C.function<func(uint, uint, uint, int) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let allocate_class = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, uint) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_allocateClassPair")
+let register_class = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SystemMenu, name:"objc_registerClassPair")
+let add_method = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>) uint8>(library:Boundary.SystemMenu, name:"class_addMethod")
+let set_associated = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>, C.Pointer<uint8>, uint) void>(library:Boundary.SystemMenu, name:"objc_setAssociatedObject")
+let get_associated = C.function<func(C.Pointer<uint8>, C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_getAssociatedObject")
+let sdl_was_init = C.function<func(uint32) uint32>(library:Boundary.SDL3, name:"SDL_WasInit")
+let sdl_main_thread = C.function<func() uint8>(library:Boundary.SDL3, name:"SDL_IsMainThread")
+let sdl_push_event = C.function<func(C.MutablePointer<uint>) uint8>(library:Boundary.SDL3, name:"SDL_PushEvent")
+
+func retain(item:uint) { let retained = object(item, "retain") }
+
+let sdl_register_events = C.function<func(int32) uint32>(library:Boundary.SDL3, name:"SDL_RegisterEvents")

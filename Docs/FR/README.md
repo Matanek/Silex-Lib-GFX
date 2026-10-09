@@ -40,3 +40,5 @@ ouverts `Components`, `Resources` et `Plugins`.
 
 Les démonstrations complètes de fenêtre et d’entrées directes vivent dans
 [Silex-Examples](https://github.com/Matanek/Silex-Examples).
+
+- [MenuBar](MenuBar.md)

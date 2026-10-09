@@ -1,0 +1,13 @@
+use GFX.MenuBar.MenuBar
+use GFX.MenuBar.Item
+use GFX.MenuBar.Shortcut
+
+test "native menus remain inert before presenter startup" {
+    var bar = MenuBar([Item.submenu("Projet", [Item.command("Enregistrer", 1, shortcut:Shortcut("s")), Item.separator(), Item.submenu("Autres", [Item.command("Exporter", 2, enabled:false)])])])
+    assert(!bar.installed())
+    assert(!bar.install())
+    assert(!bar.installed())
+    assert(bar.take_actions().is_empty())
+    bar.set_enabled(1, false); bar.set_shortcut_enabled(1, false)
+    bar.remove(); bar.remove()
+}

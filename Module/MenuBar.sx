@@ -1,0 +1,119 @@
+use Interop.C
+
+// Application-wide native menu. No native application is started by this owner.
+public struct Shortcut {
+    let key:str
+    let primary:bool
+    let shift:bool
+    let alt:bool
+    init(key:str, primary:bool = true, shift:bool = false, alt:bool = false) {
+        self.key = key; self.primary = primary; self.shift = shift; self.alt = alt
+    }
+}
+public struct Item {
+    package let label:str
+    package let action:int?
+    package var children:Item[]
+    package let shortcut:Shortcut?
+    package let separator:bool
+    package let enabled:bool
+    private init(label:str, action:int?, children:Item[], shortcut:Shortcut?, separator:bool, enabled:bool) {
+        self.label = label; self.action = action; self.children = children
+        self.shortcut = shortcut; self.separator = separator; self.enabled = enabled
+    }
+    static func command(label:str, action:int, shortcut:Shortcut? = null, enabled:bool = true) Item {
+        if action < 0 { panic("GFX.MenuBar action must not be negative") }
+        return Item(label, action, [], shortcut, false, enabled)
+    }
+    static func submenu(label:str, children:Item[]) Item { return Item(label, null, children, null, false, true) }
+    static func separator() Item { return Item("", null, [], null, true, false) }
+}
+class Entry {
+    let action:int
+    let handle:uint
+    let shortcut:str
+    var enabled:bool
+    var shortcut_enabled:bool = true
+    init(action:int, handle:uint, shortcut:str, enabled:bool) {
+        self.action = action; self.handle = handle; self.shortcut = shortcut; self.enabled = enabled
+    }
+}
+public class MenuBar {
+    private static var occupied:bool = false
+    private var items:Item[]
+    private var target:uint = 0 as uint
+    private var root:uint = 0 as uint
+    private var roots:uint[] = []
+    private var entries:Entry[] = []
+    private var pending:int[] = []
+    init(items:Item[]) { self.items = items }
+    static func available() bool { return Platform.available() }
+    func installed() bool { return self.target != 0 as uint }
+    func install() bool {
+        if self.installed() { return true }
+        if MenuBar.occupied { return false }
+        let callback:func(uint, uint, uint) void = receive_menu_action
+        self.target = Platform.target(C.object_address(self), C.function_address(callback))
+        if self.target == 0 as uint { return false }
+        self.root = Platform.menu("")
+        for item in self.items {
+            let handle = self.build(self.root, item)
+            Platform.retain(handle); self.roots.append(handle)
+        }
+        if !Platform.install(self.root) { self.remove(); return false }
+        MenuBar.occupied = true
+        return true
+    }
+    func take_actions() int[] { let actions = self.pending; self.pending = []; return actions }
+    func set_enabled(action:int, enabled:bool) {
+        for entry in self.entries {
+            if entry.action == action && entry.enabled != enabled {
+                entry.enabled = enabled; Platform.set_enabled(entry.handle, enabled)
+            }
+        }
+    }
+    func set_shortcut_enabled(action:int, enabled:bool) {
+        for entry in self.entries {
+            if entry.action == action && entry.shortcut_enabled != enabled {
+                entry.shortcut_enabled = enabled
+                var key = ""; if enabled { key = entry.shortcut }
+                Platform.set_key(entry.handle, key)
+            }
+        }
+    }
+    func remove() {
+        if self.target == 0 as uint { return }
+        Platform.remove(self.roots, self.root, self.target)
+        self.target = 0 as uint; self.root = 0 as uint
+        self.roots.clear(); self.entries.clear(); self.pending.clear()
+        MenuBar.occupied = false
+    }
+    private func build(menu:uint, item:Item) uint {
+        var action = -1; if let value = item.action { action = value }
+        var key = ""; var modifiers:uint = 0 as uint
+        if let shortcut = item.shortcut {
+            key = shortcut.key
+            if shortcut.primary { modifiers += 1048576 as uint }
+            if shortcut.shift { modifiers += 131072 as uint }
+            if shortcut.alt { modifiers += 524288 as uint }
+        }
+        let handle = Platform.item(menu, self.target, item.label, action, key, modifiers, item.separator, item.enabled)
+        if item.action != null { self.entries.append(Entry(action, handle, key, item.enabled)) }
+        if !item.separator && item.action == null {
+            let children = Platform.menu(item.label)
+            for child in item.children { let nested = self.build(children, child) }
+            Platform.set_submenu(handle, children)
+        }
+        return handle
+    }
+    package func receive(action:int) { self.pending.append(action) }
+    drop { self.remove() }
+}
+func receive_menu_action(sender:uint, selector:uint, item:uint) {
+    if Platform.repeated_key() { return }
+    let context = Platform.context(sender)
+    if context == 0 as uint { return }
+    var bar = C.object_from_address<MenuBar>(context)
+    bar.receive(Platform.action(item))
+    Platform.wake()
+}

@@ -40,3 +40,5 @@ packages contribute only their owned declarations to the open `Components`,
 
 Complete application-window and direct-input demonstrations live in
 [Silex-Examples](https://github.com/Matanek/Silex-Examples).
+
+- [MenuBar](MenuBar.md)

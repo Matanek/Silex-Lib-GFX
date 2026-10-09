@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MenuBar ajoute une barre système macOS optionnelle, des commandes différées à l’hôte, sous-menus, disponibilité et raccourcis ; les menus système préexistants sont conservés. Linux/Windows refusent l’installation, sans effet graphique.
+
 - Le provider Metal local macOS ARM64 synchronise la présentation avec la transaction Core Animation de la fenêtre, ce qui évite l’étirement de la dernière image pendant le redimensionnement. La recette SDL corrigée et son empreinte sont conservées ; sa publication et la qualification macOS Intel restent à effectuer. Les archives Linux/Windows sont inchangées.
 
 - Pendant le pompage natif, le runner Application redessine dès que la taille en pixels de la surface change, après les observateurs natifs précoces. Il n’attend plus le prochain expose périodique pour adapter une frame ; les gardes de thread principal, réentrée et arrêt restent actives.

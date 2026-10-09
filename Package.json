@@ -47,6 +47,10 @@
             "CoreServices", "CoreVideo", "ForceFeedback", "GameController",
             "IOKit", "Metal", "QuartzCore", "UniformTypeIdentifiers"
           ]
+        },
+        "SystemMenu": {
+          "frameworks": ["Cocoa"],
+          "libraries": ["objc"]
         }
       }
     },
@@ -60,6 +64,10 @@
             "CoreServices", "CoreVideo", "ForceFeedback", "GameController",
             "IOKit", "Metal", "QuartzCore", "UniformTypeIdentifiers"
           ]
+        },
+        "SystemMenu": {
+          "frameworks": ["Cocoa"],
+          "libraries": ["objc"]
         }
       }
     },

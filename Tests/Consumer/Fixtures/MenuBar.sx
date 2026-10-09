@@ -1,0 +1,10 @@
+use GFX.MenuBar.MenuBar
+use GFX.MenuBar.Item
+use GFX.MenuBar.Shortcut
+
+func main() {
+    var menu = MenuBar([Item.submenu("Projet", [Item.command("Enregistrer", 7, shortcut:Shortcut("s")),
+        Item.separator(), Item.submenu("Autres", [Item.command("Exporter", 8, enabled:false)])])])
+    assert(!menu.install()); assert(!menu.installed()); assert(menu.take_actions().is_empty())
+    menu.remove(); print("MenuBar CPU : OK")
+}
