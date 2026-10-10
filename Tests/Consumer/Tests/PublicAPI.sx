@@ -12,11 +12,11 @@ test "consume the public GFX window color and clipboard API" {
     ))
     assert(window.id().value != 0)
     assert(window.title() == "GFX public API consumer")
-    match Clipboard.try_read_text() {
+    match (try Clipboard.read_text()) {
         failure(error) => { assert(error.detail != "") }
         success(value) => {
             // Exercise writes without changing the current clipboard text.
-            match Clipboard.try_write_text(value) {
+            match (try Clipboard.write_text(value)) {
                 failure(error) => { panic(error.detail) }
                 success => {}
             }

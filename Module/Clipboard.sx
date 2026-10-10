@@ -12,7 +12,7 @@ public func has_text() bool {
     return result
 }
 
-public func try_read_text() Result<str, Error> {
+public func read_text() Result<str, Error> {
     if !initialize_runtime() {
         return Result<str, Error>.failure(Error(detail:platform_error()))
     }
@@ -28,14 +28,8 @@ public func try_read_text() Result<str, Error> {
     return Result<str, Error>.success(result)
 }
 
-public func read_text() str {
-    match try_read_text() {
-        failure(error) => { panic(error.detail) }
-        success(value) => { return value }
-    }
-}
 
-public func try_write_text(value:str) Result<void, Error> {
+public func write_text(value:str) Result<void, Error> {
     if !initialize_runtime() {
         return Result<void, Error>.failure(Error(detail:platform_error()))
     }
@@ -48,12 +42,6 @@ public func try_write_text(value:str) Result<void, Error> {
     return Result<void, Error>.success()
 }
 
-public func write_text(value:str) {
-    match try_write_text(value) {
-        failure(error) => { panic(error.detail) }
-        success => {}
-    }
-}
 
 func copy_text(address:uint) str {
     var bytes:uint8[] = []

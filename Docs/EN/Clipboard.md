@@ -6,7 +6,7 @@
 ```sx
 use GFX.Clipboard
 
-match Clipboard.try_read_text() {
+match try Clipboard.read_text() {
     failure(error) => { print(error.detail) }
     success(value) => { print(value) }
 }
