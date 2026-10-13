@@ -28,3 +28,5 @@ pas la file SDL.
 Hors d’`Application`, créez un `Input`, appelez `wait()` lorsque le programme
 peut dormir, puis `update()` exactement une fois avant de lire l’état et les
 événements de ce tour.
+
+Les positions de `finger_pressed/moved/released/canceled` sont normalisées par rapport à la fenêtre. Multipliez-les par ses dimensions logiques pour placer le doigt dans une interface ; les valeurs peuvent sortir de `0..1` pendant un geste. `MouseId.is_touch()` indique une souris émulée depuis le tactile ; `TouchId.is_mouse()` indique un tactile émulé depuis la souris. Un hôte qui traite les deux familles peut ainsi écarter les événements doublons.

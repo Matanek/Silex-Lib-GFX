@@ -1,0 +1,12 @@
+use GFX.Input.Pointer
+use GFX.Input.Events
+
+test "mouse and touch identifiers report emulation without exposing native constants" {
+    let mouse_touch:uint = 0xffff_ffff_ffff_ffff
+    assert(!Pointer.MouseId(value:0 as uint32).is_touch())
+    assert(!Pointer.MouseId(value:12 as uint32).is_touch())
+    assert(!Pointer.MouseId(value:4294967294 as uint32).is_touch())
+    assert(Pointer.MouseId(value:4294967295 as uint32).is_touch())
+    assert(!Events.TouchId(value:12 as uint).is_mouse())
+    assert(Events.TouchId(value:mouse_touch).is_mouse())
+}

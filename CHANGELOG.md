@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- MouseId.is_touch() and TouchId.is_mouse() identify emulated pointer events so hosts can process each touch/mouse input once.
+
 - Adopts one `Result` declaration: an ordinary call returns the value or
   stops the program on failure; `try call()` keeps the `Result`. Existing calls
   storing results and propagating failures are made explicit. This revision

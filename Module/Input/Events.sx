@@ -70,7 +70,12 @@ public struct GamepadDeviceEvent { let gamepad:GamepadId; let timestamp:Timestam
 public struct GamepadTouchEvent { let gamepad:GamepadId; let touchpad:int; let finger:int; let position:Math.Vec2; let pressure:float; let timestamp:Timestamp }
 public struct GamepadSensorEvent { let gamepad:GamepadId; let sensor:SensorType; let values:float[]; let sensor_timestamp:Timestamp; let timestamp:Timestamp }
 
-public struct TouchId { let value:uint }
+static struct Const { let mouse_touch_id:uint = 0xffff_ffff_ffff_ffff }
+
+public struct TouchId {
+    let value:uint
+    func is_mouse() bool { return self.value == Const.mouse_touch_id }
+}
 public struct FingerId { let value:uint }
 public struct TouchEvent { let touch:TouchId; let finger:FingerId; let window:Window.Id; let position:Math.Vec2; let delta:Math.Vec2; let pressure:float; let timestamp:Timestamp }
 public struct PinchEvent { let window:Window.Id; let scale:float; let timestamp:Timestamp }

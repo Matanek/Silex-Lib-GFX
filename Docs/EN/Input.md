@@ -29,3 +29,5 @@ Outside `Application`, create one `Input`, call `wait()` when the program may
 sleep, then call `update()` exactly once before reading that turn's state and
 events. The [direct window/input demonstration](https://github.com/Matanek/Silex-Examples/blob/main/Sources/DirectWindowInputLoop.sx)
 shows this manual event loop, including window-close and Escape handling.
+
+Positions in `finger_pressed/moved/released/canceled` are normalized relative to the window. Multiply them by logical window dimensions for UI coordinates; values may leave `0..1` during a gesture. `MouseId.is_touch()` identifies mouse events emulated from touch; `TouchId.is_mouse()` identifies touch emulated from mouse. A host handling both families can therefore discard duplicate events.

@@ -7,4 +7,8 @@ public enum MouseButton {
     other(uint8)
 }
 
-public struct MouseId { let value:uint32 }
+public struct MouseId {
+    let value:uint32
+    // SDL's virtual mouse identity is private to the platform foundation.
+    func is_touch() bool { return self.value == 4294967295 as uint32 }
+}
