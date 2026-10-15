@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accessibility fournit le contrat indépendant des interfaces pour décrire et actionner une source sémantique à la demande, sans dépendance à Canvas ou UI. Aucun pont système n’est encore fourni.
+
 - Les identifiants MouseId.is_touch() et TouchId.is_mouse() signalent les événements de pointeur émulés ; les hôtes peuvent traiter une seule fois une entrée tactile/souris.
 
 - Adopte la déclaration `Result` unique : l’appel ordinaire rend la valeur

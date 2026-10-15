@@ -1,0 +1,140 @@
+// Platform-neutral descriptions for accessibility providers. Native adapters
+// remain private to GFX; a source is read and acted on its owning UI thread.
+public enum Role {
+    group
+    text
+    button
+    checkbox
+    radio
+    radio_group
+    text_field
+    text_area
+    slider
+    scrollbar
+    scroll_view
+    list
+    list_item
+    tree
+    tree_item
+    table
+    row
+    column_header
+    cell
+    tab_group
+    tab
+    menu
+    menu_item
+    combo_box
+    dialog
+    tooltip
+    image
+    progress
+    separator
+}
+
+public enum Action {
+    activate
+    focus
+    set_value
+    select
+    deselect
+    expand
+    collapse
+    increment
+    decrement
+    reveal
+    dismiss
+    scroll_forward
+    scroll_backward
+    set_text_selection
+}
+
+public struct Request {
+    let action:Action
+    let text:str?
+    let number:float?
+    // Text selection indices count complete Unicode graphemes.
+    let anchor:int
+    let cursor:int
+    init(action:Action, text:str? = null, number:float? = null, anchor:int = 0, cursor:int = 0) {
+        self.action = action; self.text = text; self.number = number
+        self.anchor = anchor; self.cursor = cursor
+    }
+}
+
+public struct Bounds {
+    let x:float
+    let y:float
+    let width:float
+    let height:float
+    init(x:float = 0.0, y:float = 0.0, width:float = 0.0, height:float = 0.0) {
+        self.x = x; self.y = y; self.width = width; self.height = height
+    }
+}
+
+// IDs are opaque source-scoped values. Providers must not decode or manufacture
+// them. Queries can describe logical items which have no mounted visual view.
+public struct Element {
+    let id:str
+    let parent:str? = null
+    let role:Role = Role.group
+    let name:str = ""
+    let description:str = ""
+    let value:str? = null
+    let number:float? = null
+    let minimum:float? = null
+    let maximum:float? = null
+    let enabled:bool = true
+    let focusable:bool = false
+    let focused:bool = false
+    let checked:bool? = null
+    let selected:bool? = null
+    let expanded:bool? = null
+    let editable:bool = false
+    let multiline:bool = false
+    let horizontal:bool = false
+    let selection_anchor:int? = null
+    let selection_cursor:int? = null
+    let invalid:bool = false
+    let offscreen:bool = false
+    let bounds:Bounds = Bounds()
+    let child_count:int = 0
+    let index:int = 0
+    let level:int = 0
+    let row_index:int? = null
+    let column_index:int? = null
+    let row_count:int? = null
+    let column_count:int? = null
+    let labelled_by:str? = null
+    let labels:str? = null
+    let sorted_descending:bool? = null
+    let shortcut:str? = null
+    let actions:Action[] = []
+}
+
+public enum ChangeKind { structure; name; value; relations; state; selection; focus; bounds; removed }
+public struct Change {
+    let id:str
+    let kind:ChangeKind
+    init(id:str, kind:ChangeKind) { self.id = id; self.kind = kind }
+}
+
+// Children are requested by index, never returned as an eagerly built tree.
+// Invalid/stale IDs and unsupported actions return null/false.
+public protocol Source {
+    func root() str?
+    func focused() str?
+    func read(id:str) Element?
+    func child(id:str, index:int) str?
+    func perform(id:str, request:Request) bool
+    func changes() Change[]
+}
+
+package struct EmptySource:Source {
+    func root() str? { return null }
+    func focused() str? { return null }
+    func read(id:str) Element? { return null }
+    func child(id:str, index:int) str? { return null }
+    func perform(id:str, request:Request) bool { return false }
+    func changes() Change[] { return [] }
+}

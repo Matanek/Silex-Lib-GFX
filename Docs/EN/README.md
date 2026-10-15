@@ -42,3 +42,5 @@ Complete application-window and direct-input demonstrations live in
 [Silex-Examples](https://github.com/Matanek/Silex-Examples).
 
 - [MenuBar](MenuBar.md)
+
+- [Provide or inspect a semantic source](Accessibility.md)

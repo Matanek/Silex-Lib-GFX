@@ -1,0 +1,40 @@
+use GFX.Accessibility
+
+// A custom host can provide semantics without importing Canvas or GFX.UI.
+class VolumeSource:Accessibility.Source {
+    var volume:float = 0.5
+    var pending:bool = false
+    func root() str? { return "volume" }
+    func focused() str? { return null }
+    func read(id:str) Accessibility.Element? {
+        if id != "volume" { return null }
+        return Accessibility.Element(id:id, role:Accessibility.Role.slider, name:"Volume", number:self.volume,
+            minimum:0.0, maximum:1.0, actions:[Accessibility.Action.set_value])
+    }
+    func child(id:str, index:int) str? { return null }
+    func perform(id:str, request:Accessibility.Request) bool {
+        if id != "volume" || request.action != Accessibility.Action.set_value { return false }
+        if let value = request.number {
+            if value < 0.0 || value > 1.0 || value == self.volume { return false }
+            self.volume = value; self.pending = true; return true
+        }
+        return false
+    }
+    func changes() Accessibility.Change[] {
+        if !self.pending { return [] }
+        self.pending = false
+        return [Accessibility.Change("volume", Accessibility.ChangeKind.value)]
+    }
+}
+test "a standalone public accessibility source retains typed descriptions and dynamic actions" {
+    var source:Accessibility.Source = VolumeSource()
+    let initial = source.read(source.root()!)!
+    assert(initial.name == "Volume" && initial.number == 0.5 && source.focused() == null)
+    assert(initial.actions.count() == 1 && source.child(initial.id, 0) == null)
+    assert(source.perform(initial.id, Accessibility.Request(Accessibility.Action.set_value, number:0.75)))
+    assert(source.read(initial.id)!.number == 0.75 && initial.number == 0.5)
+    let changes = source.changes()
+    assert(changes.count() == 1 && changes[0].kind == Accessibility.ChangeKind.value)
+    assert(source.changes().is_empty())
+    assert(source.read("removed") == null)
+}

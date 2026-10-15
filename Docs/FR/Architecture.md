@@ -21,6 +21,7 @@ les collisions de noms publics.
 
 ```text
 GFX
+├── Accessibility   semantic sources, descriptions and actions
 ├── Application     loop, resources, systems, plugins, time, and pacing
 ├── Clipboard       operating-system UTF-8 text clipboard
 ├── Input           events, keyboard, and pointer
