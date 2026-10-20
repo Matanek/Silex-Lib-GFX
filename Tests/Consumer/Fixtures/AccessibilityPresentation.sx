@@ -1,0 +1,12 @@
+use GFX.Window
+use GFX.Accessibility
+
+// Compile the custom-presenter surface across the package boundary. This
+// fixture deliberately creates no Window and does not start a native host.
+func present(window:&Window.Window, source:Accessibility.Source) bool {
+    window.set_accessibility_source(source)
+    let changed = window.update_accessibility()
+    window.set_accessibility_source(null)
+    return changed
+}
+func main() {}

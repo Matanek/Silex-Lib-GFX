@@ -1,0 +1,17 @@
+use GFX.Accessibility
+
+// Package-private lifetime boundary shared by Window and its selected adapter.
+package nocopy class Presentation {
+    private var host:Platform.Host
+    init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool) {
+        self.host = Platform.Host(source, view, window, height, flipped)
+    }
+    static func for_window(source:Accessibility.Source, window:uint, height:float) Presentation {
+        let view = Platform.view(window)
+        return Presentation(source, view, window, height, Platform.flipped(view))
+    }
+    func synchronize(height:float) bool { return self.host.synchronize(height) }
+    func remove() { self.host.remove() }
+    package func root_handle() uint { return self.host.root_handle() }
+    package func peer_count() int { return self.host.peer_count() }
+}

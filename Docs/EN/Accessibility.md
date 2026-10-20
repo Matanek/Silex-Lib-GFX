@@ -2,8 +2,9 @@
 
 `GFX.Accessibility` describes the meaning of an interface without depending on
 Canvas or GFX.UI. A host can inspect a source supplied by an existing interface,
-or implement `Source` for its own controls. Desktop system bridges are not yet
-provided.
+or implement `Source` for its own controls. The first macOS adapter presents
+elements to AppKit; VoiceOver qualification is ongoing. Linux and Windows
+adapters are not yet provided.
 
 ## Read and act on the same interface
 
@@ -28,3 +29,23 @@ implements a volume control, reads it through the protocol and changes its value
 It imports only `GFX.Accessibility`. GFX.UI applications use `Label` and
 `Accessible`, then `Session.accessibility()` or `Runtime.accessibility()`
 to obtain this source.
+
+## Present a source in a window
+
+`Window.set_accessibility_source(source)` associates a source with the window;
+`null` detaches the previous one. A custom presenter then calls
+`Window.update_accessibility()` after updating its content on the UI thread.
+This method posts change notifications and returns `true` when a native action
+has changed the source since the previous call: refresh the drawing and text
+input target in that case. The window retains one reader and detaches its peers
+before destruction.
+
+`GFX.Viewer` performs these steps automatically for a `Canvas.Session` providing
+`accessibility_source()`. GFX.UI sessions already supply it. Applications need
+no additional setting or native handle.
+
+On macOS, the first path covers roles/names/values, focus, button activation,
+field editing, geometry and invalidation of detached peers. Children are queried
+by index. Their AppKit arrays remain lazy: counting or copying them does not
+materialize every row. This first integration does not yet qualify every
+control, native text selection or screen-reader behavior.

@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Accessibility provides a UI-independent contract for describing and acting on a semantic source on demand, without Canvas or UI dependencies. No system bridge is provided yet.
+- Initial private AppKit adapter: Window accepts an accessibility Source, synchronizes changes and detaches peers before destruction; native children stay lazy. Inspection/VoiceOver qualification and Linux/Windows bridges remain pending.
+
+- Accessibility provides a UI-independent contract for describing and acting on a semantic source on demand, without Canvas or UI dependencies. Initial AppKit integration is undergoing qualification.
 
 - MouseId.is_touch() and TouchId.is_mouse() identify emulated pointer events so hosts can process each touch/mouse input once.
 

@@ -2,6 +2,8 @@ use Interop.C
 use Interop.Boundary
 use STD.Math
 use GFX.Window.Display
+use GFX.Accessibility
+use GFX.Accessibility.Presentation.Presentation as AccessiblePresentation
 
 public struct Settings {
     var title:str = "Window"
@@ -108,6 +110,7 @@ public class Window {
     private var cursor_active:bool = false
     private var horizontal_cursor:uint = 0
     private var vertical_cursor:uint = 0
+    private var accessible_presentation:AccessiblePresentation? = null
 
     init(settings:Settings = Settings()) {
         validate_size(settings.width, settings.height)
@@ -149,6 +152,7 @@ public class Window {
     }
 
     drop {
+        if var presentation = self.accessible_presentation { presentation.remove() }
         let active = C.address_bits(sdl_get_cursor())
         if (self.horizontal_cursor != 0 && active == self.horizontal_cursor) ||
             (self.vertical_cursor != 0 && active == self.vertical_cursor) {
@@ -169,6 +173,23 @@ public class Window {
     }
 
     package func native_handle() uint { return self.handle }
+
+    // For custom presenters. Viewer obtains this source from Canvas.Session.
+    // Replacing or clearing it detaches the previous native hierarchy first.
+    func set_accessibility_source(source:Accessibility.Source?) {
+        if var presentation = self.accessible_presentation { presentation.remove() }
+        self.accessible_presentation = null
+        if var semantics = source {
+            self.accessible_presentation = AccessiblePresentation.for_window(semantics, self.presentation_handle(), self.size().y)
+        }
+    }
+
+    // Call after updating the presented content, on its UI thread. True means
+    // a native accessibility action changed the source since the previous call.
+    func update_accessibility() bool {
+        if var presentation = self.accessible_presentation { return presentation.synchronize(self.size().y) }
+        return false
+    }
 
     func title() str {
         return self.current_title

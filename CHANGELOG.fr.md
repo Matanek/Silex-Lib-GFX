@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Accessibility fournit le contrat indépendant des interfaces pour décrire et actionner une source sémantique à la demande, sans dépendance à Canvas ou UI. Aucun pont système n’est encore fourni.
+- Premier adaptateur AppKit privé : Window accepte une Source accessible, synchronise les changements et détache ses pairs avant destruction ; enfants natifs paresseux. Inspection/VoiceOver à qualifier, ponts Linux/Windows à venir.
+
+- Accessibility fournit le contrat indépendant des interfaces pour décrire et actionner une source sémantique à la demande, sans dépendance à Canvas ou UI. Le premier raccordement AppKit est en qualification.
 
 - Les identifiants MouseId.is_touch() et TouchId.is_mouse() signalent les événements de pointeur émulés ; les hôtes peuvent traiter une seule fois une entrée tactile/souris.
 

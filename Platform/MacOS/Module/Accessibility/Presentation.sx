@@ -1,0 +1,418 @@
+use GFX.Accessibility as AX
+use STD.Collections.Dictionary
+use Interop.C
+use Interop.Boundary
+
+// One owner per presented source, confined to the AppKit/UI thread. Native
+// objects hold unretained contexts; remove() invalidates them before any owner
+// or window can die. AppKit may retain a detached element or children array.
+nocopy class Peer {
+    let owner:uint
+    let id:str
+    let handle:uint
+    let children:uint
+    init(owner:uint, id:str) {
+        self.owner = owner; self.id = id
+        self.handle = object(element_class(), "new")
+        self.children = object(children_class(), "new")
+        associate(self.handle, C.object_address(self))
+        associate(self.children, C.object_address(self))
+    }
+    func detach() { associate(self.handle, 0 as uint); associate(self.children, 0 as uint) }
+    drop { self.detach(); release(self.children); release(self.handle) }
+}
+
+package nocopy class Host {
+    private var source:AX.Source
+    private var peers:Dictionary<str, Peer> = Dictionary<str, Peer>()
+    private let view:uint
+    private let window:uint
+    private let previous_children:uint
+    private let previous_element:uint8
+    private var root_id:str? = null
+    private var active:bool = true
+    private var dirty:bool = false
+    private var height:float
+    private let flipped:bool
+    private var wake_event:uint32 = 0 as uint32
+
+    // view/window may be zero for the owning headless AppKit tests. This never
+    // initializes NSApplication, SDL or a native window.
+    init(source:AX.Source, view:uint, window:uint, height:float, flipped:bool) {
+        let pool = object(system_class("NSAutoreleasePool"), "new")
+        self.source = source; self.view = view; self.window = window
+        self.height = height; self.flipped = flipped
+        self.previous_children = object(view, "accessibilityChildren")
+        retain(self.previous_children)
+        self.previous_element = read_bool(view, selector("isAccessibilityElement"))
+        if view != 0 as uint {
+            send_bool(view, selector("setAccessibilityElement:"), 0 as uint8)
+            self.wake_event = register_events(1 as int32)
+        }
+        self.refresh_root()
+        release_pool(pool)
+    }
+
+    func root_handle() uint {
+        if !self.active { return 0 as uint }
+        if let id = self.source.root() { return self.peer(id) }
+        return 0 as uint
+    }
+    func peer_count() int { return self.peers.count() }
+
+    func synchronize(height:float) bool {
+        if !self.active { return false }
+        self.height = height
+        let pool = object(system_class("NSAutoreleasePool"), "new")
+        self.refresh_root()
+        let changed = self.dirty
+        self.dirty = false
+        for change in self.source.changes() {
+            if var peer = self.peers.find(change.id) {
+                if change.kind == AX.ChangeKind.removed {
+                    notify(peer.handle, "AXUIElementDestroyed")
+                    peer.detach()
+                    let removed = self.peers.remove(change.id)
+                } else {
+                    if let element = self.source.read(change.id) { self.frame(peer, element) }
+                    notify(peer.handle, notification(change.kind))
+                }
+            }
+        }
+        release_pool(pool)
+        return changed
+    }
+
+    private func refresh_root() {
+        let id = self.source.root()
+        if id == self.root_id { return }
+        self.root_id = id
+        if self.view == 0 as uint { return }
+        var children = object(system_class("NSArray"), "array")
+        if let root = id {
+            children = send_object(system_class("NSArray"), selector("arrayWithObject:"), self.peer(root))
+        }
+        send_void_object(self.view, selector("setAccessibilityChildren:"), children)
+        notify(self.view, "AXLayoutChanged")
+    }
+
+    func peer(id:str) uint {
+        if !self.active { return 0 as uint }
+        if let peer = self.peers.find(id) { return peer.handle }
+        if let element = self.source.read(id) {
+            var peer = Peer(C.object_address(self), id)
+            let previous = self.peers.set(id, peer)
+            self.frame(peer, element)
+            return peer.handle
+        }
+        return 0 as uint
+    }
+
+    private func frame(peer:Peer, element:AX.Element) {
+        var x = element.bounds.x; var y = element.bounds.y
+        var height = self.height
+        var flipped = self.flipped
+        if let parent = element.parent {
+            if let description = self.source.read(parent) {
+                x -= description.bounds.x; y -= description.bounds.y
+                height = description.bounds.height; flipped = false
+            }
+        }
+        if !flipped { y = height - y - element.bounds.height }
+        set_frame(peer.handle, x, y, element.bounds.width, element.bounds.height)
+    }
+
+    module func property(peer:Peer, method:uint) uint {
+        if !self.active { return 0 as uint }
+        if let element = self.source.read(peer.id) {
+            if method == selector("accessibilityRole") { return string(role(element.role)) }
+            if method == selector("accessibilityLabel") || method == selector("accessibilityTitle") { return string(element.name) }
+            if method == selector("accessibilityHelp") { return string(element.description) }
+            if method == selector("accessibilityIdentifier") { return string(element.id) }
+            if method == selector("accessibilityValue") {
+                if let checked = element.checked {
+                    var value = 0.0; if checked { value = 1.0 }
+                    return number(value)
+                }
+                if let value = element.number { return number(value) }
+                if let value = element.value { return string(value) }
+                return 0 as uint
+            }
+            if method == selector("accessibilityParent") {
+                if let parent = element.parent { return self.peer(parent) }
+                return self.view
+            }
+            if method == selector("accessibilityChildren") || method == selector("accessibilityChildrenInNavigationOrder") { return peer.children }
+            if method == selector("accessibilityWindow") || method == selector("accessibilityTopLevelUIElement") { return self.window }
+            if method == selector("accessibilityApplicationFocusedUIElement") || method == selector("accessibilityFocusedUIElement") {
+                if let focused = self.source.focused() { return self.peer(focused) }
+            }
+        }
+        return 0 as uint
+    }
+
+    module func state(peer:Peer, method:uint) uint8 {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if method == selector("isAccessibilityElement") { return 1 as uint8 }
+                if method == selector("isAccessibilityEnabled") && element.enabled { return 1 as uint8 }
+                if method == selector("isAccessibilityFocused") && element.focused { return 1 as uint8 }
+                if method == selector("isAccessibilitySelected") && element.selected == true { return 1 as uint8 }
+                if method == selector("isAccessibilityExpanded") && element.expanded == true { return 1 as uint8 }
+            }
+        }
+        return 0 as uint8
+    }
+
+    module func child_count(peer:Peer) uint {
+        if self.active {
+            if let element = self.source.read(peer.id) { return element.child_count as uint }
+        }
+        return 0 as uint
+    }
+    module func child(peer:Peer, index:uint) uint {
+        if index >= self.child_count(peer) { return 0 as uint }
+        if let id = self.source.child(peer.id, index as int) { return self.peer(id) }
+        return 0 as uint
+    }
+
+    module func allows(peer:Peer, method:uint) bool {
+        if !self.active { return false }
+        if let element = self.source.read(peer.id) {
+            if let action = action(method) {
+                if !element.enabled { return false }
+                for available in element.actions { if action == available { return true } }
+                return false
+            }
+            if method == selector("isAccessibilitySelected") { return element.selected != null }
+            if method == selector("isAccessibilityExpanded") { return element.expanded != null }
+            // Do not advertise inherited setters or actions which would only
+            // update AppKit storage and bypass the application's source.
+            for name in ["accessibilityRole", "accessibilityRoleDescription", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement", "isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "accessibilityFrame", "accessibilityFrameInParentSpace", "accessibilityHitTest:"] {
+                if method == selector(name) { return true }
+            }
+        }
+        return false
+    }
+    module func perform(peer:Peer, request:AX.Request) bool {
+        if !self.active || !self.source.perform(peer.id, request) { return false }
+        self.dirty = true
+        if self.wake_event != 0 as uint32 && self.wake_event != 4294967295 as uint32 {
+            var event:uint[16] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            event[0] = self.wake_event as uint
+            let pushed = push_event(C.mutable_pointer(event[0]))
+        }
+        return true
+    }
+
+    module func set_value(peer:Peer, value:uint) {
+        if !self.allows(peer, selector("setAccessibilityValue:")) { return }
+        if let element = self.source.read(peer.id) {
+            if element.number != null {
+                let changed = self.perform(peer, AX.Request(AX.Action.set_value, number:read_double(value, selector("doubleValue")) as float))
+            } else {
+                let changed = self.perform(peer, AX.Request(AX.Action.set_value, text:copy_string(value)))
+            }
+        }
+    }
+
+    func remove() {
+        if !self.active { return }
+        self.active = false
+        for peer in self.peers.get_values() { peer.detach() }
+        if self.view != 0 as uint {
+            send_void_object(self.view, selector("setAccessibilityChildren:"), self.previous_children)
+            send_bool(self.view, selector("setAccessibilityElement:"), self.previous_element)
+        }
+        self.peers.clear()
+    }
+    drop { self.remove(); release(self.previous_children) }
+}
+
+func context(native:uint) uint { return C.address_bits(get_associated(C.pointer_bits(native), C.pointer_bits(selector("silexAccessibilityContext")))) }
+func associate(native:uint, address:uint) {
+    set_associated(C.pointer_bits(native), C.pointer_bits(selector("silexAccessibilityContext")), C.pointer_bits(address), 0 as uint)
+}
+func read_property(native:uint, method:uint) uint {
+    let address = context(native); if address == 0 as uint { return 0 as uint }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.property(peer, method)
+}
+func read_state(native:uint, method:uint) uint8 {
+    let address = context(native); if address == 0 as uint { return 0 as uint8 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.state(peer, method)
+}
+func array_count(native:uint, method:uint) uint {
+    let address = context(native); if address == 0 as uint { return 0 as uint }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.child_count(peer)
+}
+func array_child(native:uint, method:uint, index:uint) uint {
+    let address = context(native); if address == 0 as uint { return 0 as uint }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.child(peer, index)
+}
+func allowed(native:uint, method:uint, queried:uint) uint8 {
+    let address = context(native); if address == 0 as uint { return 0 as uint8 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    if host.allows(peer, queried) { return 1 as uint8 }
+    return 0 as uint8
+}
+func press(native:uint, method:uint) uint8 {
+    let address = context(native); if address == 0 as uint { return 0 as uint8 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    if let operation = action(method) {
+        if host.perform(peer, AX.Request(operation)) { return 1 as uint8 }
+    }
+    return 0 as uint8
+}
+func set_focused(native:uint, method:uint, focused:uint8) {
+    if focused == 0 as uint8 { return }
+    let address = context(native); if address == 0 as uint { return }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    let changed = host.perform(peer, AX.Request(AX.Action.focus))
+}
+func set_value(native:uint, method:uint, value:uint) {
+    let address = context(native); if address == 0 as uint || value == 0 as uint { return }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    host.set_value(peer, value)
+}
+
+func copy_children(native:uint, method:uint, zone:uint) uint { return object(native, "retain") }
+
+func action(method:uint) AX.Action? {
+    if method == selector("accessibilityPerformPress") { return AX.Action.activate }
+    if method == selector("setAccessibilityFocused:") { return AX.Action.focus }
+    if method == selector("setAccessibilityValue:") { return AX.Action.set_value }
+    if method == selector("accessibilityPerformIncrement") { return AX.Action.increment }
+    if method == selector("accessibilityPerformDecrement") { return AX.Action.decrement }
+    return null
+}
+func role(value:AX.Role) str {
+    if value == AX.Role.button { return "AXButton" }
+    if value == AX.Role.text { return "AXStaticText" }
+    if value == AX.Role.text_field { return "AXTextField" }
+    if value == AX.Role.text_area { return "AXTextArea" }
+    if value == AX.Role.checkbox { return "AXCheckBox" }
+    if value == AX.Role.radio { return "AXRadioButton" }
+    if value == AX.Role.slider { return "AXSlider" }
+    if value == AX.Role.list { return "AXList" }
+    if value == AX.Role.tree { return "AXOutline" }
+    if value == AX.Role.table { return "AXTable" }
+    if value == AX.Role.row || value == AX.Role.list_item || value == AX.Role.tree_item { return "AXRow" }
+    if value == AX.Role.cell { return "AXCell" }
+    if value == AX.Role.scroll_view { return "AXScrollArea" }
+    if value == AX.Role.progress { return "AXProgressIndicator" }
+    if value == AX.Role.image { return "AXImage" }
+    if value == AX.Role.menu { return "AXMenu" }
+    if value == AX.Role.menu_item { return "AXMenuItem" }
+    if value == AX.Role.combo_box { return "AXComboBox" }
+    return "AXGroup"
+}
+func notification(kind:AX.ChangeKind) str {
+    if kind == AX.ChangeKind.focus { return "AXFocusedUIElementChanged" }
+    if kind == AX.ChangeKind.value { return "AXValueChanged" }
+    if kind == AX.ChangeKind.selection { return "AXSelectedChildrenChanged" }
+    if kind == AX.ChangeKind.name { return "AXTitleChanged" }
+    return "AXLayoutChanged"
+}
+
+func add(type:uint, name:str, callback:uint, encoding:str) {
+    if add_method(C.pointer_bits(type), C.pointer_bits(selector(name)), C.pointer_bits(callback), C.terminated_pointer(encoding)) == 0 as uint8 {
+        panic("GFX could not register an AppKit accessibility callback")
+    }
+}
+func element_class() uint {
+    var type = system_class("SilexAccessibilityElement")
+    if type != 0 as uint { return type }
+    type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
+    let property:func(uint,uint) uint = read_property
+    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+        add(type, name, C.function_address(property), "@@:")
+    }
+    let state:func(uint,uint) uint8 = read_state
+    for name in ["isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "isAccessibilitySelected", "isAccessibilityExpanded"] {
+        add(type, name, C.function_address(state), "B@:")
+    }
+    let check:func(uint,uint,uint) uint8 = allowed
+    add(type, "isAccessibilitySelectorAllowed:", C.function_address(check), "B@::")
+    let perform:func(uint,uint) uint8 = press
+    for name in ["accessibilityPerformPress", "accessibilityPerformIncrement", "accessibilityPerformDecrement"] {
+        add(type, name, C.function_address(perform), "B@:")
+    }
+    let focus:func(uint,uint,uint8) void = set_focused
+    add(type, "setAccessibilityFocused:", C.function_address(focus), "v@:B")
+    let value:func(uint,uint,uint) void = set_value
+    add(type, "setAccessibilityValue:", C.function_address(value), "v@:@")
+    register_class(C.pointer_bits(type)); return type
+}
+func children_class() uint {
+    var type = system_class("SilexAccessibilityChildren")
+    if type != 0 as uint { return type }
+    type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSArray")), C.terminated_pointer("SilexAccessibilityChildren"), 0 as uint))
+    let count:func(uint,uint) uint = array_count
+    let child:func(uint,uint,uint) uint = array_child
+    let copy_callback:func(uint,uint,uint) uint = copy_children
+    add(type, "count", C.function_address(count), "Q@:")
+    add(type, "objectAtIndex:", C.function_address(child), "@@:Q")
+    add(type, "copyWithZone:", C.function_address(copy_callback), "@@:^v")
+    register_class(C.pointer_bits(type)); return type
+}
+func selector(name:str) uint { return C.address_bits(register_selector(C.terminated_pointer(name))) }
+func system_class(name:str) uint { return C.address_bits(get_class(C.terminated_pointer(name))) }
+func object(receiver:uint, name:str) uint { return send(receiver, selector(name)) }
+func string(value:str) uint { return send_object(system_class("NSString"), selector("stringWithUTF8String:"), C.address_bits(C.terminated_pointer(value))) }
+func number(value:float) uint { return send_double(system_class("NSNumber"), selector("numberWithDouble:"), value as float64) }
+func retain(value:uint) { let held = object(value, "retain") }
+func release(value:uint) { send_void(value, selector("release")) }
+func release_pool(value:uint) { send_void(value, selector("drain")) }
+func copy_string(value:uint) str {
+    let count = send_object(value, selector("lengthOfBytesUsingEncoding:"), 4 as uint)
+    let data = object(value, "UTF8String")
+    var bytes:uint8[] = []
+    var index = 0 as uint
+    while index < count { bytes.append(C.load<uint8>(data, index)); index++ }
+    return C.string(@bytes[0:bytes.count()])
+}
+func set_frame(element:uint, x:float, y:float, width:float, height:float) {
+    let method = selector("setAccessibilityFrameInParentSpace:")
+    let signature = send_object(element, selector("methodSignatureForSelector:"), method)
+    let invocation = send_object(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), signature)
+    send_void_object(invocation, selector("setSelector:"), method)
+    send_void_object(invocation, selector("setTarget:"), element)
+    var rect:float64[4] = [x as float64, y as float64, width as float64, height as float64]
+    set_argument(invocation, selector("setArgument:atIndex:"), C.address_bits(C.mutable_pointer(rect)), 2)
+    send_void(invocation, selector("invoke"))
+}
+func notify(element:uint, name:str) { post_notification(element, string(name)) }
+func view(window:uint) uint { return object(window, "contentView") }
+func flipped(view:uint) bool { return read_bool(view, selector("isFlipped")) != 0 as uint8 }
+
+let get_class = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_getClass")
+let register_selector = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"sel_registerName")
+let send = C.function<func(uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_object = C.function<func(uint,uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_void = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_void_object = C.function<func(uint,uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_bool = C.function<func(uint,uint,uint8) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let read_bool = C.function<func(uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_double = C.function<func(uint,uint,float64) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let read_double = C.function<func(uint,uint) float64>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let set_argument = C.function<func(uint,uint,uint,int) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let allocate_class = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>,uint) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_allocateClassPair")
+let register_class = C.function<func(C.Pointer<uint8>) void>(library:Boundary.SystemMenu, name:"objc_registerClassPair")
+let add_method = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>,C.Pointer<uint8>,C.Pointer<uint8>) uint8>(library:Boundary.SystemMenu, name:"class_addMethod")
+let set_associated = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>,C.Pointer<uint8>,uint) void>(library:Boundary.SystemMenu, name:"objc_setAssociatedObject")
+let get_associated = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_getAssociatedObject")
+let post_notification = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, name:"NSAccessibilityPostNotification")
+let register_events = C.function<func(int32) uint32>(library:Boundary.SDL3, name:"SDL_RegisterEvents")
+let push_event = C.function<func(C.MutablePointer<uint>) uint8>(library:Boundary.SDL3, name:"SDL_PushEvent")

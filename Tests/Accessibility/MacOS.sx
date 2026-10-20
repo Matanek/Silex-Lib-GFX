@@ -1,0 +1,145 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.Presentation.Presentation
+use Interop.C
+use Interop.Boundary
+use STD.Text
+
+class Source:AX.Source {
+    var value:str = "Ada"
+    var focus:bool = false
+    var pressed:int = 0
+    var requested:int = 0
+    var button_y:float = 24.0
+    var pending:AX.Change[] = []
+    func root() str? { return "root" }
+    func focused() str? { if self.focus { return "field" } return null }
+    func read(id:str) AX.Element? {
+        if id == "root" { return AX.Element(id:id, child_count:50000, bounds:AX.Bounds(0.0, 0.0, 400.0, 200.0)) }
+        if id == "button" {
+            return AX.Element(id:id, parent:"root", role:AX.Role.button, name:"Apply", actions:[AX.Action.activate],
+                bounds:AX.Bounds(12.0, self.button_y, 80.0, 30.0))
+        }
+        if Text.starts_with(id, "row:") { return AX.Element(id:id, parent:"root", role:AX.Role.text) }
+        if id == "field" {
+            return AX.Element(id:id, parent:"root", role:AX.Role.text_field, name:"Name", value:self.value,
+                focused:self.focus, editable:true, actions:[AX.Action.focus, AX.Action.set_value])
+        }
+        return null
+    }
+    func child(id:str, index:int) str? {
+        self.requested++
+        if id == "root" && index == 0 { return "button" }
+        if id == "root" && index == 49999 { return "field" }
+        if id == "root" && index > 0 && index < 49999 { return "row:$(index)" }
+        return null
+    }
+    func perform(id:str, request:AX.Request) bool {
+        if id == "button" && request.action == AX.Action.activate { self.pressed++; return true }
+        if id == "field" && request.action == AX.Action.focus { self.focus = true; return true }
+        if id == "field" && request.action == AX.Action.set_value {
+            if let text = request.text { self.value = text; return true }
+        }
+        return false
+    }
+    func changes() AX.Change[] { let pending = self.pending; self.pending = []; return pending }
+}
+
+let get_class = C.function<func(C.Pointer<uint8>) uint>(library:Boundary.SystemMenu, name:"objc_getClass")
+let get_selector = C.function<func(C.Pointer<uint8>) uint>(library:Boundary.SystemMenu, name:"sel_registerName")
+let send = C.function<func(uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_arg = C.function<func(uint,uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_bool = C.function<func(uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let set_bool = C.function<func(uint,uint,uint8) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let set_object = C.function<func(uint,uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_void = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let compare = C.function<func(uint,uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
+func selector(name:str) uint { return get_selector(C.terminated_pointer(name)) }
+func object(value:uint, method:str) uint { return send(value, selector(method)) }
+func system_class(name:str) uint { return get_class(C.terminated_pointer(name)) }
+func native_string(value:str) uint { return send_arg(system_class("NSString"), selector("stringWithUTF8String:"), C.address_bits(C.terminated_pointer(value))) }
+func frame(element:uint) float64[4] {
+    let method = selector("accessibilityFrameInParentSpace")
+    let signature = send_arg(element, selector("methodSignatureForSelector:"), method)
+    let invocation = send_arg(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), signature)
+    set_object(invocation, selector("setSelector:"), method)
+    set_object(invocation, selector("setTarget:"), element)
+    send_void(invocation, selector("invoke"))
+    var rect:float64[4] = [0.0, 0.0, 0.0, 0.0]
+    set_object(invocation, selector("getReturnValue:"), C.address_bits(C.mutable_pointer(rect)))
+    return rect
+}
+
+func verify_appkit() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle()
+    let children = object(root, "accessibilityChildren")
+    assert(object(children, "count") == 50000 as uint)
+    assert(source.requested == 0 && host.peer_count() == 1)
+    let snapshot = object(children, "copy")
+    assert(snapshot == children && source.requested == 0)
+    send_void(snapshot, selector("release"))
+    let button = send_arg(children, selector("objectAtIndex:"), 0 as uint)
+    let field = send_arg(children, selector("objectAtIndex:"), 49999 as uint)
+    assert(source.requested == 2 && host.peer_count() == 3)
+    assert(send_arg(children, selector("objectAtIndex:"), 49999 as uint) == field)
+    assert(compare(object(field, "accessibilityRole"), selector("isEqualToString:"), native_string("AXTextField")) != 0 as uint8)
+    assert(compare(object(button, "accessibilityLabel"), selector("isEqualToString:"), native_string("Apply")) != 0 as uint8)
+    assert(object(field, "accessibilityParent") == root)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityValue:")) != 0 as uint8)
+    assert(compare(button, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityValue:")) == 0 as uint8)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelectedTextRange:")) == 0 as uint8)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityPerformDelete")) == 0 as uint8)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityFrame")) != 0 as uint8)
+    let initial = frame(button)
+    assert(initial[0] == 12.0 && initial[1] == 146.0 && initial[2] == 80.0 && initial[3] == 30.0)
+    assert(send_bool(button, selector("accessibilityPerformPress")) != 0 as uint8)
+    assert(source.pressed == 1)
+    set_bool(field, selector("setAccessibilityFocused:"), 1 as uint8)
+    assert(source.focus && send_bool(field, selector("isAccessibilityFocused")) != 0 as uint8)
+    set_object(field, selector("setAccessibilityValue:"), native_string("Été 👋"))
+    assert(source.value == "Été 👋")
+    assert(compare(object(field, "accessibilityValue"), selector("isEqualToString:"), native_string("Été 👋")) != 0 as uint8)
+    assert(host.synchronize(200.0) && !host.synchronize(200.0))
+    source.button_y = 30.0
+    source.pending = [AX.Change("button", AX.ChangeKind.bounds)]
+    assert(!host.synchronize(200.0))
+    let moved = frame(button)
+    assert(moved[1] == 140.0)
+    // Model an accessibility client retaining native objects past teardown.
+    let retained_button = object(button, "retain")
+    let retained_children = object(children, "retain")
+    host.remove()
+    assert(send_bool(button, selector("accessibilityPerformPress")) == 0 as uint8)
+    assert(source.pressed == 1 && object(children, "count") == 0 as uint)
+    send_void(retained_button, selector("release")); send_void(retained_children, selector("release"))
+    send_void(pool, selector("drain"))
+}
+
+test "AppKit queries children lazily and invokes the same source without a window" { verify_appkit() }
+
+func verify_attachment() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    // NSView is an unattached object: this creates no NSWindow or presenter.
+    let view = object(system_class("NSView"), "new")
+    let previous = object(view, "accessibilityChildren")
+    let retained = object(previous, "retain")
+    let previous_element = send_bool(view, selector("isAccessibilityElement"))
+    var source = Source()
+    var host = Presentation(source, view, 0 as uint, 200.0, false)
+    let roots = object(view, "accessibilityChildren")
+    assert(object(roots, "count") == 1 as uint)
+    let root = send_arg(roots, selector("objectAtIndex:"), 0 as uint)
+    assert(root == host.root_handle() && object(root, "accessibilityParent") == view)
+    assert(source.requested == 0)
+    host.remove()
+    assert(object(object(view, "accessibilityChildren"), "count") == object(previous, "count"))
+    assert(send_bool(view, selector("isAccessibilityElement")) == previous_element)
+    send_void(retained, selector("release")); send_void(view, selector("release"))
+    send_void(pool, selector("drain"))
+}
+
+test "AppKit attachment restores the view hierarchy without creating a window" { verify_attachment() }
+
+func main() { verify_appkit(); verify_attachment(); print("AppKit accessibility : OK (sans fenêtre)") }
