@@ -3,6 +3,7 @@ use GFX.Accessibility.Presentation.Presentation
 use Interop.C
 use Interop.Boundary
 use STD.Text
+use STD.Math
 
 class Source:AX.Source {
     var value:str = "Ada"
@@ -11,6 +12,12 @@ class Source:AX.Source {
     var requested:int = 0
     var button_y:float = 24.0
     var pending:AX.Change[] = []
+    var checked:bool = false
+    var second_radio:bool = false
+    var amount:float = 12.0
+    var enabled:bool = true
+    var horizontal:bool = true
+    var control_requests:int = 0
     func root() str? { return "root" }
     func focused() str? { if self.focus { return "field" } return null }
     func read(id:str) AX.Element? {
@@ -24,16 +31,52 @@ class Source:AX.Source {
             return AX.Element(id:id, parent:"root", role:AX.Role.text_field, name:"Name", value:self.value,
                 focused:self.focus, editable:true, actions:[AX.Action.focus, AX.Action.set_value])
         }
+        if id == "check" {
+            return AX.Element(id:id, parent:"root", role:AX.Role.checkbox, checked:self.checked,
+                enabled:self.enabled, actions:[AX.Action.activate])
+        }
+        if id == "radios" { return AX.Element(id:id, parent:"root", role:AX.Role.radio_group, child_count:2) }
+        if id == "radio:0" || id == "radio:1" {
+            let selected = (id == "radio:1") == self.second_radio
+            return AX.Element(id:id, parent:"radios", role:AX.Role.radio, checked:selected,
+                selected:selected, actions:[AX.Action.activate])
+        }
+        if id == "slider" {
+            return AX.Element(id:id, parent:"root", role:AX.Role.slider, number:self.amount,
+                minimum:10.0, maximum:20.0, horizontal:self.horizontal, enabled:self.enabled,
+                actions:[AX.Action.set_value, AX.Action.increment, AX.Action.decrement])
+        }
         return null
     }
     func child(id:str, index:int) str? {
         self.requested++
         if id == "root" && index == 0 { return "button" }
         if id == "root" && index == 49999 { return "field" }
+        if id == "root" && index == 1 { return "check" }
+        if id == "root" && index == 2 { return "radios" }
+        if id == "root" && index == 3 { return "slider" }
+        if id == "radios" && index == 0 { return "radio:0" }
+        if id == "radios" && index == 1 { return "radio:1" }
         if id == "root" && index > 0 && index < 49999 { return "row:$(index)" }
         return null
     }
     func perform(id:str, request:AX.Request) bool {
+        // Deliberately permissive: the bridge itself must reject an unannounced
+        // operation or a disabled control, even if the source could accept it.
+        if id == "check" || id == "slider" || id == "radios" || Text.starts_with(id, "radio:") {
+            self.control_requests++
+            if id == "check" { self.checked = !self.checked; return true }
+            if id == "radio:0" || id == "radio:1" { self.second_radio = id == "radio:1"; return true }
+            if id == "slider" {
+                var value = self.amount
+                if request.action == AX.Action.increment { value += 0.1 }
+                if request.action == AX.Action.decrement { value -= 0.1 }
+                if let number = request.number { value = number }
+                self.amount = Math.clamp(value, 10.0, 20.0)
+                return true
+            }
+            return true
+        }
         if id == "button" && request.action == AX.Action.activate { self.pressed++; return true }
         if id == "field" && request.action == AX.Action.focus { self.focus = true; return true }
         if id == "field" && request.action == AX.Action.set_value {
@@ -53,6 +96,8 @@ let set_bool = C.function<func(uint,uint,uint8) void>(library:Boundary.SystemMen
 let set_object = C.function<func(uint,uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let send_void = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let compare = C.function<func(uint,uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let read_double = C.function<func(uint,uint) float64>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let make_number = C.function<func(uint,uint,float64) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
 func selector(name:str) uint { return get_selector(C.terminated_pointer(name)) }
 func object(value:uint, method:str) uint { return send(value, selector(method)) }
 func system_class(name:str) uint { return get_class(C.terminated_pointer(name)) }
@@ -142,4 +187,61 @@ func verify_attachment() {
 
 test "AppKit attachment restores the view hierarchy without creating a window" { verify_attachment() }
 
-func main() { verify_appkit(); verify_attachment(); print("AppKit accessibility : OK (sans fenêtre)") }
+func verify_controls() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle()
+    let children = object(root, "accessibilityChildren")
+    let check = send_arg(children, selector("objectAtIndex:"), 1 as uint)
+    let radios = send_arg(children, selector("objectAtIndex:"), 2 as uint)
+    let slider = send_arg(children, selector("objectAtIndex:"), 3 as uint)
+    assert(compare(object(check, "accessibilityRole"), selector("isEqualToString:"), native_string("AXCheckBox")) != 0 as uint8)
+    assert(read_double(object(check, "accessibilityValue"), selector("doubleValue")) == 0.0)
+    assert(send_bool(check, selector("accessibilityPerformPress")) != 0 as uint8 && source.checked)
+    assert(read_double(object(check, "accessibilityValue"), selector("doubleValue")) == 1.0)
+    assert(compare(object(radios, "accessibilityRole"), selector("isEqualToString:"), native_string("AXRadioGroup")) != 0 as uint8)
+    assert(object(radios, "accessibilityOrientation") == 1 as uint)
+    let choices = object(radios, "accessibilityChildren")
+    let first = send_arg(choices, selector("objectAtIndex:"), 0 as uint)
+    let second = send_arg(choices, selector("objectAtIndex:"), 1 as uint)
+    assert(object(first, "accessibilityParent") == radios && object(second, "accessibilityParent") == radios)
+    assert(compare(object(second, "accessibilityRole"), selector("isEqualToString:"), native_string("AXRadioButton")) != 0 as uint8)
+    assert(send_bool(first, selector("isAccessibilitySelected")) != 0 as uint8)
+    assert(send_bool(second, selector("accessibilityPerformPress")) != 0 as uint8 && source.second_radio)
+    assert(send_bool(second, selector("isAccessibilitySelected")) != 0 as uint8)
+    assert(read_double(object(first, "accessibilityValue"), selector("doubleValue")) == 0.0)
+    assert(read_double(object(second, "accessibilityValue"), selector("doubleValue")) == 1.0)
+    assert(compare(object(slider, "accessibilityRole"), selector("isEqualToString:"), native_string("AXSlider")) != 0 as uint8)
+    assert(read_double(object(slider, "accessibilityMinValue"), selector("doubleValue")) == 10.0)
+    assert(read_double(object(slider, "accessibilityMaxValue"), selector("doubleValue")) == 20.0)
+    assert(compare(slider, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityMinValue")) != 0 as uint8)
+    assert(compare(check, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityMinValue")) == 0 as uint8)
+    assert(object(check, "accessibilityMinValue") == 0 as uint)
+    assert(object(slider, "accessibilityOrientation") == 2 as uint)
+    source.horizontal = false
+    assert(object(slider, "accessibilityOrientation") == 1 as uint)
+    assert(send_bool(slider, selector("accessibilityPerformIncrement")) != 0 as uint8)
+    assert(Math.abs(source.amount - 12.1) < 0.001)
+    assert(send_bool(slider, selector("accessibilityPerformDecrement")) != 0 as uint8)
+    assert(Math.abs(source.amount - 12.0) < 0.001)
+    set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), 100.0))
+    assert(source.amount == 20.0)
+    assert(read_double(object(slider, "accessibilityValue"), selector("doubleValue")) == 20.0)
+    let requests = source.control_requests
+    assert(send_bool(radios, selector("accessibilityPerformPress")) == 0 as uint8)
+    set_bool(check, selector("setAccessibilityFocused:"), 1 as uint8)
+    source.enabled = false
+    assert(send_bool(check, selector("isAccessibilityEnabled")) == 0 as uint8)
+    assert(compare(check, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityPerformPress")) == 0 as uint8)
+    assert(send_bool(check, selector("accessibilityPerformPress")) == 0 as uint8)
+    assert(send_bool(slider, selector("accessibilityPerformIncrement")) == 0 as uint8)
+    set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), 15.0))
+    assert(source.control_requests == requests && source.checked && source.amount == 20.0)
+    host.remove()
+    send_void(pool, selector("drain"))
+}
+
+test "AppKit exposes checkbox radio and slider state and rejects disabled or unsupported actions" { verify_controls() }
+
+func main() { verify_appkit(); verify_attachment(); verify_controls(); print("AppKit accessibility : OK (sans fenêtre)") }

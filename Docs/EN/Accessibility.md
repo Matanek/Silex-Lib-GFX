@@ -3,7 +3,8 @@
 `GFX.Accessibility` describes the meaning of an interface without depending on
 Canvas or GFX.UI. A host can inspect a source supplied by an existing interface,
 or implement `Source` for its own controls. The first macOS adapter presents
-elements to AppKit; VoiceOver qualification is ongoing. Linux and Windows
+elements to AppKit; the initial button/text-field path has been checked with
+the inspector and VoiceOver. Qualification of other controls continues. Linux and Windows
 adapters are not yet provided.
 
 ## Read and act on the same interface
@@ -48,4 +49,12 @@ On macOS, the first path covers roles/names/values, focus, button activation,
 field editing, geometry and invalidation of detached peers. Children are queried
 by index. Their AppKit arrays remain lazy: counting or copying them does not
 materialize every row. This first integration does not yet qualify every
-control, native text selection or screen-reader behavior.
+control, native text selection or collections with a screen reader.
+
+Checkboxes and radio buttons expose their state through their native value;
+activation reuses the source action. Radio groups use the corresponding AppKit
+role. Sliders expose their numeric value, bounds and orientation, and accept
+the increment, decrement and value-setting actions advertised by the source.
+Disabled controls and unadvertised actions are rejected even when a client
+invokes the callback directly. Native tests cover these exchanges; their
+VoiceOver path still needs qualification.

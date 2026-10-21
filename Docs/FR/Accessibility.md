@@ -3,7 +3,8 @@
 `GFX.Accessibility` décrit le sens d’une interface sans dépendre de Canvas ou
 de GFX.UI. Un hôte peut inspecter la source fournie par une interface existante,
 ou implémenter `Source` pour ses propres contrôles. Le premier adaptateur macOS
-présente les éléments à AppKit ; sa qualification avec VoiceOver reste en cours.
+présente les éléments à AppKit ; le premier parcours bouton/champ a été vérifié
+avec l’inspecteur et VoiceOver. La qualification des autres contrôles continue.
 Les adaptateurs Linux et Windows ne sont pas encore fournis.
 
 ## Lire et actionner la même interface
@@ -50,4 +51,12 @@ modification du champ, géométrie et invalidation des pairs détachés. Les enf
 sont demandés à la source par index. Leurs tableaux AppKit restent paresseux :
 leur taille ou leur copie ne matérialise pas toutes les lignes. Cette première
 intégration ne constitue pas encore une qualification de tous les contrôles,
-de la sélection de texte native ou du lecteur d’écran.
+de la sélection de texte native ou des collections avec lecteur d’écran.
+
+Les cases à cocher et boutons radio exposent leur état par leur valeur native ;
+l’activation réutilise l’action de la source. Les groupes radio portent le rôle
+AppKit correspondant. Les curseurs exposent leur valeur numérique, leurs bornes
+et leur orientation, et acceptent les actions d’incrément, de décrément et de
+modification annoncées par la source. Un contrôle désactivé ou une action non
+annoncée n’est pas actionné, même si un client invoque directement le callback.
+Le test natif couvre ces échanges ; leur parcours VoiceOver reste à qualifier.

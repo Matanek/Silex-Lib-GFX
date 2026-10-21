@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Initial private AppKit adapter: Window accepts an accessibility Source, synchronizes changes and detaches peers before destruction; native children stay lazy. Inspection/VoiceOver qualification and Linux/Windows bridges remain pending.
+- AppKit exposes radio groups, slider bounds and orientation; checkboxes/radios reuse source state and actions. Callbacks also reject disabled or unadvertised actions. The initial button/text-field path is confirmed with the inspector and VoiceOver; new controls remain under qualification.
+
+- Initial private AppKit adapter: Window accepts an accessibility Source, synchronizes changes and detaches peers before destruction; native children stay lazy. The button/text-field path is qualified; remaining controls and Linux/Windows bridges are pending.
 
 - Accessibility provides a UI-independent contract for describing and acting on a semantic source on demand, without Canvas or UI dependencies. Initial AppKit integration is undergoing qualification.
 

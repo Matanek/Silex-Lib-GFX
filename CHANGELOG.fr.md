@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-- Premier adaptateur AppKit privé : Window accepte une Source accessible, synchronise les changements et détache ses pairs avant destruction ; enfants natifs paresseux. Inspection/VoiceOver à qualifier, ponts Linux/Windows à venir.
+- AppKit expose les groupes radio, les bornes et l’orientation des curseurs ; cases/radios réutilisent leur état et leurs actions. Les callbacks refusent aussi les actions non annoncées ou désactivées. Le premier parcours bouton/champ est confirmé dans l’inspecteur et VoiceOver ; nouveaux contrôles en qualification.
+
+- Premier adaptateur AppKit privé : Window accepte une Source accessible, synchronise les changements et détache ses pairs avant destruction ; enfants natifs paresseux. Parcours bouton/champ qualifié, autres contrôles et ponts Linux/Windows à venir.
 
 - Accessibility fournit le contrat indépendant des interfaces pour décrire et actionner une source sémantique à la demande, sans dépendance à Canvas ou UI. Le premier raccordement AppKit est en qualification.
 
