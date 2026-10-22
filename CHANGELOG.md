@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- AppKit exposes visible label relationships and routes selection/expansion setters to the source's advertised actions. Repeated, disabled, unsupported and detached calls leave the application unchanged. Headless native coverage does not qualify collection navigation with a screen reader.
+
 - AppKit exposes radio groups, slider bounds and orientation; checkboxes/radios reuse source state and actions. Callbacks also reject disabled or unadvertised actions. The initial button/text-field path is confirmed with the inspector and VoiceOver; new controls remain under qualification.
 
 - Initial private AppKit adapter: Window accepts an accessibility Source, synchronizes changes and detaches peers before destruction; native children stay lazy. The button/text-field path is qualified; remaining controls and Linux/Windows bridges are pending.

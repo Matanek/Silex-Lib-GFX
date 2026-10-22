@@ -60,3 +60,16 @@ et leur orientation, et acceptent les actions d’incrément, de décrément et 
 modification annoncées par la source. Un contrôle désactivé ou une action non
 annoncée n’est pas actionné, même si un client invoque directement le callback.
 Le test natif couvre ces échanges ; leur parcours VoiceOver reste à qualifier.
+
+Les relations de libellés sont également présentées à AppKit : un contrôle
+référence son titre visible, et ce titre référence le contrôle qu’il nomme.
+Lire une relation ne demande que son destinataire ; un ID devenu inaccessible
+ne crée pas de pair natif.
+
+Les setters natifs de sélection et de dépliage utilisent respectivement les
+actions `select`/`deselect` et `expand`/`collapse`. Ils restent disponibles
+seulement lorsque la source annonce une action correspondante et un état.
+Chaque appel vérifie sa direction, la disponibilité du contrôle et le changement
+d’état demandé. Il ne modifie pas une copie d’état dans AppKit. Les tests natifs
+couvrent ces échanges sans fenêtre ; ils ne qualifient pas à eux seuls la
+navigation d’une collection dans un lecteur d’écran.

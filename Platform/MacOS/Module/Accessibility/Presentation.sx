@@ -153,6 +153,19 @@ package nocopy class Host {
                 if let value = element.maximum { return number(value) }
                 return 0 as uint
             }
+            if method == selector("accessibilityTitleUIElement") {
+                if let label = element.labelled_by { return self.peer(label) }
+                return 0 as uint
+            }
+            if method == selector("accessibilityServesAsTitleForUIElements") {
+                if let target = element.labels {
+                    let handle = self.peer(target)
+                    if handle != 0 as uint {
+                        return send_object(system_class("NSArray"), selector("arrayWithObject:"), handle)
+                    }
+                }
+                return object(system_class("NSArray"), "array")
+            }
             if method == selector("accessibilityParent") {
                 if let parent = element.parent { return self.peer(parent) }
                 return self.view
@@ -207,10 +220,20 @@ package nocopy class Host {
         if !self.active { return false }
         if let element = self.source.read(peer.id) {
             if let action = action(method) {
-                if !element.enabled { return false }
-                for available in element.actions { if action == available { return true } }
-                return false
+                return supports(element, action)
             }
+            // AppKit asks whether a BOOL setter is available before it has
+            // supplied a value. Check the exact direction again in set_state.
+            if method == selector("setAccessibilitySelected:") {
+                return element.selected != null &&
+                    (supports(element, AX.Action.select) || supports(element, AX.Action.deselect))
+            }
+            if method == selector("setAccessibilityExpanded:") {
+                return element.expanded != null &&
+                    (supports(element, AX.Action.expand) || supports(element, AX.Action.collapse))
+            }
+            if method == selector("accessibilityTitleUIElement") { return element.labelled_by != null }
+            if method == selector("accessibilityServesAsTitleForUIElements") { return element.labels != null }
             if method == selector("isAccessibilitySelected") { return element.selected != null }
             if method == selector("isAccessibilityExpanded") { return element.expanded != null }
             if method == selector("accessibilityMinValue") { return element.minimum != null }
@@ -235,6 +258,24 @@ package nocopy class Host {
             let pushed = push_event(C.mutable_pointer(event[0]))
         }
         return true
+    }
+
+    module func set_state(peer:Peer, method:uint, value:bool) {
+        if !self.active { return }
+        if let element = self.source.read(peer.id) {
+            var previous:bool? = null
+            var operation = AX.Action.select
+            if method == selector("setAccessibilitySelected:") {
+                previous = element.selected
+                if !value { operation = AX.Action.deselect }
+            } elif method == selector("setAccessibilityExpanded:") {
+                previous = element.expanded
+                operation = AX.Action.expand
+                if !value { operation = AX.Action.collapse }
+            } else { return }
+            if previous == null || previous == value || !supports(element, operation) { return }
+            let changed = self.perform(peer, AX.Request(operation))
+        }
     }
 
     module func set_value(peer:Peer, value:uint) {
@@ -320,6 +361,12 @@ func set_focused(native:uint, method:uint, focused:uint8) {
     if !host.allows(peer, method) { return }
     let changed = host.perform(peer, AX.Request(AX.Action.focus))
 }
+func set_state(native:uint, method:uint, value:uint8) {
+    let address = context(native); if address == 0 as uint { return }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    host.set_state(peer, method, value != 0 as uint8)
+}
 func set_value(native:uint, method:uint, value:uint) {
     let address = context(native); if address == 0 as uint || value == 0 as uint { return }
     var peer = C.object_from_address<Peer>(address)
@@ -329,6 +376,11 @@ func set_value(native:uint, method:uint, value:uint) {
 
 func copy_children(native:uint, method:uint, zone:uint) uint { return object(native, "retain") }
 
+func supports(element:AX.Element, action:AX.Action) bool {
+    if !element.enabled { return false }
+    for available in element.actions { if action == available { return true } }
+    return false
+}
 func action(method:uint) AX.Action? {
     if method == selector("accessibilityPerformPress") { return AX.Action.activate }
     if method == selector("setAccessibilityFocused:") { return AX.Action.focus }
@@ -377,7 +429,7 @@ func element_class() uint {
     if type != 0 as uint { return type }
     type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
     let property:func(uint,uint) uint = read_property
-    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
         add(type, name, C.function_address(property), "@@:")
     }
     let orientation:func(uint,uint) int64 = read_orientation
@@ -394,6 +446,10 @@ func element_class() uint {
     }
     let focus:func(uint,uint,uint8) void = set_focused
     add(type, "setAccessibilityFocused:", C.function_address(focus), "v@:B")
+    let state_setter:func(uint,uint,uint8) void = set_state
+    for name in ["setAccessibilitySelected:", "setAccessibilityExpanded:"] {
+        add(type, name, C.function_address(state_setter), "v@:B")
+    }
     let value:func(uint,uint,uint) void = set_value
     add(type, "setAccessibilityValue:", C.function_address(value), "v@:@")
     register_class(C.pointer_bits(type)); return type

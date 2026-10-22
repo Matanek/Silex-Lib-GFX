@@ -58,3 +58,16 @@ the increment, decrement and value-setting actions advertised by the source.
 Disabled controls and unadvertised actions are rejected even when a client
 invokes the callback directly. Native tests cover these exchanges; their
 VoiceOver path still needs qualification.
+
+Label relationships are also presented to AppKit: a control references its
+visible title, and that title references the control it names. Reading a
+relationship requests only its target; an inaccessible ID does not create
+a native peer.
+
+Native selection and expansion setters use the `select`/`deselect` and
+`expand`/`collapse` actions respectively. They are available only when the
+source announces a corresponding action and state. Each call checks its
+direction, control availability and requested state transition. It does not
+change a separate copy of state in AppKit. Headless native tests cover these
+exchanges; they do not by themselves qualify collection navigation with a
+screen reader.

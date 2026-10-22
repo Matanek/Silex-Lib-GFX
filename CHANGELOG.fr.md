@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- AppKit expose les relations des libellés visibles et transmet les setters de sélection/dépliage aux actions annoncées par la source. Les appels répétés, désactivés, non pris en charge ou détachés ne modifient pas l’application. Les tests natifs sans fenêtre ne qualifient pas la navigation des collections avec un lecteur d’écran.
+
 - AppKit expose les groupes radio, les bornes et l’orientation des curseurs ; cases/radios réutilisent leur état et leurs actions. Les callbacks refusent aussi les actions non annoncées ou désactivées. Le premier parcours bouton/champ est confirmé dans l’inspecteur et VoiceOver ; nouveaux contrôles en qualification.
 
 - Premier adaptateur AppKit privé : Window accepte une Source accessible, synchronise les changements et détache ses pairs avant destruction ; enfants natifs paresseux. Parcours bouton/champ qualifié, autres contrôles et ponts Linux/Windows à venir.

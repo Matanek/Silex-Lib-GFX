@@ -18,6 +18,12 @@ class Source:AX.Source {
     var enabled:bool = true
     var horizontal:bool = true
     var control_requests:int = 0
+    var title_target:str? = "field"
+    var field_title:str? = "label"
+    var branch_selected:bool = false
+    var branch_expanded:bool = false
+    var reverse_actions:bool = true
+    var branch_requests:int = 0
     func root() str? { return "root" }
     func focused() str? { if self.focus { return "field" } return null }
     func read(id:str) AX.Element? {
@@ -29,7 +35,14 @@ class Source:AX.Source {
         if Text.starts_with(id, "row:") { return AX.Element(id:id, parent:"root", role:AX.Role.text) }
         if id == "field" {
             return AX.Element(id:id, parent:"root", role:AX.Role.text_field, name:"Name", value:self.value,
-                focused:self.focus, editable:true, actions:[AX.Action.focus, AX.Action.set_value])
+                focused:self.focus, editable:true, labelled_by:self.field_title, actions:[AX.Action.focus, AX.Action.set_value])
+        }
+        if id == "label" { return AX.Element(id:id, parent:"root", role:AX.Role.text, name:"Name", labels:self.title_target) }
+        if id == "branch" {
+            var actions:AX.Action[] = [AX.Action.select, AX.Action.expand]
+            if self.reverse_actions { actions.append(AX.Action.deselect); actions.append(AX.Action.collapse) }
+            return AX.Element(id:id, parent:"root", role:AX.Role.tree_item, name:"Folder",
+                selected:self.branch_selected, expanded:self.branch_expanded, enabled:self.enabled, actions:actions)
         }
         if id == "check" {
             return AX.Element(id:id, parent:"root", role:AX.Role.checkbox, checked:self.checked,
@@ -55,6 +68,8 @@ class Source:AX.Source {
         if id == "root" && index == 1 { return "check" }
         if id == "root" && index == 2 { return "radios" }
         if id == "root" && index == 3 { return "slider" }
+        if id == "root" && index == 4 { return "label" }
+        if id == "root" && index == 5 { return "branch" }
         if id == "radios" && index == 0 { return "radio:0" }
         if id == "radios" && index == 1 { return "radio:1" }
         if id == "root" && index > 0 && index < 49999 { return "row:$(index)" }
@@ -75,6 +90,14 @@ class Source:AX.Source {
                 self.amount = Math.clamp(value, 10.0, 20.0)
                 return true
             }
+            return true
+        }
+        if id == "branch" {
+            self.branch_requests++
+            if request.action == AX.Action.select { self.branch_selected = true }
+            if request.action == AX.Action.deselect { self.branch_selected = false }
+            if request.action == AX.Action.expand { self.branch_expanded = true }
+            if request.action == AX.Action.collapse { self.branch_expanded = false }
             return true
         }
         if id == "button" && request.action == AX.Action.activate { self.pressed++; return true }
@@ -244,4 +267,77 @@ func verify_controls() {
 
 test "AppKit exposes checkbox radio and slider state and rejects disabled or unsupported actions" { verify_controls() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); print("AppKit accessibility : OK (sans fenêtre)") }
+func verify_relationships() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let children = object(host.root_handle(), "accessibilityChildren")
+    let field = send_arg(children, selector("objectAtIndex:"), 49999 as uint)
+    // A relation creates only its target peer, never enumerates the container.
+    let label = object(field, "accessibilityTitleUIElement")
+    assert(label != 0 as uint && source.requested == 1 && host.peer_count() == 3)
+    assert(label == send_arg(children, selector("objectAtIndex:"), 4 as uint))
+    let targets = object(label, "accessibilityServesAsTitleForUIElements")
+    assert(object(targets, "count") == 1 as uint)
+    assert(send_arg(targets, selector("objectAtIndex:"), 0 as uint) == field)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityTitleUIElement")) != 0 as uint8)
+    source.field_title = "missing"; source.title_target = "missing"
+    assert(object(field, "accessibilityTitleUIElement") == 0 as uint)
+    assert(object(object(label, "accessibilityServesAsTitleForUIElements"), "count") == 0 as uint)
+    assert(host.peer_count() == 3)
+    source.field_title = null; source.title_target = null
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityTitleUIElement")) == 0 as uint8)
+    source.field_title = "label"; source.title_target = "field"
+    assert(object(field, "accessibilityTitleUIElement") == label)
+    let retained = object(label, "retain")
+    host.remove()
+    assert(object(label, "accessibilityServesAsTitleForUIElements") == 0 as uint)
+    send_void(retained, selector("release")); send_void(pool, selector("drain"))
+}
+
+test "AppKit label relationships preserve target identities and tolerate missing or detached peers" { verify_relationships() }
+
+func verify_selection_expansion() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let children = object(host.root_handle(), "accessibilityChildren")
+    let branch = send_arg(children, selector("objectAtIndex:"), 5 as uint)
+    assert(compare(branch, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelected:")) != 0 as uint8)
+    assert(compare(branch, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityExpanded:")) != 0 as uint8)
+    set_bool(branch, selector("setAccessibilitySelected:"), 1 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 1 as uint8)
+    assert(source.branch_selected && source.branch_expanded && source.branch_requests == 2)
+    assert(send_bool(branch, selector("isAccessibilitySelected")) != 0 as uint8)
+    assert(send_bool(branch, selector("isAccessibilityExpanded")) != 0 as uint8)
+    // Repeating an already reached state must not invoke a permissive source.
+    set_bool(branch, selector("setAccessibilitySelected:"), 1 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 1 as uint8)
+    assert(source.branch_requests == 2 && host.synchronize(200.0) && !host.synchronize(200.0))
+    source.reverse_actions = false
+    set_bool(branch, selector("setAccessibilitySelected:"), 0 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 0 as uint8)
+    assert(source.branch_selected && source.branch_expanded && source.branch_requests == 2)
+    source.reverse_actions = true; source.enabled = false
+    assert(compare(branch, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityExpanded:")) == 0 as uint8)
+    set_bool(branch, selector("setAccessibilitySelected:"), 0 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 0 as uint8)
+    assert(source.branch_requests == 2)
+    source.enabled = true
+    set_bool(branch, selector("setAccessibilitySelected:"), 0 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 0 as uint8)
+    assert(!source.branch_selected && !source.branch_expanded && source.branch_requests == 4)
+    let field = send_arg(children, selector("objectAtIndex:"), 49999 as uint)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelected:")) == 0 as uint8)
+    set_bool(field, selector("setAccessibilitySelected:"), 1 as uint8)
+    let retained = object(branch, "retain")
+    host.remove()
+    set_bool(branch, selector("setAccessibilitySelected:"), 1 as uint8)
+    set_bool(branch, selector("setAccessibilityExpanded:"), 1 as uint8)
+    assert(source.branch_requests == 4)
+    send_void(retained, selector("release")); send_void(pool, selector("drain"))
+}
+
+test "AppKit selection and expansion setters dispatch only advertised state transitions" { verify_selection_expansion() }
+
+func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); print("AppKit accessibility : OK (sans fenêtre)") }
