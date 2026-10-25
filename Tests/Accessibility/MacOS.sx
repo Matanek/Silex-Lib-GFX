@@ -355,8 +355,8 @@ func verify_selection_expansion() {
 
 test "AppKit selection and expansion setters dispatch only advertised state transitions" { verify_selection_expansion() }
 
-func selection_span(element:uint) uint[2] {
-    let method = selector("accessibilitySelectedTextRange")
+func native_span(element:uint, name:str) uint[2] {
+    let method = selector(name)
     let signature = send_arg(element, selector("methodSignatureForSelector:"), method)
     let invocation = send_arg(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), signature)
     set_object(invocation, selector("setSelector:"), method); set_object(invocation, selector("setTarget:"), element)
@@ -365,6 +365,7 @@ func selection_span(element:uint) uint[2] {
     set_object(invocation, selector("getReturnValue:"), C.address_bits(C.mutable_pointer(span)))
     return span
 }
+func selection_span(element:uint) uint[2] { return native_span(element, "accessibilitySelectedTextRange") }
 func select_span(element:uint, start:uint, length:uint) {
     let method = selector("setAccessibilitySelectedTextRange:")
     let signature = send_arg(element, selector("methodSignatureForSelector:"), method)
@@ -493,4 +494,107 @@ func verify_geometry() {
 }
 test "AppKit geometry follows host height and origin without double translating descendants" { verify_geometry() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); print("AppKit accessibility : OK (sans fenêtre)") }
+class CollectionSource:AX.Source {
+    var requested:int = 0
+    var rows:int = 50000
+    var columns:int = 4
+    var position:int? = 49999
+    var column:int? = 3
+    var row_role:AX.Role = AX.Role.row
+    var level:int = 1
+    func root() str? { return "collection" }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? {
+        if id == "collection" {
+            return AX.Element(id:id, role:AX.Role.table, child_count:self.rows,
+                row_count:self.rows, column_count:self.columns)
+        }
+        if id == "opaque-row" {
+            // Sibling position differs from flattened model position in trees.
+            return AX.Element(id:id, parent:"collection", role:self.row_role,
+                index:2, row_index:self.position, level:self.level, child_count:1)
+        }
+        if id == "opaque-cell" {
+            return AX.Element(id:id, parent:"opaque-row", role:AX.Role.cell,
+                index:0, row_index:self.position, column_index:self.column)
+        }
+        return null
+    }
+    func child(id:str, index:int) str? {
+        self.requested++
+        if id == "collection" && index == self.rows - 1 { return "opaque-row" }
+        if id == "opaque-row" && index == 0 { return "opaque-cell" }
+        return null
+    }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] { return [] }
+}
+
+func verify_collection_positions() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle()
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRowCount")) != 0 as uint8)
+    assert(object(root, "accessibilityRowCount") == 50000 as uint)
+    assert(object(root, "accessibilityColumnCount") == 4 as uint)
+    assert(host.peer_count() == 1 && source.requested == 0)
+    let children = object(root, "accessibilityChildren")
+    let row = send_arg(children, selector("objectAtIndex:"), 49999 as uint)
+    assert(object(row, "accessibilityIndex") == 49999 as uint)
+    assert(compare(object(row, "accessibilitySubrole"), selector("isEqualToString:"), native_string("AXTableRow")) != 0 as uint8)
+    let cell = send_arg(object(row, "accessibilityChildren"), selector("objectAtIndex:"), 0 as uint)
+    let row_span = native_span(cell, "accessibilityRowIndexRange")
+    let column_span = native_span(cell, "accessibilityColumnIndexRange")
+    assert(row_span[0] == 49999 as uint && row_span[1] == 1 as uint)
+    assert(column_span[0] == 3 as uint && column_span[1] == 1 as uint)
+    assert(host.peer_count() == 3 && source.requested == 2)
+    assert(compare(row, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRowIndexRange")) == 0 as uint8)
+    assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityIndex")) == 0 as uint8)
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityRowCount:")) == 0 as uint8)
+    // Reread live model metadata without rebuilding peers or scanning children.
+    source.rows = 0; source.columns = 0; source.position = 7; source.column = 1
+    assert(object(root, "accessibilityRowCount") == 0 as uint && object(root, "accessibilityColumnCount") == 0 as uint)
+    assert(object(row, "accessibilityIndex") == 7 as uint)
+    let moved = native_span(cell, "accessibilityColumnIndexRange")
+    assert(moved[0] == 1 as uint && moved[1] == 1 as uint)
+    source.position = null; source.column = -1; source.columns = -1
+    assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRowIndexRange")) == 0 as uint8)
+    assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityColumnIndexRange")) == 0 as uint8)
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityColumnCount")) == 0 as uint8)
+    let absent = native_span(cell, "accessibilityRowIndexRange")
+    assert(absent[0] == 9223372036854775807 as uint && absent[1] == 0 as uint)
+    let retained = object(cell, "retain")
+    host.remove()
+    let detached = native_span(cell, "accessibilityColumnIndexRange")
+    assert(detached[0] == 9223372036854775807 as uint && detached[1] == 0 as uint)
+    assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityColumnIndexRange")) == 0 as uint8)
+    assert(source.requested == 2)
+    send_void(retained, selector("release")); send_void(pool, selector("drain"))
+}
+test "AppKit collection counts and cell positions stay lazy live and safe after detachment" { verify_collection_positions() }
+
+func verify_outline_positions() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource(); source.row_role = AX.Role.tree_item
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let row = send_arg(object(host.root_handle(), "accessibilityChildren"), selector("objectAtIndex:"), 49999 as uint)
+    assert(compare(object(row, "accessibilitySubrole"), selector("isEqualToString:"), native_string("AXOutlineRow")) != 0 as uint8)
+    assert(object(row, "accessibilityIndex") == 49999 as uint)
+    assert(compare(row, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityDisclosureLevel")) != 0 as uint8)
+    assert(object(row, "accessibilityDisclosureLevel") == 0 as uint)
+    source.level = 3
+    assert(object(row, "accessibilityDisclosureLevel") == 2 as uint)
+    source.position = null
+    assert(object(row, "accessibilityIndex") == 2 as uint)
+    source.row_role = AX.Role.list_item
+    assert(object(row, "accessibilitySubrole") == 0 as uint)
+    assert(compare(row, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityDisclosureLevel")) == 0 as uint8)
+    source.row_role = AX.Role.text
+    assert(compare(row, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityIndex")) == 0 as uint8)
+    assert(source.requested == 1 && host.peer_count() == 2)
+    host.remove(); send_void(pool, selector("drain"))
+}
+test "AppKit outline indices use model positions and zero based indentation only on tree rows" { verify_outline_positions() }
+
+func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); verify_collection_positions(); verify_outline_positions(); print("AppKit accessibility : OK (sans fenêtre)") }

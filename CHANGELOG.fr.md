@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- AppKit expose les dimensions des collections, les indices de lignes, les niveaux d’arbre et les plages de cellules à la demande, sans parcourir les enfants. Tests natifs sans fenêtre ; navigation complète des collections avec un lecteur d’écran à qualifier.
+
 - Les présentateurs personnalisés peuvent préciser l’origine logique de leur source accessible. AppKit actualise le rectangle racine au déplacement ou redimensionnement de l’hôte, sans décaler deux fois les descendants ni parcourir la collection. Tests natifs sans fenêtre ; placement dans une vraie fenêtre à qualifier.
 
 - AppKit raccorde la sélection textuelle contiguë des champs simples et multilignes : conversion UTF-16/graphèmes, texte sélectionné et longueur en lecture seule, plages invalides refusées et ancre inversée conservée. Échanges natifs éprouvés sans fenêtre ; parcours lecteur d’écran et géométrie textuelle à qualifier.

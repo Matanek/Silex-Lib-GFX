@@ -100,3 +100,22 @@ ne sont pas exposées : le contrat de `Source` décrit une seule plage.
 
 Les tests natifs vérifient ces échanges sans fenêtre sur macOS ARM64 et Intel.
 Le parcours avec lecteur d’écran et la géométrie du texte restent à qualifier.
+
+## Situer les lignes et cellules sur macOS
+
+AppKit lit les nombres de lignes et de colonnes déclarés par la source sans
+demander ses enfants. Les lignes de tableau et d’arbre portent leurs sous-rôles
+natifs. L’index d’une ligne utilise `row_index` lorsqu’il est fourni, sinon
+`index` ; l’ordre des frères d’un arbre ne remplace donc pas sa position dans
+le modèle. Le niveau d’arbre, compté depuis 1 dans la source, devient une
+indentation native comptée depuis 0.
+
+Chaque cellule expose séparément sa plage de ligne et sa plage de colonne,
+avec une longueur de 1. Ces propriétés sont en lecture seule ; les valeurs
+absentes ou négatives ne sont pas annoncées. Les lectures suivent les valeurs
+courantes de la source et ne parcourent pas les lignes. Un pair détaché ne
+conserve pas une ancienne position.
+
+Ces échanges disposent de tests natifs sans fenêtre. Les tableaux natifs de
+lignes/colonnes, les propriétés de tri et la navigation complète des collections
+avec un lecteur d’écran restent à raccorder et qualifier.

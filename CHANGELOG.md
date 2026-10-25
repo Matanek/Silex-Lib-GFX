@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- AppKit exposes collection dimensions, row indices, outline levels and cell ranges on demand without scanning children. Headless native tests cover these properties; complete screen-reader collection navigation remains to be qualified.
+
 - Custom presenters can specify their accessibility source’s logical origin. AppKit updates the root frame when the host moves or resizes, without translating descendants twice or traversing the collection. Native headless tests cover the exchange; placement in a real window remains to be qualified.
 
 - AppKit connects contiguous text selection in single-line and multiline fields: UTF-16/grapheme conversion, read-only selected text and length, invalid-range rejection and reversed-anchor preservation. Native exchanges are tested without a window; screen reader paths and text geometry remain under qualification.

@@ -95,3 +95,21 @@ Multiple selections are not exposed: the `Source` contract describes one span.
 
 Headless native tests verify these exchanges on macOS ARM64 and Intel. Screen
 reader paths and text geometry still need qualification.
+
+## Locate rows and cells on macOS
+
+AppKit reads the row and column counts declared by the source without
+requesting its children. Table and outline rows carry their native subroles.
+A row’s index uses `row_index` when supplied, otherwise `index`; a tree’s
+sibling order therefore does not replace its position in the model. Tree
+levels, counted from 1 in the source, become native indentation counted
+from 0.
+
+Each cell separately exposes its row range and column range, both with a
+length of 1. These properties are read-only; absent or negative values are
+not advertised. Queries follow the current source values without scanning
+rows. Detached peers do not retain an old position.
+
+Headless native tests cover these exchanges. Native row/column arrays, sort
+properties and complete screen-reader navigation of collections still need
+to be connected and qualified.

@@ -156,6 +156,10 @@ package nocopy class Host {
         if !self.active { return 0 as uint }
         if let element = self.source.read(peer.id) {
             if method == selector("accessibilityRole") { return string(role(element.role)) }
+            if method == selector("accessibilitySubrole") {
+                if let name = row_subrole(element) { return string(name) }
+                return 0 as uint
+            }
             if method == selector("accessibilityLabel") || method == selector("accessibilityTitle") { return string(element.name) }
             if method == selector("accessibilityHelp") { return string(element.description) }
             if method == selector("accessibilityIdentifier") { return string(element.id) }
@@ -249,6 +253,24 @@ package nocopy class Host {
         }
         return 0 as int64
     }
+    // Metadata is read only on a native query, never per frame or by scanning
+    // children. Model row positions can differ from tree sibling indices.
+    module func collection_number(peer:Peer, method:uint) int64 {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if let value = collection_number(element, method) { return value as int64 }
+            }
+        }
+        return 9223372036854775807 as int64 // NSNotFound.
+    }
+    module func cell_span(peer:Peer, method:uint) uint[2] {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if let index = cell_index(element, method) { return [index as uint, 1] }
+            }
+        }
+        return [9223372036854775807, 0]
+    }
     module func text_span(peer:Peer) uint[2] {
         if self.active {
             if let element = self.source.read(peer.id) {
@@ -321,6 +343,14 @@ package nocopy class Host {
             if method == selector("accessibilityMaxValue") { return element.maximum != null }
             if method == selector("accessibilityOrientation") {
                 return element.role == AX.Role.slider || element.role == AX.Role.radio_group
+            }
+            if method == selector("accessibilitySubrole") { return row_subrole(element) != null }
+            if method == selector("accessibilityRowCount") || method == selector("accessibilityColumnCount") ||
+                method == selector("accessibilityIndex") || method == selector("accessibilityDisclosureLevel") {
+                return collection_number(element, method) != null
+            }
+            if method == selector("accessibilityRowIndexRange") || method == selector("accessibilityColumnIndexRange") {
+                return cell_index(element, method) != null
             }
             // Do not advertise inherited setters or actions which would only
             // update AppKit storage and bypass the application's source.
@@ -461,15 +491,23 @@ func read_text_length(native:uint, method:uint) int64 {
     var host = C.object_from_address<Host>(peer.owner)
     return host.text_length(peer)
 }
-func forward_text(native:uint, method:uint, invocation:uint) {
+func read_collection_number(native:uint, method:uint) int64 {
+    let address = context(native); if address == 0 as uint { return 9223372036854775807 as int64 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.collection_number(peer, method)
+}
+func forward_range(native:uint, method:uint, invocation:uint) {
     let operation = object(invocation, "selector")
-    if operation == selector("accessibilitySelectedTextRange") {
+    if operation == selector("accessibilitySelectedTextRange") || operation == selector("accessibilityRowIndexRange") ||
+        operation == selector("accessibilityColumnIndexRange") {
         var span:uint[2] = [9223372036854775807, 0]
         let address = context(native)
         if address != 0 as uint {
             var peer = C.object_from_address<Peer>(address)
             var host = C.object_from_address<Host>(peer.owner)
-            span = host.text_span(peer)
+            if operation == selector("accessibilitySelectedTextRange") { span = host.text_span(peer) }
+            else { span = host.cell_span(peer, operation) }
         }
         send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(span)))
     } elif operation == selector("setAccessibilitySelectedTextRange:") {
@@ -483,6 +521,35 @@ func forward_text(native:uint, method:uint, invocation:uint) {
         let inherited = C.address_bits(method_implementation(C.pointer_bits(system_class("NSAccessibilityElement")), C.pointer_bits(method)))
         C.call<func(uint,uint,uint) void>(inherited, native, method, invocation)
     }
+}
+
+func collection_number(element:AX.Element, method:uint) int? {
+    var result:int? = null
+    if method == selector("accessibilityRowCount") { result = element.row_count }
+    elif method == selector("accessibilityColumnCount") { result = element.column_count }
+    elif method == selector("accessibilityIndex") &&
+        (element.role == AX.Role.row || element.role == AX.Role.list_item || element.role == AX.Role.tree_item) {
+        result = element.row_index ?? element.index
+    } elif method == selector("accessibilityDisclosureLevel") && element.role == AX.Role.tree_item {
+        // Source levels are one-based; native outline indentation starts at 0.
+        result = 0
+        if element.level > 0 { result = element.level - 1 }
+    }
+    if let value = result { if value >= 0 { return value } }
+    return null
+}
+func cell_index(element:AX.Element, method:uint) int? {
+    if element.role != AX.Role.cell { return null }
+    var result:int? = null
+    if method == selector("accessibilityRowIndexRange") { result = element.row_index }
+    elif method == selector("accessibilityColumnIndexRange") { result = element.column_index }
+    if let value = result { if value >= 0 { return value } }
+    return null
+}
+func row_subrole(element:AX.Element) str? {
+    if element.role == AX.Role.row { return "AXTableRow" }
+    if element.role == AX.Role.tree_item { return "AXOutlineRow" }
+    return null
 }
 
 // Conversion runs only for an accessibility query/action on this text control,
@@ -573,20 +640,26 @@ func element_class() uint {
     if type != 0 as uint { return type }
     type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
     let property:func(uint,uint) uint = read_property
-    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+    for name in ["accessibilityRole", "accessibilitySubrole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
         add(type, name, C.function_address(property), "@@:")
     }
     let orientation:func(uint,uint) int64 = read_orientation
     add(type, "accessibilityOrientation", C.function_address(orientation), "q@:")
     let length:func(uint,uint) int64 = read_text_length
     add(type, "accessibilityNumberOfCharacters", C.function_address(length), "q@:")
+    let metadata:func(uint,uint) int64 = read_collection_number
+    for name in ["accessibilityRowCount", "accessibilityColumnCount", "accessibilityIndex", "accessibilityDisclosureLevel"] {
+        add(type, name, C.function_address(metadata), "q@:")
+    }
     // Foundation marshals NSRange itself. Use the runtime's forwarding IMP,
     // not a scalar callback masquerading as an aggregate-returning function.
     // NSRange is two NSUInteger (16 bytes) on both distributed macOS targets.
     let trampoline = C.address_bits(method_implementation(C.pointer_bits(system_class("NSObject")), C.pointer_bits(selector("silexUnimplementedTextRange"))))
-    add(type, "accessibilitySelectedTextRange", trampoline, "{_NSRange=QQ}@:")
+    for name in ["accessibilitySelectedTextRange", "accessibilityRowIndexRange", "accessibilityColumnIndexRange"] {
+        add(type, name, trampoline, "{_NSRange=QQ}@:")
+    }
     add(type, "setAccessibilitySelectedTextRange:", trampoline, "v@:{_NSRange=QQ}")
-    let forward:func(uint,uint,uint) void = forward_text
+    let forward:func(uint,uint,uint) void = forward_range
     add(type, "forwardInvocation:", C.function_address(forward), "v@:@")
     let state:func(uint,uint) uint8 = read_state
     for name in ["isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "isAccessibilitySelected", "isAccessibilityExpanded"] {
