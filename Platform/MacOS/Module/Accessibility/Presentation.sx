@@ -1,5 +1,6 @@
 use GFX.Accessibility as AX
 use STD.Collections.Dictionary
+use STD.Math
 use STD.Text.Grapheme
 use STD.Text.UTF8
 use Interop.C
@@ -35,15 +36,16 @@ package nocopy class Host {
     private var active:bool = true
     private var dirty:bool = false
     private var height:float
+    private var origin:Math.Vec2
     private let flipped:bool
     private var wake_event:uint32 = 0 as uint32
 
     // view/window may be zero for the owning headless AppKit tests. This never
     // initializes NSApplication, SDL or a native window.
-    init(source:AX.Source, view:uint, window:uint, height:float, flipped:bool) {
+    init(source:AX.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2) {
         let pool = object(system_class("NSAutoreleasePool"), "new")
         self.source = source; self.view = view; self.window = window
-        self.height = height; self.flipped = flipped
+        self.height = height; self.flipped = flipped; self.origin = origin
         self.previous_children = object(view, "accessibilityChildren")
         retain(self.previous_children)
         self.previous_element = read_bool(view, selector("isAccessibilityElement"))
@@ -62,11 +64,23 @@ package nocopy class Host {
     }
     func peer_count() int { return self.peers.count() }
 
-    func synchronize(height:float) bool {
+    func synchronize(height:float, origin:Math.Vec2?) bool {
         if !self.active { return false }
+        let next_origin = origin ?? self.origin
+        let moved = self.height != height || self.origin != next_origin
         self.height = height
+        self.origin = next_origin
         let pool = object(system_class("NSAutoreleasePool"), "new")
         self.refresh_root()
+        // Presentation movement affects only the root's view-relative frame.
+        // Descendants remain parent-relative: never enumerate the collection.
+        if moved {
+            if let id = self.root_id {
+                if let peer = self.peers.find(id) {
+                    if let element = self.source.read(id) { self.frame(peer, element); notify(peer.handle, "AXLayoutChanged") }
+                }
+            }
+        }
         let changed = self.dirty
         self.dirty = false
         for change in self.source.changes() {
@@ -125,12 +139,15 @@ package nocopy class Host {
         var x = element.bounds.x; var y = element.bounds.y
         var height = self.height
         var flipped = self.flipped
+        var nested = false
         if let parent = element.parent {
             if let description = self.source.read(parent) {
                 x -= description.bounds.x; y -= description.bounds.y
                 height = description.bounds.height; flipped = false
+                nested = true
             }
         }
+        if !nested { x += self.origin.x; y += self.origin.y }
         if !flipped { y = height - y - element.bounds.height }
         set_frame(peer.handle, x, y, element.bounds.width, element.bounds.height)
     }

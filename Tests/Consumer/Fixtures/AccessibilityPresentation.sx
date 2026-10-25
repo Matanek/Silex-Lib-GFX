@@ -1,5 +1,6 @@
 use GFX.Window
 use GFX.Accessibility
+use STD.Math
 
 // Compile the custom-presenter surface across the package boundary. This
 // fixture deliberately creates no Window and does not start a native host.
@@ -8,5 +9,12 @@ func present(window:&Window.Window, source:Accessibility.Source) bool {
     let changed = window.update_accessibility()
     window.set_accessibility_source(null)
     return changed
+}
+func present_at(window:&Window.Window, source:Accessibility.Source, origin:Math.Vec2) bool {
+    window.set_accessibility_source(source, origin:origin)
+    let changed = window.update_accessibility(origin:Math.Vec2(origin.x + 12.0, origin.y - 6.0))
+    let resized = window.update_accessibility() // Preserve that origin.
+    window.set_accessibility_source(null)
+    return changed || resized
 }
 func main() {}

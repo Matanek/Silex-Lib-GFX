@@ -1,6 +1,7 @@
 {
   "sources": "Tests",
   "dependencies": {
-    "GFX": "^0.38.2"
+    "GFX": "^0.38.2",
+    "STD": "^0.22.0"
   }
 }

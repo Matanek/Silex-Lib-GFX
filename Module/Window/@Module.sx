@@ -176,18 +176,20 @@ public class Window {
 
     // For custom presenters. Viewer obtains this source from Canvas.Session.
     // Replacing or clearing it detaches the previous native hierarchy first.
-    func set_accessibility_source(source:Accessibility.Source?) {
+    func set_accessibility_source(source:Accessibility.Source?, origin:Math.Vec2 = Math.Vec2()) {
         if var presentation = self.accessible_presentation { presentation.remove() }
         self.accessible_presentation = null
         if var semantics = source {
-            self.accessible_presentation = AccessiblePresentation.for_window(semantics, self.presentation_handle(), self.size().y)
+            self.accessible_presentation = AccessiblePresentation.for_window(semantics, self.presentation_handle(), self.size().y, origin)
         }
     }
 
     // Call after updating the presented content, on its UI thread. True means
     // a native accessibility action changed the source since the previous call.
-    func update_accessibility() bool {
-        if var presentation = self.accessible_presentation { return presentation.synchronize(self.size().y) }
+    // origin, when supplied, is the drawing origin in logical window coordinates.
+    // Omitting it keeps the currently presented origin, including after a resize.
+    func update_accessibility(origin:Math.Vec2? = null) bool {
+        if var presentation = self.accessible_presentation { return presentation.synchronize(self.size().y, origin) }
         return false
     }
 

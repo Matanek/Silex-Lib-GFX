@@ -11,6 +11,7 @@ class Source:AX.Source {
     var pressed:int = 0
     var requested:int = 0
     var button_y:float = 24.0
+    var root_bounds:AX.Bounds = AX.Bounds(0.0, 0.0, 400.0, 200.0)
     var pending:AX.Change[] = []
     var checked:bool = false
     var second_radio:bool = false
@@ -32,7 +33,7 @@ class Source:AX.Source {
     func root() str? { return "root" }
     func focused() str? { if self.focus { return "field" } return null }
     func read(id:str) AX.Element? {
-        if id == "root" { return AX.Element(id:id, child_count:50000, bounds:AX.Bounds(0.0, 0.0, 400.0, 200.0)) }
+        if id == "root" { return AX.Element(id:id, child_count:50000, bounds:self.root_bounds) }
         if id == "button" {
             return AX.Element(id:id, parent:"root", role:AX.Role.button, name:"Apply", actions:[AX.Action.activate],
                 bounds:AX.Bounds(12.0, self.button_y, 80.0, 30.0))
@@ -452,4 +453,44 @@ func verify_multiline_selection() {
 }
 test "AppKit multiline selection includes line breaks and safely rereads a shortened source" { verify_multiline_selection() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); print("AppKit accessibility : OK (sans fenêtre)") }
+func verify_geometry() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    source.root_bounds = AX.Bounds(40.0, 30.0, 300.0, 120.0)
+    var host = Presentation(source, 0 as uint, 0 as uint, 300.0, false)
+    let root = host.root_handle()
+    let children = object(root, "accessibilityChildren")
+    let button = send_arg(children, selector("objectAtIndex:"), 0 as uint)
+    let initial = frame(root)
+    assert(initial[0] == 40.0 && initial[1] == 150.0)
+    let child_frame = frame(button)
+    assert(child_frame[0] == -28.0 && child_frame[1] == 96.0)
+    assert(!host.synchronize(360.0))
+    let resized = frame(root)
+    assert(resized[0] == 40.0 && resized[1] == 210.0)
+    assert(!host.synchronize(360.0, Math.Vec2(25.0, -12.0)))
+    let placed = frame(root)
+    assert(placed[0] == 65.0 && placed[1] == 222.0 && placed[2] == 300.0 && placed[3] == 120.0)
+    assert(!host.synchronize(400.0)) // Keep the last origin when omitted.
+    assert(frame(root)[1] == 262.0)
+    assert(frame(button) == child_frame) // Translation belongs to the root only.
+    assert(host.root_handle() == root && host.peer_count() == 2 && source.requested == 1)
+    assert(source.read("root")!.bounds == source.root_bounds)
+    // Source bounds and presentation movement may happen in the same update.
+    source.root_bounds = AX.Bounds(10.0, 20.0, 300.0, 120.0)
+    source.pending = [AX.Change("root", AX.ChangeKind.bounds), AX.Change("button", AX.ChangeKind.bounds)]
+    assert(!host.synchronize(400.0, Math.Vec2(-8.0, 15.0)))
+    assert(frame(root)[0] == 2.0 && frame(root)[1] == 245.0)
+    assert(frame(button)[0] == 2.0 && frame(button)[1] == 86.0)
+    host.remove(); send_void(pool, selector("drain"))
+    let flipped_pool = object(system_class("NSAutoreleasePool"), "new")
+    var flipped_host = Presentation(source, 0 as uint, 0 as uint, 400.0, true, Math.Vec2(25.0, 12.0))
+    let flipped_root = flipped_host.root_handle()
+    assert(frame(flipped_root)[0] == 35.0 && frame(flipped_root)[1] == 32.0)
+    assert(!flipped_host.synchronize(500.0, Math.Vec2(-4.0, 18.0)))
+    assert(frame(flipped_root)[0] == 6.0 && frame(flipped_root)[1] == 38.0)
+    flipped_host.remove(); send_void(flipped_pool, selector("drain"))
+}
+test "AppKit geometry follows host height and origin without double translating descendants" { verify_geometry() }
+
+func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); print("AppKit accessibility : OK (sans fenêtre)") }

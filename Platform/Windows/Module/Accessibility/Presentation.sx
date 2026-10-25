@@ -1,9 +1,10 @@
 use GFX.Accessibility
+use STD.Math
 
 // The Windows bridge is tracked separately; this does not claim UIA support.
 package nocopy class Host {
-    init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool) {}
-    func synchronize(height:float) bool { return false }
+    init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2) {}
+    func synchronize(height:float, origin:Math.Vec2?) bool { return false }
     func remove() {}
     func root_handle() uint { return 0 as uint }
     func peer_count() int { return 0 }

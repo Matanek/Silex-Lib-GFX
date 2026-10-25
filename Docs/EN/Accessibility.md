@@ -41,6 +41,13 @@ has changed the source since the previous call: refresh the drawing and text
 input target in that case. The window retains one reader and detaches its peers
 before destruction.
 
+For an offset drawing, pass `origin:Math.Vec2(x, y)` to
+`set_accessibility_source`: this is its origin in logical window coordinates,
+with Y pointing down. Pass a new origin to `update_accessibility(origin:...)`
+when it moves; omitting this argument preserves the previous origin. Resizing
+updates native bounds even when the source reports no change. Descendants stay
+relative to their parents; moving the presentation does not traverse the collection.
+
 `GFX.Viewer` performs these steps automatically for a `Canvas.Session` providing
 `accessibility_source()`. GFX.UI sessions already supply it. Applications need
 no additional setting or native handle.

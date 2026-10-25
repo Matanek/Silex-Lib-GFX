@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Les présentateurs personnalisés peuvent préciser l’origine logique de leur source accessible. AppKit actualise le rectangle racine au déplacement ou redimensionnement de l’hôte, sans décaler deux fois les descendants ni parcourir la collection. Tests natifs sans fenêtre ; placement dans une vraie fenêtre à qualifier.
+
 - AppKit raccorde la sélection textuelle contiguë des champs simples et multilignes : conversion UTF-16/graphèmes, texte sélectionné et longueur en lecture seule, plages invalides refusées et ancre inversée conservée. Échanges natifs éprouvés sans fenêtre ; parcours lecteur d’écran et géométrie textuelle à qualifier.
 
 - AppKit expose les relations des libellés visibles et transmet les setters de sélection/dépliage aux actions annoncées par la source. Les appels répétés, désactivés, non pris en charge ou détachés ne modifient pas l’application. Les tests natifs sans fenêtre ne qualifient pas la navigation des collections avec un lecteur d’écran.

@@ -42,6 +42,14 @@ action native a changé la source depuis l’appel précédent : le présentateu
 doit alors rafraîchir son dessin et sa cible de saisie. La fenêtre conserve un
 lecteur, puis détache ses pairs avant sa destruction.
 
+Si le dessin est décalé, passez `origin:Math.Vec2(x, y)` à
+`set_accessibility_source` : il désigne son origine dans la fenêtre, en unités
+logiques, avec Y vers le bas. Passez une nouvelle origine à
+`update_accessibility(origin:...)` lorsqu’elle change ; sans cet argument,
+l’origine précédente est conservée. Le redimensionnement actualise les bornes
+natives même si la source ne signale aucun changement. Les descendants restent
+relatifs à leurs parents ; déplacer la présentation ne parcourt pas la collection.
+
 `GFX.Viewer` réalise automatiquement ces étapes pour une `Canvas.Session`
 fournissant `accessibility_source()`. Les sessions GFX.UI la fournissent déjà.
 Aucun réglage ou handle natif n’est nécessaire dans l’application.
