@@ -51,7 +51,7 @@ modification du champ, géométrie et invalidation des pairs détachés. Les enf
 sont demandés à la source par index. Leurs tableaux AppKit restent paresseux :
 leur taille ou leur copie ne matérialise pas toutes les lignes. Cette première
 intégration ne constitue pas encore une qualification de tous les contrôles,
-de la sélection de texte native ou des collections avec lecteur d’écran.
+du parcours de sélection textuelle ou des collections avec lecteur d’écran.
 
 Les cases à cocher et boutons radio exposent leur état par leur valeur native ;
 l’activation réutilise l’action de la source. Les groupes radio portent le rôle
@@ -73,3 +73,22 @@ Chaque appel vérifie sa direction, la disponibilité du contrôle et le changem
 d’état demandé. Il ne modifie pas une copie d’état dans AppKit. Les tests natifs
 couvrent ces échanges sans fenêtre ; ils ne qualifient pas à eux seuls la
 navigation d’une collection dans un lecteur d’écran.
+
+## Sélectionner du texte depuis macOS
+
+Les champs simples et multilignes exposent leur sélection contiguë, le texte
+sélectionné et la longueur du contenu. Les positions natives comptent des
+unités UTF-16 ; `Source` conserve ses index en graphèmes Unicode. Une demande
+qui coupe un graphème sélectionne celui-ci en entier. Un caret demandé dans
+un graphème se place à son début. Les plages hors du texte ou marquées
+`NSNotFound` sont ignorées, sans dépassement arithmétique.
+
+Une lecture ne change pas le sens de la sélection de l’application. Répéter
+la même plage native conserve aussi une ancre inversée. Les contrôles
+désactivés ou sans action `set_text_selection` refusent les changements.
+Le texte sélectionné et la longueur sont en lecture seule ; la modification
+du contenu continue d’utiliser la valeur du champ. Les sélections multiples
+ne sont pas exposées : le contrat de `Source` décrit une seule plage.
+
+Les tests natifs vérifient ces échanges sans fenêtre sur macOS ARM64 et Intel.
+Le parcours avec lecteur d’écran et la géométrie du texte restent à qualifier.

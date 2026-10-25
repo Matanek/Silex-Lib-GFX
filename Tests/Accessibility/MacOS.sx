@@ -24,6 +24,11 @@ class Source:AX.Source {
     var branch_expanded:bool = false
     var reverse_actions:bool = true
     var branch_requests:int = 0
+    var anchor:int = 0
+    var cursor:int = 0
+    var selection_allowed:bool = true
+    var selection_requests:int = 0
+    var multiline:bool = false
     func root() str? { return "root" }
     func focused() str? { if self.focus { return "field" } return null }
     func read(id:str) AX.Element? {
@@ -34,8 +39,13 @@ class Source:AX.Source {
         }
         if Text.starts_with(id, "row:") { return AX.Element(id:id, parent:"root", role:AX.Role.text) }
         if id == "field" {
-            return AX.Element(id:id, parent:"root", role:AX.Role.text_field, name:"Name", value:self.value,
-                focused:self.focus, editable:true, labelled_by:self.field_title, actions:[AX.Action.focus, AX.Action.set_value])
+            var actions:AX.Action[] = [AX.Action.focus, AX.Action.set_value]
+            if self.selection_allowed { actions.append(AX.Action.set_text_selection) }
+            var role = AX.Role.text_field
+            if self.multiline { role = AX.Role.text_area }
+            return AX.Element(id:id, parent:"root", role:role, name:"Name", value:self.value,
+                focused:self.focus, editable:true, enabled:self.enabled, labelled_by:self.field_title,
+                selection_anchor:self.anchor, selection_cursor:self.cursor, multiline:self.multiline, actions:actions)
         }
         if id == "label" { return AX.Element(id:id, parent:"root", role:AX.Role.text, name:"Name", labels:self.title_target) }
         if id == "branch" {
@@ -102,6 +112,10 @@ class Source:AX.Source {
         }
         if id == "button" && request.action == AX.Action.activate { self.pressed++; return true }
         if id == "field" && request.action == AX.Action.focus { self.focus = true; return true }
+        if id == "field" && request.action == AX.Action.set_text_selection {
+            self.selection_requests++; self.anchor = request.anchor; self.cursor = request.cursor
+            return true
+        }
         if id == "field" && request.action == AX.Action.set_value {
             if let text = request.text { self.value = text; return true }
         }
@@ -121,6 +135,7 @@ let send_void = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, na
 let compare = C.function<func(uint,uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let read_double = C.function<func(uint,uint) float64>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let make_number = C.function<func(uint,uint,float64) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let argument = C.function<func(uint,uint,uint,int) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
 func selector(name:str) uint { return get_selector(C.terminated_pointer(name)) }
 func object(value:uint, method:str) uint { return send(value, selector(method)) }
 func system_class(name:str) uint { return get_class(C.terminated_pointer(name)) }
@@ -157,7 +172,6 @@ func verify_appkit() {
     assert(object(field, "accessibilityParent") == root)
     assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityValue:")) != 0 as uint8)
     assert(compare(button, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityValue:")) == 0 as uint8)
-    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelectedTextRange:")) == 0 as uint8)
     assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityPerformDelete")) == 0 as uint8)
     assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityFrame")) != 0 as uint8)
     let initial = frame(button)
@@ -340,4 +354,102 @@ func verify_selection_expansion() {
 
 test "AppKit selection and expansion setters dispatch only advertised state transitions" { verify_selection_expansion() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); print("AppKit accessibility : OK (sans fenêtre)") }
+func selection_span(element:uint) uint[2] {
+    let method = selector("accessibilitySelectedTextRange")
+    let signature = send_arg(element, selector("methodSignatureForSelector:"), method)
+    let invocation = send_arg(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), signature)
+    set_object(invocation, selector("setSelector:"), method); set_object(invocation, selector("setTarget:"), element)
+    send_void(invocation, selector("invoke"))
+    var span:uint[2] = [0, 0]
+    set_object(invocation, selector("getReturnValue:"), C.address_bits(C.mutable_pointer(span)))
+    return span
+}
+func select_span(element:uint, start:uint, length:uint) {
+    let method = selector("setAccessibilitySelectedTextRange:")
+    let signature = send_arg(element, selector("methodSignatureForSelector:"), method)
+    let invocation = send_arg(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), signature)
+    set_object(invocation, selector("setSelector:"), method); set_object(invocation, selector("setTarget:"), element)
+    var span:uint[2] = [start, length]
+    argument(invocation, selector("setArgument:atIndex:"), C.address_bits(C.mutable_pointer(span)), 2)
+    send_void(invocation, selector("invoke"))
+}
+func verify_text_selection() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source()
+    source.value = "Aé👩‍💻中Z" // UTF-16 boundaries: 0, 1, 3, 8, 9, 10.
+    source.anchor = 4; source.cursor = 1
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let field = send_arg(object(host.root_handle(), "accessibilityChildren"), selector("objectAtIndex:"), 49999 as uint)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelectedTextRange:")) != 0 as uint8)
+    assert(object(field, "accessibilityNumberOfCharacters") == 10 as uint)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelectedText:")) == 0 as uint8)
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("accessibilitySelectedTextRanges")) == 0 as uint8)
+    let initial = selection_span(field)
+    assert(initial[0] == 1 as uint && initial[1] == 8 as uint)
+    assert(compare(object(field, "accessibilitySelectedText"), selector("isEqualToString:"), native_string("é👩‍💻中")) != 0 as uint8)
+    // Reading and repeating a range preserve an application's reversed anchor.
+    select_span(field, 1 as uint, 8 as uint)
+    assert(source.anchor == 4 && source.cursor == 1 && source.selection_requests == 0)
+    // A partial combining mark / surrogate / ZWJ sequence selects whole graphemes.
+    select_span(field, 2 as uint, 3 as uint)
+    assert(source.anchor == 1 && source.cursor == 3)
+    let whole = selection_span(field)
+    assert(whole[0] == 1 as uint && whole[1] == 7 as uint)
+    select_span(field, 5 as uint, 0 as uint)
+    assert(source.anchor == 2 && source.cursor == 2)
+    assert(compare(object(field, "accessibilitySelectedText"), selector("isEqualToString:"), native_string("")) != 0 as uint8)
+    assert(host.synchronize(200.0) && !host.synchronize(200.0))
+    let requests = source.selection_requests
+    select_span(field, 11 as uint, 0 as uint)
+    select_span(field, 0 as uint, 18446744073709551615)
+    select_span(field, 9223372036854775807 as uint, 0 as uint)
+    assert(source.selection_requests == requests)
+    source.selection_allowed = false
+    assert(compare(field, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilitySelectedTextRange:")) == 0 as uint8)
+    select_span(field, 0 as uint, 1 as uint)
+    source.selection_allowed = true; source.enabled = false
+    select_span(field, 0 as uint, 1 as uint)
+    assert(source.selection_requests == requests)
+    source.enabled = true; source.value = ""; source.anchor = 0; source.cursor = 0
+    assert(object(field, "accessibilityNumberOfCharacters") == 0 as uint)
+    let empty = selection_span(field); assert(empty[0] == 0 as uint && empty[1] == 0 as uint)
+    select_span(field, 0 as uint, 1 as uint)
+    assert(source.selection_requests == requests)
+    let retained = object(field, "retain"); host.remove()
+    let detached = selection_span(field)
+    assert(detached[0] == 9223372036854775807 as uint && detached[1] == 0 as uint)
+    select_span(field, 0 as uint, 0 as uint)
+    assert(source.selection_requests == requests)
+    send_void(retained, selector("release")); send_void(pool, selector("drain"))
+}
+test "AppKit text selection translates UTF-16 and complete graphemes without changing reversed anchors" { verify_text_selection() }
+
+func verify_multiline_selection() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = Source(); source.multiline = true; source.value = "A\né👩‍💻"
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let children = object(host.root_handle(), "accessibilityChildren")
+    let field = send_arg(children, selector("objectAtIndex:"), 49999 as uint)
+    assert(compare(object(field, "accessibilityRole"), selector("isEqualToString:"), native_string("AXTextArea")) != 0 as uint8)
+    assert(object(field, "accessibilityNumberOfCharacters") == 9 as uint)
+    select_span(field, 1 as uint, 3 as uint)
+    assert(source.anchor == 1 && source.cursor == 3)
+    assert(compare(object(field, "accessibilitySelectedText"), selector("isEqualToString:"), native_string("\né")) != 0 as uint8)
+    source.value = "x"
+    let shortened = selection_span(field)
+    assert(shortened[0] == 1 as uint && shortened[1] == 0 as uint)
+    assert(source.anchor == 1 && source.cursor == 3) // Querying never edits Source.
+    source.value = ""
+    let empty = selection_span(field)
+    assert(empty[0] == 0 as uint && empty[1] == 0 as uint)
+    assert(compare(object(field, "accessibilitySelectedText"), selector("isEqualToString:"), native_string("")) != 0 as uint8)
+    let button = send_arg(children, selector("objectAtIndex:"), 0 as uint)
+    assert(compare(button, selector("isAccessibilitySelectorAllowed:"), selector("accessibilitySelectedTextRange")) == 0 as uint8)
+    let absent = selection_span(button)
+    assert(absent[0] == 9223372036854775807 as uint && absent[1] == 0 as uint)
+    assert(object(button, "accessibilitySelectedText") == 0 as uint)
+    host.remove(); send_void(pool, selector("drain"))
+}
+test "AppKit multiline selection includes line breaks and safely rereads a shortened source" { verify_multiline_selection() }
+
+func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); print("AppKit accessibility : OK (sans fenêtre)") }

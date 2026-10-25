@@ -49,7 +49,7 @@ On macOS, the first path covers roles/names/values, focus, button activation,
 field editing, geometry and invalidation of detached peers. Children are queried
 by index. Their AppKit arrays remain lazy: counting or copying them does not
 materialize every row. This first integration does not yet qualify every
-control, native text selection or collections with a screen reader.
+control, text-selection paths or collections with a screen reader.
 
 Checkboxes and radio buttons expose their state through their native value;
 activation reuses the source action. Radio groups use the corresponding AppKit
@@ -71,3 +71,20 @@ direction, control availability and requested state transition. It does not
 change a separate copy of state in AppKit. Headless native tests cover these
 exchanges; they do not by themselves qualify collection navigation with a
 screen reader.
+
+## Select text from macOS
+
+Single-line and multiline fields expose their contiguous selection, selected
+text and content length. Native positions count UTF-16 units; `Source` keeps
+Unicode grapheme indices. A request cutting through a grapheme selects that
+whole grapheme. A caret requested inside a grapheme moves to its start. Ranges
+outside the text or marked `NSNotFound` are ignored without arithmetic overflow.
+
+Reading does not change the application's selection direction. Repeating the
+same native span also preserves a reversed anchor. Disabled controls and those
+without the `set_text_selection` action reject changes. Selected text and
+content length are read-only; content edits continue to use the field's value.
+Multiple selections are not exposed: the `Source` contract describes one span.
+
+Headless native tests verify these exchanges on macOS ARM64 and Intel. Screen
+reader paths and text geometry still need qualification.

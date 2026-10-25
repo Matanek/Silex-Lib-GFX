@@ -1,5 +1,7 @@
 use GFX.Accessibility as AX
 use STD.Collections.Dictionary
+use STD.Text.Grapheme
+use STD.Text.UTF8
 use Interop.C
 use Interop.Boundary
 
@@ -74,7 +76,11 @@ package nocopy class Host {
                     peer.detach()
                     let removed = self.peers.remove(change.id)
                 } else {
+                    var event_name = notification(change.kind)
                     if let element = self.source.read(change.id) {
+                        if change.kind == AX.ChangeKind.selection && has_text_selection(element) {
+                            event_name = "AXSelectedTextChanged"
+                        }
                         self.frame(peer, element)
                         // A semantic checked-state change is a native value
                         // change for checkboxes and radio buttons.
@@ -82,7 +88,7 @@ package nocopy class Host {
                             notify(peer.handle, "AXValueChanged")
                         }
                     }
-                    notify(peer.handle, notification(change.kind))
+                    notify(peer.handle, event_name)
                 }
             }
         }
@@ -145,6 +151,17 @@ package nocopy class Host {
                 if let value = element.value { return string(value) }
                 return 0 as uint
             }
+            if method == selector("accessibilitySelectedText") {
+                if !has_text_selection(element) { return 0 as uint }
+                let text = element.value!
+                let offsets = Grapheme.boundaries(text)
+                let first = text_index(element.selection_anchor!, offsets.count() - 1)
+                let last = text_index(element.selection_cursor!, offsets.count() - 1)
+                var start = first; var end = last
+                if start > end { start = last; end = first }
+                let bytes = UTF8.bytes(text)
+                return string(C.string(@bytes[offsets[start]:offsets[end]]))
+            }
             if method == selector("accessibilityMinValue") {
                 if let value = element.minimum { return number(value) }
                 return 0 as uint
@@ -204,6 +221,48 @@ package nocopy class Host {
         return 0 as int64
     }
 
+    module func text_length(peer:Peer) int64 {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if has_text_selection(element) {
+                    let offsets = utf16_boundaries(element.value!)
+                    return offsets[offsets.count() - 1] as int64
+                }
+            }
+        }
+        return 0 as int64
+    }
+    module func text_span(peer:Peer) uint[2] {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if has_text_selection(element) { return selected_span(element, utf16_boundaries(element.value!)) }
+            }
+        }
+        return [9223372036854775807, 0] // NSNotFound, zero length.
+    }
+    module func select_text(peer:Peer, span:uint[2]) {
+        if !self.active { return }
+        if let element = self.source.read(peer.id) {
+            if !has_text_selection(element) || !supports(element, AX.Action.set_text_selection) { return }
+            let offsets = utf16_boundaries(element.value!)
+            let total = offsets[offsets.count() - 1]
+            // Subtraction checks the length without overflowing NSUInteger.
+            if span[0] > total || span[1] > total - span[0] { return }
+            var anchor = 0
+            while anchor + 1 < offsets.count() && offsets[anchor + 1] <= span[0] { anchor++ }
+            var cursor = anchor
+            if span[1] != 0 as uint {
+                let end = span[0] + span[1]
+                while cursor < offsets.count() - 1 && offsets[cursor] < end { cursor++ }
+            }
+            // NSRange has no direction: do not overwrite a reversed anchor
+            // when the client merely repeats the application's current span.
+            let previous = selected_span(element, offsets)
+            if previous[0] == offsets[anchor] && previous[1] == offsets[cursor] - offsets[anchor] { return }
+            let changed = self.perform(peer, AX.Request(AX.Action.set_text_selection, anchor:anchor, cursor:cursor))
+        }
+    }
+
     module func child_count(peer:Peer) uint {
         if self.active {
             if let element = self.source.read(peer.id) { return element.child_count as uint }
@@ -222,6 +281,11 @@ package nocopy class Host {
             if let action = action(method) {
                 return supports(element, action)
             }
+            if method == selector("setAccessibilitySelectedTextRange:") {
+                return has_text_selection(element) && supports(element, AX.Action.set_text_selection)
+            }
+            if method == selector("accessibilitySelectedTextRange") || method == selector("accessibilitySelectedText") ||
+                method == selector("accessibilityNumberOfCharacters") { return has_text_selection(element) }
             // AppKit asks whether a BOOL setter is available before it has
             // supplied a value. Check the exact direction again in set_state.
             if method == selector("setAccessibilitySelected:") {
@@ -374,6 +438,69 @@ func set_value(native:uint, method:uint, value:uint) {
     host.set_value(peer, value)
 }
 
+func read_text_length(native:uint, method:uint) int64 {
+    let address = context(native); if address == 0 as uint { return 0 as int64 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.text_length(peer)
+}
+func forward_text(native:uint, method:uint, invocation:uint) {
+    let operation = object(invocation, "selector")
+    if operation == selector("accessibilitySelectedTextRange") {
+        var span:uint[2] = [9223372036854775807, 0]
+        let address = context(native)
+        if address != 0 as uint {
+            var peer = C.object_from_address<Peer>(address)
+            var host = C.object_from_address<Host>(peer.owner)
+            span = host.text_span(peer)
+        }
+        send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(span)))
+    } elif operation == selector("setAccessibilitySelectedTextRange:") {
+        let address = context(native); if address == 0 as uint { return }
+        var span:uint[2] = [0, 0]
+        set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(span)), 2)
+        var peer = C.object_from_address<Peer>(address)
+        var host = C.object_from_address<Host>(peer.owner)
+        host.select_text(peer, span)
+    } else {
+        let inherited = C.address_bits(method_implementation(C.pointer_bits(system_class("NSAccessibilityElement")), C.pointer_bits(method)))
+        C.call<func(uint,uint,uint) void>(inherited, native, method, invocation)
+    }
+}
+
+// Conversion runs only for an accessibility query/action on this text control,
+// never per frame or across the semantic tree. No cached string or global state.
+func has_text_selection(element:AX.Element) bool {
+    return element.value != null && element.selection_anchor != null && element.selection_cursor != null
+}
+func text_index(index:int, count:int) int {
+    if index < 0 { return 0 }
+    if index > count { return count }
+    return index
+}
+func utf16_boundaries(text:str) uint[] {
+    let boundaries = Grapheme.boundaries(text)
+    var offsets:uint[] = [0]
+    var bytes = 0; var units = 0 as uint; var next = 1
+    for scalar in UTF8.scalars(text) {
+        if scalar <= 127 { bytes++ }
+        elif scalar <= 2047 { bytes += 2 }
+        elif scalar <= 65535 { bytes += 3 }
+        else { bytes += 4 }
+        units++
+        if scalar > 65535 { units++ }
+        if next < boundaries.count() && bytes == boundaries[next] { offsets.append(units); next++ }
+    }
+    return offsets
+}
+func selected_span(element:AX.Element, offsets:uint[]) uint[2] {
+    let anchor = text_index(element.selection_anchor!, offsets.count() - 1)
+    let cursor = text_index(element.selection_cursor!, offsets.count() - 1)
+    var start = anchor; var end = cursor
+    if start > end { start = cursor; end = anchor }
+    return [offsets[start], offsets[end] - offsets[start]]
+}
+
 func copy_children(native:uint, method:uint, zone:uint) uint { return object(native, "retain") }
 
 func supports(element:AX.Element, action:AX.Action) bool {
@@ -429,11 +556,21 @@ func element_class() uint {
     if type != 0 as uint { return type }
     type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
     let property:func(uint,uint) uint = read_property
-    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+    for name in ["accessibilityRole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
         add(type, name, C.function_address(property), "@@:")
     }
     let orientation:func(uint,uint) int64 = read_orientation
     add(type, "accessibilityOrientation", C.function_address(orientation), "q@:")
+    let length:func(uint,uint) int64 = read_text_length
+    add(type, "accessibilityNumberOfCharacters", C.function_address(length), "q@:")
+    // Foundation marshals NSRange itself. Use the runtime's forwarding IMP,
+    // not a scalar callback masquerading as an aggregate-returning function.
+    // NSRange is two NSUInteger (16 bytes) on both distributed macOS targets.
+    let trampoline = C.address_bits(method_implementation(C.pointer_bits(system_class("NSObject")), C.pointer_bits(selector("silexUnimplementedTextRange"))))
+    add(type, "accessibilitySelectedTextRange", trampoline, "{_NSRange=QQ}@:")
+    add(type, "setAccessibilitySelectedTextRange:", trampoline, "v@:{_NSRange=QQ}")
+    let forward:func(uint,uint,uint) void = forward_text
+    add(type, "forwardInvocation:", C.function_address(forward), "v@:@")
     let state:func(uint,uint) uint8 = read_state
     for name in ["isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "isAccessibilitySelected", "isAccessibilityExpanded"] {
         add(type, name, C.function_address(state), "B@:")
@@ -515,3 +652,5 @@ let get_associated = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>) C.Pointe
 let post_notification = C.function<func(uint,uint) void>(library:Boundary.SystemMenu, name:"NSAccessibilityPostNotification")
 let register_events = C.function<func(int32) uint32>(library:Boundary.SDL3, name:"SDL_RegisterEvents")
 let push_event = C.function<func(C.MutablePointer<uint>) uint8>(library:Boundary.SDL3, name:"SDL_PushEvent")
+
+let method_implementation = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"class_getMethodImplementation")
