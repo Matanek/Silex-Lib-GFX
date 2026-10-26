@@ -14,15 +14,18 @@ nocopy class Peer {
     let id:str
     let handle:uint
     let children:uint
+    let rows:uint
     init(owner:uint, id:str) {
         self.owner = owner; self.id = id
         self.handle = object(element_class(), "new")
         self.children = object(children_class(), "new")
+        self.rows = object(children_class(), "new")
         associate(self.handle, C.object_address(self))
         associate(self.children, C.object_address(self))
+        associate(self.rows, C.object_address(self))
     }
-    func detach() { associate(self.handle, 0 as uint); associate(self.children, 0 as uint) }
-    drop { self.detach(); release(self.children); release(self.handle) }
+    func detach() { associate(self.handle, 0 as uint); associate(self.children, 0 as uint); associate(self.rows, 0 as uint) }
+    drop { self.detach(); release(self.rows); release(self.children); release(self.handle) }
 }
 
 package nocopy class Host {
@@ -209,6 +212,7 @@ package nocopy class Host {
                 return self.view
             }
             if method == selector("accessibilityChildren") || method == selector("accessibilityChildrenInNavigationOrder") { return peer.children }
+            if method == selector("accessibilityRows") && self.row_view(peer) != null { return peer.rows }
             if method == selector("accessibilityWindow") || method == selector("accessibilityTopLevelUIElement") { return self.window }
             if method == selector("accessibilityApplicationFocusedUIElement") || method == selector("accessibilityFocusedUIElement") {
                 if let focused = self.source.focused() { return self.peer(focused) }
@@ -314,6 +318,52 @@ package nocopy class Host {
         return 0 as uint
     }
 
+    // Row projection is a separate relationship, not a filter over children:
+    // tables have header/scroll wrappers and outlines have nested descendants.
+    private func row_view(peer:Peer) AX.Rows? {
+        if !self.active { return null }
+        if let element = self.source.read(peer.id) {
+            if element.role == AX.Role.table || element.role == AX.Role.tree || element.role == AX.Role.list {
+                return self.source.rows(peer.id)
+            }
+        }
+        return null
+    }
+    module func row_count(peer:Peer) uint {
+        if var rows = self.row_view(peer) {
+            let count = rows.count()
+            if count > 0 { return count as uint }
+        }
+        return 0 as uint
+    }
+    module func row(peer:Peer, index:uint) uint {
+        if var rows = self.row_view(peer) {
+            let count = rows.count()
+            if count <= 0 || index >= count as uint { return 0 as uint }
+            if let id = rows.row(index as int) { return self.peer(id) }
+        }
+        return 0 as uint
+    }
+    module func cell(peer:Peer, column:int, row:int) uint {
+        if !self.active || column < 0 || row < 0 { return 0 as uint }
+        if let table = self.source.read(peer.id) {
+            if table.role != AX.Role.table || column >= (table.column_count ?? 0) { return 0 as uint }
+            if var rows = self.row_view(peer) {
+                if row >= rows.count() { return 0 as uint }
+                if let row_id = rows.row(row) {
+                    if let id = self.source.child(row_id, column) {
+                        if let cell = self.source.read(id) {
+                            if cell.role == AX.Role.cell && cell.row_index == row && cell.column_index == column {
+                                return self.peer(id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return 0 as uint
+    }
+
     module func allows(peer:Peer, method:uint) bool {
         if !self.active { return false }
         if let element = self.source.read(peer.id) {
@@ -345,6 +395,10 @@ package nocopy class Host {
                 return element.role == AX.Role.slider || element.role == AX.Role.radio_group
             }
             if method == selector("accessibilitySubrole") { return row_subrole(element) != null }
+            if method == selector("accessibilityRows") { return self.row_view(peer) != null }
+            if method == selector("accessibilityCellForColumn:row:") {
+                return element.role == AX.Role.table && (element.column_count ?? -1) >= 0 && self.row_view(peer) != null
+            }
             if method == selector("accessibilityRowCount") || method == selector("accessibilityColumnCount") ||
                 method == selector("accessibilityIndex") || method == selector("accessibilityDisclosureLevel") {
                 return collection_number(element, method) != null
@@ -439,13 +493,21 @@ func array_count(native:uint, method:uint) uint {
     let address = context(native); if address == 0 as uint { return 0 as uint }
     var peer = C.object_from_address<Peer>(address)
     var host = C.object_from_address<Host>(peer.owner)
+    if native == peer.rows { return host.row_count(peer) }
     return host.child_count(peer)
 }
 func array_child(native:uint, method:uint, index:uint) uint {
     let address = context(native); if address == 0 as uint { return 0 as uint }
     var peer = C.object_from_address<Peer>(address)
     var host = C.object_from_address<Host>(peer.owner)
+    if native == peer.rows { return host.row(peer, index) }
     return host.child(peer, index)
+}
+func read_cell(native:uint, method:uint, column:int, row:int) uint {
+    let address = context(native); if address == 0 as uint { return 0 as uint }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.cell(peer, column, row)
 }
 func allowed(native:uint, method:uint, queried:uint) uint8 {
     let address = context(native); if address == 0 as uint { return 0 as uint8 }
@@ -640,9 +702,11 @@ func element_class() uint {
     if type != 0 as uint { return type }
     type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
     let property:func(uint,uint) uint = read_property
-    for name in ["accessibilityRole", "accessibilitySubrole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+    for name in ["accessibilityRole", "accessibilitySubrole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityRows", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
         add(type, name, C.function_address(property), "@@:")
     }
+    let cell:func(uint,uint,int,int) uint = read_cell
+    add(type, "accessibilityCellForColumn:row:", C.function_address(cell), "@@:qq")
     let orientation:func(uint,uint) int64 = read_orientation
     add(type, "accessibilityOrientation", C.function_address(orientation), "q@:")
     let length:func(uint,uint) int64 = read_text_length

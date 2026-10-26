@@ -31,6 +31,26 @@ It imports only `GFX.Accessibility`. GFX.UI applications use `Label` and
 `Accessible`, then `Session.accessibility()` or `Runtime.accessibility()`
 to obtain this source.
 
+## Request a collection’s rows
+
+`Source.rows(id)` returns an optional `Rows` view, whose `count()` gives the
+current row count and `row(index)` gives an opaque row ID. Existing sources
+keep the `null` default: exposing dimensions alone does not enable this
+relationship. A custom source supplies this view when it provides direct row
+access without enumerating children or constructing their views.
+
+This relationship follows current model order. For a tree, it includes rows
+of expanded branches in display order, while `child` keeps the real hierarchy.
+For a table, it excludes headers and scroll wrappers; a row’s children are its
+cells in column order. Sorting can change an ID’s index without changing the ID.
+
+The view is live and used on the source’s owning thread: mutations, collapse
+and modal dialog restrictions also affect a retained view. An empty or no longer
+accessible collection has zero size. Negative, out-of-range or inaccessible
+indices return `null`. The row and column counts in `Element` must remain
+consistent with this model. GFX.UI supplies these views automatically for lists,
+trees and tables; applications need no additional configuration.
+
 ## Present a source in a window
 
 `Window.set_accessibility_source(source)` associates a source with the window;
@@ -110,6 +130,17 @@ length of 1. These properties are read-only; absent or negative values are
 not advertised. Queries follow the current source values without scanning
 rows. Detached peers do not retain an old position.
 
-Headless native tests cover these exchanges. Native row/column arrays, sort
-properties and complete screen-reader navigation of collections still need
-to be connected and qualified.
+AppKit also exposes `accessibilityRows` from this indexed view. Reading its
+size or copying its array does not create peers for every row; requesting an
+index creates only the requested peer. The child hierarchy uses the same native
+identity. The array follows mutations and becomes inert when its presentation
+is detached or destroyed, even if AppKit retains it.
+
+For tables, `accessibilityCellForColumn:row:` directly requests a row and its
+cell. Negative or out-of-range coordinates and cells with mismatched metadata
+are rejected. Sources without a `Rows` view do not advertise it. These queries
+change neither selection nor scroll position.
+
+Headless native tests cover these exchanges on macOS ARM64 and Intel. Native
+column arrays, sort properties and complete screen-reader navigation of
+collections still need to be connected and qualified.

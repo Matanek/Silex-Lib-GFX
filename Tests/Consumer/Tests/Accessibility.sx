@@ -37,4 +37,5 @@ test "a standalone public accessibility source retains typed descriptions and dy
     assert(changes.count() == 1 && changes[0].kind == Accessibility.ChangeKind.value)
     assert(source.changes().is_empty())
     assert(source.read("removed") == null)
+    assert(source.rows(initial.id) == null) // Existing sources need no new method.
 }

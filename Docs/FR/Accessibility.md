@@ -32,6 +32,28 @@ Il n’importe que `GFX.Accessibility`. Les applications GFX.UI utilisent
 `Label` et `Accessible`, puis `Session.accessibility()` ou
 `Runtime.accessibility()` pour obtenir cette source.
 
+## Demander les lignes d’une collection
+
+`Source.rows(id)` retourne une vue `Rows` optionnelle, dont `count()` donne le
+nombre courant de lignes et `row(index)` leur ID opaque. Les sources existantes
+conservent le défaut `null` : exposer des dimensions seules n’active pas cette
+relation. Une source personnalisée fournit cette vue lorsqu’elle propose un
+accès direct à ses lignes, sans énumérer ses enfants ni construire leurs vues.
+
+Cette relation suit l’ordre courant du modèle. Pour un arbre, elle comprend
+les lignes des branches dépliées dans l’ordre affiché, tandis que `child`
+conserve la vraie hiérarchie. Pour un tableau, elle exclut les en-têtes et les
+conteneurs de défilement ; les enfants d’une ligne sont ses cellules, dans
+l’ordre des colonnes. Un tri peut changer l’index d’un ID sans changer cet ID.
+
+La vue est vivante, utilisable sur le même thread que la source : les mutations,
+le repli et les restrictions d’un dialogue modal s’appliquent aussi à une vue
+déjà conservée. Une collection vide ou devenue inaccessible a une taille nulle.
+Un index négatif, hors de la taille courante ou devenu inaccessible retourne
+`null`. Les nombres de lignes et colonnes de `Element` doivent rester cohérents
+avec ce modèle. GFX.UI fournit automatiquement ces vues pour ses listes,
+arbres et tableaux ; l’application ne configure rien de plus.
+
 ## Présenter une source dans une fenêtre
 
 `Window.set_accessibility_source(source)` associe une source à la fenêtre ;
@@ -116,6 +138,17 @@ absentes ou négatives ne sont pas annoncées. Les lectures suivent les valeurs
 courantes de la source et ne parcourent pas les lignes. Un pair détaché ne
 conserve pas une ancienne position.
 
-Ces échanges disposent de tests natifs sans fenêtre. Les tableaux natifs de
-lignes/colonnes, les propriétés de tri et la navigation complète des collections
-avec un lecteur d’écran restent à raccorder et qualifier.
+AppKit expose aussi `accessibilityRows` depuis cette vue indexée. Lire sa taille
+ou copier son tableau ne crée pas de pairs pour toutes les lignes ; demander
+un index ne crée que le pair demandé. La même identité native reste utilisée
+par la hiérarchie des enfants. Le tableau suit les mutations et devient inerte
+lorsque sa présentation est détachée ou détruite, même si AppKit le conserve.
+
+Pour les tableaux, `accessibilityCellForColumn:row:` demande directement la
+ligne puis sa cellule. Les coordonnées négatives, hors limites et les cellules
+dont les métadonnées ne correspondent pas sont refusées. Les sources sans vue
+`Rows` ne l’annoncent pas. Ces requêtes ne modifient ni sélection ni défilement.
+
+Les tests natifs sans fenêtre couvrent ces échanges sur macOS ARM64 et Intel.
+Les tableaux natifs de colonnes, les propriétés de tri et la navigation complète
+des collections avec un lecteur d’écran restent à raccorder et qualifier.

@@ -128,6 +128,7 @@ class Source:AX.Source {
 let get_class = C.function<func(C.Pointer<uint8>) uint>(library:Boundary.SystemMenu, name:"objc_getClass")
 let get_selector = C.function<func(C.Pointer<uint8>) uint>(library:Boundary.SystemMenu, name:"sel_registerName")
 let send = C.function<func(uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
+let send_cell = C.function<func(uint,uint,int,int) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let send_arg = C.function<func(uint,uint,uint) uint>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let send_bool = C.function<func(uint,uint) uint8>(library:Boundary.SystemMenu, name:"objc_msgSend")
 let set_bool = C.function<func(uint,uint,uint8) void>(library:Boundary.SystemMenu, name:"objc_msgSend")
@@ -496,19 +497,27 @@ test "AppKit geometry follows host height and origin without double translating 
 
 class CollectionSource:AX.Source {
     var requested:int = 0
-    var rows:int = 50000
+    var row_requests:int = 0
+    var rows_supported:bool = true
+    var row_total:int = 50000
     var columns:int = 4
     var position:int? = 49999
     var column:int? = 3
+    var collection_role:AX.Role = AX.Role.table
     var row_role:AX.Role = AX.Role.row
     var level:int = 1
+    func rows(id:str) AX.Rows? {
+        if id == "collection" && self.rows_supported { return CollectionRows(self) }
+        return null
+    }
     func root() str? { return "collection" }
     func focused() str? { return null }
     func read(id:str) AX.Element? {
         if id == "collection" {
-            return AX.Element(id:id, role:AX.Role.table, child_count:self.rows,
-                row_count:self.rows, column_count:self.columns)
+            return AX.Element(id:id, role:self.collection_role, child_count:self.row_total,
+                row_count:self.row_total, column_count:self.columns)
         }
+        if id == "header" { return AX.Element(id:id, role:AX.Role.column_header) }
         if id == "opaque-row" {
             // Sibling position differs from flattened model position in trees.
             return AX.Element(id:id, parent:"collection", role:self.row_role,
@@ -522,13 +531,110 @@ class CollectionSource:AX.Source {
     }
     func child(id:str, index:int) str? {
         self.requested++
-        if id == "collection" && index == self.rows - 1 { return "opaque-row" }
+        if id == "collection" && index == 0 { return "header" }
+        if id == "collection" && index == self.row_total - 1 { return "opaque-row" }
         if id == "opaque-row" && index == 0 { return "opaque-cell" }
         return null
     }
     func perform(id:str, request:AX.Request) bool { return false }
     func changes() AX.Change[] { return [] }
 }
+
+class CollectionRows:AX.Rows {
+    private var source:CollectionSource
+    init(source:CollectionSource) { self.source = source }
+    func count() int { return self.source.row_total }
+    func row(index:int) str? {
+        self.source.row_requests++
+        if index >= 0 && index == self.source.row_total - 1 { return "opaque-row" }
+        return null
+    }
+}
+
+func verify_indexed_rows() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource()
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle()
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRows")) != 0 as uint8)
+    let rows = object(root, "accessibilityRows")
+    assert(rows != 0 as uint && object(rows, "count") == 50000 as uint)
+    assert(host.peer_count() == 1 && source.row_requests == 0 && source.requested == 0)
+    let retained_rows = object(rows, "copy")
+    assert(retained_rows == rows && host.peer_count() == 1)
+    let row = send_arg(rows, selector("objectAtIndex:"), 49999 as uint)
+    assert(row != 0 as uint && object(row, "accessibilityIndex") == 49999 as uint)
+    assert(source.row_requests == 1 && source.requested == 0 && host.peer_count() == 2)
+    assert(send_arg(object(root, "accessibilityChildren"), selector("objectAtIndex:"), 49999 as uint) == row)
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityCellForColumn:row:")) != 0 as uint8)
+    // This fake source has only one child cell. Its model column is deliberately
+    // different from that child index; the bridge must reject a mismatched cell.
+    let query = selector("accessibilityCellForColumn:row:")
+    assert(send_cell(root, query, 0, 49999) == 0 as uint)
+    source.column = 0
+    let cell = send_cell(root, query, 0, 49999)
+    assert(cell != 0 as uint)
+    let before = source.row_requests
+    assert(send_cell(root, query, -1, 49999) == 0 as uint)
+    assert(send_cell(root, query, 4, 49999) == 0 as uint)
+    assert(send_cell(root, query, 0, -1) == 0 as uint)
+    assert(send_cell(root, query, 0, 50000) == 0 as uint)
+    assert(source.row_requests == before)
+    source.row_total = 1; source.position = 0
+    assert(object(rows, "count") == 1 as uint)
+    assert(send_arg(rows, selector("objectAtIndex:"), 0 as uint) == row)
+    assert(send_cell(root, query, 0, 0) == cell)
+    source.row_total = -1
+    assert(object(rows, "count") == 0 as uint)
+    source.row_total = 0
+    assert(object(rows, "count") == 0 as uint)
+    source.rows_supported = false
+    assert(object(rows, "count") == 0 as uint)
+    assert(object(root, "accessibilityRows") == 0 as uint)
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRows")) == 0 as uint8)
+    let retained_root = object(root, "retain")
+    host.remove()
+    assert(object(retained_rows, "count") == 0 as uint)
+    assert(send_arg(retained_rows, selector("objectAtIndex:"), 0 as uint) == 0 as uint)
+    assert(send_cell(root, query, 0, 0) == 0 as uint)
+    send_void(retained_root, selector("release"))
+    send_void(retained_rows, selector("release")); send_void(pool, selector("drain"))
+}
+test "AppKit row projection and indexed cell lookup stay lazy live and detach safely" { verify_indexed_rows() }
+
+func retained_row_array(source:CollectionSource) uint {
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    return object(object(host.root_handle(), "accessibilityRows"), "retain")
+}
+func verify_row_array_lifetime() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource()
+    let rows = retained_row_array(source)
+    assert(rows != 0 as uint && object(rows, "count") == 0 as uint)
+    assert(send_arg(rows, selector("objectAtIndex:"), 49999 as uint) == 0 as uint)
+    assert(source.row_requests == 0 && source.requested == 0)
+    send_void(rows, selector("release")); send_void(pool, selector("drain"))
+}
+test "AppKit retained row arrays become inert when their presentation is destroyed" { verify_row_array_lifetime() }
+
+func verify_outline_rows() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource(); source.collection_role = AX.Role.tree; source.row_role = AX.Role.tree_item
+    var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle(); let rows = object(root, "accessibilityRows")
+    assert(object(rows, "count") == 50000 as uint && source.row_requests == 0)
+    let row = send_arg(rows, selector("objectAtIndex:"), 49999 as uint)
+    assert(compare(object(row, "accessibilitySubrole"), selector("isEqualToString:"), native_string("AXOutlineRow")) != 0 as uint8)
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityCellForColumn:row:")) == 0 as uint8)
+    source.collection_role = AX.Role.list; source.row_role = AX.Role.list_item
+    assert(object(root, "accessibilityRows") == rows)
+    assert(send_arg(rows, selector("objectAtIndex:"), 49999 as uint) == row)
+    source.collection_role = AX.Role.text
+    assert(object(root, "accessibilityRows") == 0 as uint && object(rows, "count") == 0 as uint)
+    assert(source.row_requests == 2 && source.requested == 0)
+    host.remove(); send_void(pool, selector("drain"))
+}
+test "AppKit outlines and lists project model rows without treating other roles as collections" { verify_outline_rows() }
 
 func verify_collection_positions() {
     let pool = object(system_class("NSAutoreleasePool"), "new")
@@ -553,7 +659,7 @@ func verify_collection_positions() {
     assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityIndex")) == 0 as uint8)
     assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityRowCount:")) == 0 as uint8)
     // Reread live model metadata without rebuilding peers or scanning children.
-    source.rows = 0; source.columns = 0; source.position = 7; source.column = 1
+    source.row_total = 0; source.columns = 0; source.position = 7; source.column = 1
     assert(object(root, "accessibilityRowCount") == 0 as uint && object(root, "accessibilityColumnCount") == 0 as uint)
     assert(object(row, "accessibilityIndex") == 7 as uint)
     let moved = native_span(cell, "accessibilityColumnIndexRange")
@@ -597,4 +703,4 @@ func verify_outline_positions() {
 }
 test "AppKit outline indices use model positions and zero based indentation only on tree rows" { verify_outline_positions() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); verify_collection_positions(); verify_outline_positions(); print("AppKit accessibility : OK (sans fenêtre)") }
+func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); verify_collection_positions(); verify_outline_positions(); verify_indexed_rows(); verify_row_array_lifetime(); verify_outline_rows(); print("AppKit accessibility : OK (sans fenêtre)") }

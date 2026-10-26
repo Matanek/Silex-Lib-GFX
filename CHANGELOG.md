@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Accessible sources can supply a live indexed Rows view, optional for existing sources. AppKit exposes rows and direct cell lookup without global enumeration; identities, mutations and detachment are tested without a window. Complete screen-reader navigation still needs qualification.
+
 - AppKit exposes collection dimensions, row indices, outline levels and cell ranges on demand without scanning children. Headless native tests cover these properties; complete screen-reader collection navigation remains to be qualified.
 
 - Custom presenters can specify their accessibility source’s logical origin. AppKit updates the root frame when the host moves or resizes, without translating descendants twice or traversing the collection. Native headless tests cover the exchange; placement in a real window remains to be qualified.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Les sources accessibles peuvent fournir une vue Rows vivante et indexée, facultative pour les sources existantes. AppKit expose les lignes et l’accès direct aux cellules sans énumération globale ; identités, mutations et détachement sont éprouvés sans fenêtre. La navigation complète avec lecteur d’écran reste à qualifier.
+
 - AppKit expose les dimensions des collections, les indices de lignes, les niveaux d’arbre et les plages de cellules à la demande, sans parcourir les enfants. Tests natifs sans fenêtre ; navigation complète des collections avec un lecteur d’écran à qualifier.
 
 - Les présentateurs personnalisés peuvent préciser l’origine logique de leur source accessible. AppKit actualise le rectangle racine au déplacement ou redimensionnement de l’hôte, sans décaler deux fois les descendants ni parcourir la collection. Tests natifs sans fenêtre ; placement dans une vraie fenêtre à qualifier.

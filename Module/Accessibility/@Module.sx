@@ -119,6 +119,13 @@ public struct Change {
     init(id:str, kind:ChangeKind) { self.id = id; self.kind = kind }
 }
 
+// A live row view has model order, independently of visual wrappers or tree
+// parentage. Reading its size must not enumerate or construct its rows.
+public protocol Rows {
+    func count() int
+    func row(index:int) str?
+}
+
 // Children are requested by index, never returned as an eagerly built tree.
 // Invalid/stale IDs and unsupported actions return null/false.
 public protocol Source {
@@ -126,6 +133,7 @@ public protocol Source {
     func focused() str?
     func read(id:str) Element?
     func child(id:str, index:int) str?
+    func rows(id:str) Rows? { return null }
     func perform(id:str, request:Request) bool
     func changes() Change[]
 }
