@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The macOS bridge adds columns/headers/sorting, collection selection/disclosure, remaining control roles and on-demand text geometry. Source keeps compatible defaults; rectangle forwarding follows ARM64 and Intel ABIs.
+
 - Accessible sources can supply a live indexed Rows view, optional for existing sources. AppKit exposes rows and direct cell lookup without global enumeration; identities, mutations and detachment are tested without a window. Complete screen-reader navigation still needs qualification.
 
 - AppKit exposes collection dimensions, row indices, outline levels and cell ranges on demand without scanning children. Headless native tests cover these properties; complete screen-reader collection navigation remains to be qualified.

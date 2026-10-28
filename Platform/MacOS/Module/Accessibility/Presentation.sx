@@ -15,17 +15,24 @@ nocopy class Peer {
     let handle:uint
     let children:uint
     let rows:uint
+    let columns:uint
+    let selected_rows:uint
+    var expanded:bool? = null
     init(owner:uint, id:str) {
         self.owner = owner; self.id = id
         self.handle = object(element_class(), "new")
         self.children = object(children_class(), "new")
         self.rows = object(children_class(), "new")
+        self.columns = object(children_class(), "new")
+        self.selected_rows = object(children_class(), "new")
         associate(self.handle, C.object_address(self))
         associate(self.children, C.object_address(self))
         associate(self.rows, C.object_address(self))
+        associate(self.columns, C.object_address(self))
+        associate(self.selected_rows, C.object_address(self))
     }
-    func detach() { associate(self.handle, 0 as uint); associate(self.children, 0 as uint); associate(self.rows, 0 as uint) }
-    drop { self.detach(); release(self.rows); release(self.children); release(self.handle) }
+    func detach() { associate(self.handle, 0 as uint); associate(self.children, 0 as uint); associate(self.rows, 0 as uint); associate(self.columns, 0 as uint); associate(self.selected_rows, 0 as uint) }
+    drop { self.detach(); release(self.selected_rows); release(self.columns); release(self.rows); release(self.children); release(self.handle) }
 }
 
 package nocopy class Host {
@@ -98,6 +105,17 @@ package nocopy class Host {
                         if change.kind == AX.ChangeKind.selection && has_text_selection(element) {
                             event_name = "AXSelectedTextChanged"
                         }
+                        if change.kind == AX.ChangeKind.state {
+                            if element.role == AX.Role.tree_item && element.expanded != null && element.expanded != peer.expanded {
+                                if element.expanded == true { event_name = "AXRowExpanded" }
+                                else { event_name = "AXRowCollapsed" }
+                            }
+                            peer.expanded = element.expanded
+                        }
+                        if change.kind == AX.ChangeKind.selection &&
+                            (element.role == AX.Role.table || element.role == AX.Role.tree || element.role == AX.Role.list) {
+                            event_name = "AXSelectedRowsChanged"
+                        }
                         self.frame(peer, element)
                         // A semantic checked-state change is a native value
                         // change for checkboxes and radio buttons.
@@ -131,6 +149,7 @@ package nocopy class Host {
         if let peer = self.peers.find(id) { return peer.handle }
         if let element = self.source.read(id) {
             var peer = Peer(C.object_address(self), id)
+            peer.expanded = element.expanded
             let previous = self.peers.set(id, peer)
             self.frame(peer, element)
             return peer.handle
@@ -158,16 +177,25 @@ package nocopy class Host {
     module func property(peer:Peer, method:uint) uint {
         if !self.active { return 0 as uint }
         if let element = self.source.read(peer.id) {
-            if method == selector("accessibilityRole") { return string(role(element.role)) }
+            if method == selector("accessibilityRole") { if element.role == AX.Role.column_header && !supports(element, AX.Action.activate) { return string("AXStaticText") }
+                return string(role(element.role)) }
             if method == selector("accessibilitySubrole") {
                 if let name = row_subrole(element) { return string(name) }
                 return 0 as uint
             }
             if method == selector("accessibilityLabel") || method == selector("accessibilityTitle") { return string(element.name) }
-            if method == selector("accessibilityHelp") { return string(element.description) }
+            if method == selector("accessibilityHelp") {
+                if let shortcut = element.shortcut {
+                    if element.description == "" { return string(shortcut) }
+                    return string(element.description+" · "+shortcut)
+                }
+                return string(element.description)
+            }
             if method == selector("accessibilityIdentifier") { return string(element.id) }
             if method == selector("accessibilityValue") {
-                if let checked = element.checked {
+                var checked_state = element.checked
+                if element.role == AX.Role.tab { checked_state = element.selected }
+                if let checked = checked_state {
                     var value = 0.0; if checked { value = 1.0 }
                     return number(value)
                 }
@@ -207,6 +235,25 @@ package nocopy class Host {
                 }
                 return object(system_class("NSArray"), "array")
             }
+            if method == selector("accessibilityTabs") || method == selector("accessibilitySelectedChildren") {
+                return self.choice_children(peer,method == selector("accessibilitySelectedChildren"))
+            }
+            if method == selector("accessibilityHorizontalScrollBar") { return self.scroll_bar(peer,true) }
+            if method == selector("accessibilityVerticalScrollBar") { return self.scroll_bar(peer,false) }
+            if method == selector("accessibilityHeader") {
+                if let header = element.header { return self.peer(header) }
+            }
+            if method == selector("accessibilityDisclosedByRow") {
+                if let parent = element.parent {
+                    if let description = self.source.read(parent) {
+                        if description.role == AX.Role.tree_item { return self.peer(parent) }
+                    }
+                }
+                return 0 as uint
+            }
+            if method == selector("accessibilityDisclosedRows") && element.role == AX.Role.tree_item { return peer.rows }
+            if method == selector("accessibilityColumns") && self.source.columns(peer.id) != null { return peer.columns }
+            if method == selector("accessibilitySelectedRows") && self.row_view(peer) != null { return peer.selected_rows }
             if method == selector("accessibilityParent") {
                 if let parent = element.parent { return self.peer(parent) }
                 return self.view
@@ -225,10 +272,11 @@ package nocopy class Host {
         if self.active {
             if let element = self.source.read(peer.id) {
                 if method == selector("isAccessibilityElement") { return 1 as uint8 }
+                if method == selector("isAccessibilityModal") && element.role == AX.Role.dialog { return 1 as uint8 }
                 if method == selector("isAccessibilityEnabled") && element.enabled { return 1 as uint8 }
                 if method == selector("isAccessibilityFocused") && element.focused { return 1 as uint8 }
                 if method == selector("isAccessibilitySelected") && element.selected == true { return 1 as uint8 }
-                if method == selector("isAccessibilityExpanded") && element.expanded == true { return 1 as uint8 }
+                if (method == selector("isAccessibilityExpanded") || method == selector("isAccessibilityDisclosed")) && element.expanded == true { return 1 as uint8 }
             }
         }
         return 0 as uint8
@@ -237,7 +285,7 @@ package nocopy class Host {
     module func orientation(peer:Peer) int64 {
         if self.active {
             if let element = self.source.read(peer.id) {
-                if element.role == AX.Role.slider || element.role == AX.Role.radio_group {
+                if element.role == AX.Role.slider || element.role == AX.Role.radio_group || element.role == AX.Role.scrollbar || element.role == AX.Role.separator || element.role == AX.Role.progress {
                     if element.horizontal { return 2 as int64 }
                     return 1 as int64
                 }
@@ -306,14 +354,121 @@ package nocopy class Host {
         }
     }
 
+    module func text_query(peer:Peer, operation:uint, invocation:uint) {
+        if !self.active { return }
+        if let element = self.source.read(peer.id) {
+            if !has_text_selection(element) { return }
+            let offsets = utf16_boundaries(element.value!)
+            var geometry = self.source.text_geometry(peer.id)
+            var selection:AX.TextRange? = null
+            if operation == selector("accessibilityVisibleCharacterRange") {
+                if var layout = geometry { selection = layout.visible_range() }
+            } elif operation == selector("accessibilityRangeForLine:") {
+                var line:int = 0
+                set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(line)), 2)
+                if var layout = geometry { selection = layout.range_for_line(line) }
+            } elif operation == selector("accessibilityRangeForPosition:") {
+                var point:float64[2] = [0.0,0.0]
+                set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(point)), 2)
+                let position = self.source_point(point)
+                if var layout = geometry { selection = layout.range_at(position.x,position.y) }
+            } elif operation == selector("accessibilityLineForIndex:") || operation == selector("accessibilityRangeForIndex:") {
+                var index:int = 0
+                set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(index)), 2)
+                if index < 0 || index as uint > offsets[offsets.count()-1] { return }
+                var cluster = 0
+                while cluster+1 < offsets.count() && offsets[cluster+1] <= index as uint { cluster++ }
+                if operation == selector("accessibilityLineForIndex:") {
+                    if var layout = geometry { if let line = layout.line_for_index(cluster) {
+                        var result:int = line
+                        send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(result)))
+                    } }
+                    return
+                }
+                var length = 1; if cluster == offsets.count()-1 { length = 0 }
+                selection = AX.TextRange(cluster,length)
+            } else {
+                var span:uint[2] = [0,0]
+                set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(span)), 2)
+                let total = offsets[offsets.count()-1]
+                if span[0] > total || span[1] > total-span[0] { return }
+                var start = 0
+                while start+1 < offsets.count() && offsets[start+1] <= span[0] { start++ }
+                var end = start
+                if span[1] != 0 as uint { while end < offsets.count()-1 && offsets[end] < span[0]+span[1] { end++ } }
+                selection = AX.TextRange(start,end-start)
+                if operation == selector("accessibilityStringForRange:") {
+                    // NSString owns the UTF-16 substring operation, including
+                    // ranges which do not coincide with grapheme boundaries.
+                    let text = string(element.value!)
+                    let result = send_object(text, selector("methodSignatureForSelector:"), selector("substringWithRange:"))
+                    let call = send_object(system_class("NSInvocation"), selector("invocationWithMethodSignature:"), result)
+                    send_void_object(call, selector("setSelector:"), selector("substringWithRange:"))
+                    send_void_object(call, selector("setTarget:"), text)
+                    set_argument(call, selector("setArgument:atIndex:"), C.address_bits(C.mutable_pointer(span)), 2)
+                    send_void(call, selector("invoke"))
+                    var value:uint = 0
+                    send_void_object(call, selector("getReturnValue:"), C.address_bits(C.mutable_pointer(value)))
+                    send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(value)))
+                    return
+                }
+                if operation == selector("accessibilityFrameForRange:") {
+                    if var layout = geometry { if let bounds = layout.bounds(selection!) {
+                        var frame = self.screen_rect(bounds)
+                        send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(frame)))
+                    } }
+                    return
+                }
+            }
+            if let resolved = selection {
+                if resolved.start < 0 || resolved.length < 0 || resolved.start >= offsets.count() || resolved.length > offsets.count()-1-resolved.start { return }
+                var span:uint[2] = [offsets[resolved.start],offsets[resolved.start+resolved.length]-offsets[resolved.start]]
+                send_void_object(invocation, selector("setReturnValue:"), C.address_bits(C.mutable_pointer(span)))
+            }
+        }
+    }
+    private func screen_rect(bounds:AX.Bounds) float64[4] {
+        var y = bounds.y+self.origin.y
+        if !self.flipped { y = self.height-y-bounds.height }
+        var rect:float64[4] = [(bounds.x+self.origin.x) as float64,y as float64,bounds.width as float64,bounds.height as float64]
+        if self.view != 0 as uint { rect = convert_rect(self.view,"convertRect:toView:",rect,true) }
+        if self.window != 0 as uint { rect = convert_rect(self.window,"convertRectToScreen:",rect,false) }
+        return rect
+    }
+    private func source_point(point:float64[2]) Math.Vec2 {
+        var position = point
+        if self.window != 0 as uint { position = convert_point(self.window,"convertPointFromScreen:",position,false) }
+        if self.view != 0 as uint { position = convert_point(self.view,"convertPoint:fromView:",position,true) }
+        var y = position[1] as float
+        if !self.flipped { y = self.height-y }
+        return Math.Vec2(position[0] as float-self.origin.x,y-self.origin.y)
+    }
+
     module func child_count(peer:Peer) uint {
         if self.active {
-            if let element = self.source.read(peer.id) { return element.child_count as uint }
+            if let element = self.source.read(peer.id) {
+                if element.role == AX.Role.column {
+                    if let parent = element.parent {
+                        if var rows = self.source.rows(parent) { let count = rows.count(); if count > 0 { return count as uint } }
+                    }
+                    return 0 as uint
+                }
+                return element.child_count as uint
+            }
         }
         return 0 as uint
     }
     module func child(peer:Peer, index:uint) uint {
         if index >= self.child_count(peer) { return 0 as uint }
+        if let element = self.source.read(peer.id) {
+            if element.role == AX.Role.column {
+                if let parent = element.parent {
+                    let handle = self.peer(parent)
+                    if var owner = self.peers.find(parent) { return self.cell(owner, element.column_index ?? -1, index as int) }
+                }
+                return 0 as uint
+            }
+        }
         if let id = self.source.child(peer.id, index as int) { return self.peer(id) }
         return 0 as uint
     }
@@ -323,7 +478,7 @@ package nocopy class Host {
     private func row_view(peer:Peer) AX.Rows? {
         if !self.active { return null }
         if let element = self.source.read(peer.id) {
-            if element.role == AX.Role.table || element.role == AX.Role.tree || element.role == AX.Role.list {
+            if element.role == AX.Role.table || element.role == AX.Role.tree || element.role == AX.Role.list || element.role == AX.Role.tree_item {
                 return self.source.rows(peer.id)
             }
         }
@@ -364,11 +519,97 @@ package nocopy class Host {
         return 0 as uint
     }
 
+    module func column_count(peer:Peer) uint {
+        if !self.active { return 0 as uint }
+        if var columns = self.source.columns(peer.id) { let count = columns.count(); if count > 0 { return count as uint } }
+        return 0 as uint
+    }
+    module func column(peer:Peer, index:uint) uint {
+        if index >= self.column_count(peer) { return 0 as uint }
+        if var columns = self.source.columns(peer.id) {
+            if let id = columns.column(index as int) {
+                if let element = self.source.read(id) {
+                    if element.role == AX.Role.column && element.parent == peer.id && element.column_index == index as int { return self.peer(id) }
+                }
+            }
+        }
+        return 0 as uint
+    }
+    module func selected_rows(peer:Peer) str[] {
+        if var rows = self.row_view(peer) { return rows.selected() }
+        return []
+    }
+    private func scroll_bar(peer:Peer, horizontal:bool) uint {
+        if let element = self.source.read(peer.id) {
+            if element.role != AX.Role.scroll_view { return 0 as uint }
+            var index = 0
+            while index < element.child_count {
+                if let id = self.source.child(peer.id,index) {
+                    if let child = self.source.read(id) {
+                        if child.role == AX.Role.scrollbar && child.horizontal == horizontal { return self.peer(id) }
+                    }
+                }
+                index++
+            }
+        }
+        return 0 as uint
+    }
+    private func choice_children(peer:Peer, selected:bool) uint {
+        let result = object(system_class("NSMutableArray"),"array")
+        if let element = self.source.read(peer.id) {
+            if element.role != AX.Role.tab_group && element.role != AX.Role.radio_group { return result }
+            var index = 0
+            while index < element.child_count {
+                if let id = self.source.child(peer.id,index) {
+                    if let child = self.source.read(id) {
+                        if child.role == AX.Role.tab || child.role == AX.Role.radio {
+                            if !selected || child.selected == true || child.checked == true {
+                                send_void_object(result,selector("addObject:"),self.peer(id))
+                            }
+                        } elif child.role == AX.Role.radio_group {
+                            let handle = self.peer(id)
+                            if var nested = self.peers.find(id) {
+                                send_void_object(result,selector("addObjectsFromArray:"),self.choice_children(nested,selected))
+                            }
+                        }
+                    }
+                }
+                index++
+            }
+        }
+        return result
+    }
+    module func press(peer:Peer, method:uint) bool {
+        if !self.active { return false }
+        if let element = self.source.read(peer.id) {
+            if let operation = action(method,element) {
+                if supports(element,operation) { return self.perform(peer,AX.Request(operation)) }
+            }
+        }
+        return false
+    }
+    module func sort_direction(peer:Peer) int64 {
+        if self.active {
+            if let element = self.source.read(peer.id) {
+                if let descending = element.sorted_descending {
+                    if descending { return 2 as int64 }
+                    return 1 as int64
+                }
+            }
+        }
+        return 0 as int64
+    }
+
     module func allows(peer:Peer, method:uint) bool {
         if !self.active { return false }
         if let element = self.source.read(peer.id) {
-            if let action = action(method) {
+            if let action = action(method,element) {
                 return supports(element, action)
+            }
+            if text_query_method(method) {
+                if !has_text_selection(element) { return false }
+                if method == selector("accessibilityRangeForIndex:") || method == selector("accessibilityStringForRange:") { return true }
+                return self.source.text_geometry(peer.id) != null
             }
             if method == selector("setAccessibilitySelectedTextRange:") {
                 return has_text_selection(element) && supports(element, AX.Action.set_text_selection)
@@ -381,9 +622,23 @@ package nocopy class Host {
                 return element.selected != null &&
                     (supports(element, AX.Action.select) || supports(element, AX.Action.deselect))
             }
-            if method == selector("setAccessibilityExpanded:") {
+            if method == selector("setAccessibilityExpanded:") || method == selector("setAccessibilityDisclosed:") {
                 return element.expanded != null &&
                     (supports(element, AX.Action.expand) || supports(element, AX.Action.collapse))
+            }
+            if method == selector("isAccessibilityModal") { return element.role == AX.Role.dialog }
+            if method == selector("accessibilityTabs") { return element.role == AX.Role.tab_group }
+            if method == selector("accessibilitySelectedChildren") { return element.role == AX.Role.tab_group || element.role == AX.Role.radio_group }
+            if method == selector("accessibilityHorizontalScrollBar") || method == selector("accessibilityVerticalScrollBar") { return element.role == AX.Role.scroll_view }
+            if method == selector("accessibilityColumns") { return self.source.columns(peer.id) != null }
+            if method == selector("accessibilityHeader") { return element.header != null }
+            if method == selector("accessibilitySortDirection") { return element.role == AX.Role.column || element.role == AX.Role.column_header }
+            if method == selector("isAccessibilityDisclosed") || method == selector("accessibilityDisclosedByRow") {
+                return element.role == AX.Role.tree_item
+            }
+            if method == selector("accessibilityDisclosedRows") { return element.role == AX.Role.tree_item && self.row_view(peer) != null }
+            if method == selector("accessibilitySelectedRows") {
+                return element.role != AX.Role.tree_item && self.row_view(peer) != null
             }
             if method == selector("accessibilityTitleUIElement") { return element.labelled_by != null }
             if method == selector("accessibilityServesAsTitleForUIElements") { return element.labels != null }
@@ -392,7 +647,7 @@ package nocopy class Host {
             if method == selector("accessibilityMinValue") { return element.minimum != null }
             if method == selector("accessibilityMaxValue") { return element.maximum != null }
             if method == selector("accessibilityOrientation") {
-                return element.role == AX.Role.slider || element.role == AX.Role.radio_group
+                return element.role == AX.Role.slider || element.role == AX.Role.radio_group || element.role == AX.Role.scrollbar || element.role == AX.Role.separator || element.role == AX.Role.progress
             }
             if method == selector("accessibilitySubrole") { return row_subrole(element) != null }
             if method == selector("accessibilityRows") { return self.row_view(peer) != null }
@@ -433,7 +688,7 @@ package nocopy class Host {
             if method == selector("setAccessibilitySelected:") {
                 previous = element.selected
                 if !value { operation = AX.Action.deselect }
-            } elif method == selector("setAccessibilityExpanded:") {
+            } elif method == selector("setAccessibilityExpanded:") || method == selector("setAccessibilityDisclosed:") {
                 previous = element.expanded
                 operation = AX.Action.expand
                 if !value { operation = AX.Action.collapse }
@@ -494,6 +749,8 @@ func array_count(native:uint, method:uint) uint {
     var peer = C.object_from_address<Peer>(address)
     var host = C.object_from_address<Host>(peer.owner)
     if native == peer.rows { return host.row_count(peer) }
+    if native == peer.columns { return host.column_count(peer) }
+    if native == peer.selected_rows { return host.selected_rows(peer).count() as uint }
     return host.child_count(peer)
 }
 func array_child(native:uint, method:uint, index:uint) uint {
@@ -501,6 +758,12 @@ func array_child(native:uint, method:uint, index:uint) uint {
     var peer = C.object_from_address<Peer>(address)
     var host = C.object_from_address<Host>(peer.owner)
     if native == peer.rows { return host.row(peer, index) }
+    if native == peer.columns { return host.column(peer, index) }
+    if native == peer.selected_rows {
+        let ids = host.selected_rows(peer)
+        if index < ids.count() as uint { return host.peer(ids[index as int]) }
+        return 0 as uint
+    }
     return host.child(peer, index)
 }
 func read_cell(native:uint, method:uint, column:int, row:int) uint {
@@ -520,10 +783,7 @@ func press(native:uint, method:uint) uint8 {
     let address = context(native); if address == 0 as uint { return 0 as uint8 }
     var peer = C.object_from_address<Peer>(address)
     var host = C.object_from_address<Host>(peer.owner)
-    if !host.allows(peer, method) { return 0 as uint8 }
-    if let operation = action(method) {
-        if host.perform(peer, AX.Request(operation)) { return 1 as uint8 }
-    }
+    if host.press(peer,method) { return 1 as uint8 }
     return 0 as uint8
 }
 func set_focused(native:uint, method:uint, focused:uint8) {
@@ -547,6 +807,12 @@ func set_value(native:uint, method:uint, value:uint) {
     host.set_value(peer, value)
 }
 
+func read_sort(native:uint, method:uint) int64 {
+    let address = context(native); if address == 0 as uint { return 0 as int64 }
+    var peer = C.object_from_address<Peer>(address)
+    var host = C.object_from_address<Host>(peer.owner)
+    return host.sort_direction(peer)
+}
 func read_text_length(native:uint, method:uint) int64 {
     let address = context(native); if address == 0 as uint { return 0 as int64 }
     var peer = C.object_from_address<Peer>(address)
@@ -561,6 +827,16 @@ func read_collection_number(native:uint, method:uint) int64 {
 }
 func forward_range(native:uint, method:uint, invocation:uint) {
     let operation = object(invocation, "selector")
+    if text_query_method(operation) {
+        empty_text_reply(operation,invocation)
+        let address = context(native)
+        if address != 0 as uint {
+            var peer = C.object_from_address<Peer>(address)
+            var host = C.object_from_address<Host>(peer.owner)
+            host.text_query(peer,operation,invocation)
+        }
+        return
+    }
     if operation == selector("accessibilitySelectedTextRange") || operation == selector("accessibilityRowIndexRange") ||
         operation == selector("accessibilityColumnIndexRange") {
         var span:uint[2] = [9223372036854775807, 0]
@@ -585,13 +861,59 @@ func forward_range(native:uint, method:uint, invocation:uint) {
     }
 }
 
+func text_query_method(method:uint) bool {
+    for name in ["accessibilityVisibleCharacterRange","accessibilityRangeForLine:","accessibilityRangeForIndex:",
+        "accessibilityRangeForPosition:","accessibilityLineForIndex:","accessibilityStringForRange:","accessibilityFrameForRange:"] {
+        if method == selector(name) { return true }
+    }
+    return false
+}
+func empty_text_reply(method:uint, invocation:uint) {
+    if method == selector("accessibilityFrameForRange:") {
+        var rect:float64[4] = [0.0,0.0,0.0,0.0]
+        send_void_object(invocation,selector("setReturnValue:"),C.address_bits(C.mutable_pointer(rect)))
+    } elif method == selector("accessibilityLineForIndex:") {
+        var line:int = 9223372036854775807
+        send_void_object(invocation,selector("setReturnValue:"),C.address_bits(C.mutable_pointer(line)))
+    } elif method == selector("accessibilityStringForRange:") {
+        var text:uint = 0
+        send_void_object(invocation,selector("setReturnValue:"),C.address_bits(C.mutable_pointer(text)))
+    } else {
+        var span:uint[2] = [9223372036854775807,0]
+        send_void_object(invocation,selector("setReturnValue:"),C.address_bits(C.mutable_pointer(span)))
+    }
+}
+func convert_rect(target:uint, name:str, rect:float64[4], relative:bool) float64[4] {
+    let method = selector(name)
+    let signature = send_object(target,selector("methodSignatureForSelector:"),method)
+    let call = send_object(system_class("NSInvocation"),selector("invocationWithMethodSignature:"),signature)
+    send_void_object(call,selector("setSelector:"),method); send_void_object(call,selector("setTarget:"),target)
+    var input = rect; var view:uint = 0; var output:float64[4] = [0.0,0.0,0.0,0.0]
+    set_argument(call,selector("setArgument:atIndex:"),C.address_bits(C.mutable_pointer(input)),2)
+    if relative { set_argument(call,selector("setArgument:atIndex:"),C.address_bits(C.mutable_pointer(view)),3) }
+    send_void(call,selector("invoke")); send_void_object(call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(output)))
+    return output
+}
+func convert_point(target:uint, name:str, point:float64[2], relative:bool) float64[2] {
+    let method = selector(name)
+    let signature = send_object(target,selector("methodSignatureForSelector:"),method)
+    let call = send_object(system_class("NSInvocation"),selector("invocationWithMethodSignature:"),signature)
+    send_void_object(call,selector("setSelector:"),method); send_void_object(call,selector("setTarget:"),target)
+    var input = point; var view:uint = 0; var output:float64[2] = [0.0,0.0]
+    set_argument(call,selector("setArgument:atIndex:"),C.address_bits(C.mutable_pointer(input)),2)
+    if relative { set_argument(call,selector("setArgument:atIndex:"),C.address_bits(C.mutable_pointer(view)),3) }
+    send_void(call,selector("invoke")); send_void_object(call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(output)))
+    return output
+}
+
 func collection_number(element:AX.Element, method:uint) int? {
     var result:int? = null
     if method == selector("accessibilityRowCount") { result = element.row_count }
     elif method == selector("accessibilityColumnCount") { result = element.column_count }
     elif method == selector("accessibilityIndex") &&
-        (element.role == AX.Role.row || element.role == AX.Role.list_item || element.role == AX.Role.tree_item) {
+        (element.role == AX.Role.row || element.role == AX.Role.list_item || element.role == AX.Role.tree_item || element.role == AX.Role.column) {
         result = element.row_index ?? element.index
+        if element.role == AX.Role.column { result = element.column_index ?? element.index }
     } elif method == selector("accessibilityDisclosureLevel") && element.role == AX.Role.tree_item {
         // Source levels are one-based; native outline indentation starts at 0.
         result = 0
@@ -609,6 +931,9 @@ func cell_index(element:AX.Element, method:uint) int? {
     return null
 }
 func row_subrole(element:AX.Element) str? {
+    if element.role == AX.Role.dialog { return "AXDialog" }
+    if element.role == AX.Role.tab { return "AXTabButton" }
+    if element.role == AX.Role.column_header && supports(element, AX.Action.activate) { return "AXSortButton" }
     if element.role == AX.Role.row { return "AXTableRow" }
     if element.role == AX.Role.tree_item { return "AXOutlineRow" }
     return null
@@ -654,7 +979,11 @@ func supports(element:AX.Element, action:AX.Action) bool {
     for available in element.actions { if action == available { return true } }
     return false
 }
-func action(method:uint) AX.Action? {
+func action(method:uint, element:AX.Element) AX.Action? {
+    if method == selector("accessibilityPerformShowMenu") { return AX.Action.expand }
+    if method == selector("accessibilityPerformIncrement") && !supports(element,AX.Action.increment) { return AX.Action.scroll_forward }
+    if method == selector("accessibilityPerformDecrement") && !supports(element,AX.Action.decrement) { return AX.Action.scroll_backward }
+    if method == selector("accessibilityPerformCancel") { return AX.Action.dismiss }
     if method == selector("accessibilityPerformPress") { return AX.Action.activate }
     if method == selector("setAccessibilityFocused:") { return AX.Action.focus }
     if method == selector("setAccessibilityValue:") { return AX.Action.set_value }
@@ -663,6 +992,13 @@ func action(method:uint) AX.Action? {
     return null
 }
 func role(value:AX.Role) str {
+    if value == AX.Role.column { return "AXColumn" }
+    if value == AX.Role.column_header { return "AXButton" }
+    if value == AX.Role.tab_group { return "AXTabGroup" }
+    if value == AX.Role.tab { return "AXRadioButton" }
+    if value == AX.Role.tooltip { return "AXHelpTag" }
+    if value == AX.Role.scrollbar { return "AXScrollBar" }
+    if value == AX.Role.separator { return "AXSplitter" }
     if value == AX.Role.button { return "AXButton" }
     if value == AX.Role.text { return "AXStaticText" }
     if value == AX.Role.text_field { return "AXTextField" }
@@ -702,13 +1038,15 @@ func element_class() uint {
     if type != 0 as uint { return type }
     type = C.address_bits(allocate_class(C.pointer_bits(system_class("NSAccessibilityElement")), C.terminated_pointer("SilexAccessibilityElement"), 0 as uint))
     let property:func(uint,uint) uint = read_property
-    for name in ["accessibilityRole", "accessibilitySubrole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityRows", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
+    for name in ["accessibilityRole", "accessibilitySubrole", "accessibilityLabel", "accessibilityTitle", "accessibilityHelp", "accessibilityIdentifier", "accessibilityValue", "accessibilitySelectedText", "accessibilityMinValue", "accessibilityMaxValue", "accessibilityTitleUIElement", "accessibilityServesAsTitleForUIElements", "accessibilityParent", "accessibilityChildren", "accessibilityChildrenInNavigationOrder", "accessibilityTabs", "accessibilitySelectedChildren", "accessibilityHorizontalScrollBar", "accessibilityVerticalScrollBar", "accessibilityRows", "accessibilityColumns", "accessibilityHeader", "accessibilitySelectedRows", "accessibilityDisclosedByRow", "accessibilityDisclosedRows", "accessibilityWindow", "accessibilityTopLevelUIElement", "accessibilityApplicationFocusedUIElement", "accessibilityFocusedUIElement"] {
         add(type, name, C.function_address(property), "@@:")
     }
     let cell:func(uint,uint,int,int) uint = read_cell
     add(type, "accessibilityCellForColumn:row:", C.function_address(cell), "@@:qq")
     let orientation:func(uint,uint) int64 = read_orientation
     add(type, "accessibilityOrientation", C.function_address(orientation), "q@:")
+    let sort:func(uint,uint) int64 = read_sort
+    add(type, "accessibilitySortDirection", C.function_address(sort), "q@:")
     let length:func(uint,uint) int64 = read_text_length
     add(type, "accessibilityNumberOfCharacters", C.function_address(length), "q@:")
     let metadata:func(uint,uint) int64 = read_collection_number
@@ -723,22 +1061,30 @@ func element_class() uint {
         add(type, name, trampoline, "{_NSRange=QQ}@:")
     }
     add(type, "setAccessibilitySelectedTextRange:", trampoline, "v@:{_NSRange=QQ}")
+    add(type,"accessibilityVisibleCharacterRange",trampoline,"{_NSRange=QQ}@:")
+    add(type,"accessibilityRangeForLine:",trampoline,"{_NSRange=QQ}@:q")
+    add(type,"accessibilityRangeForIndex:",trampoline,"{_NSRange=QQ}@:q")
+    add(type,"accessibilityRangeForPosition:",trampoline,"{_NSRange=QQ}@:{CGPoint=dd}")
+    add(type,"accessibilityLineForIndex:",trampoline,"q@:q")
+    add(type,"accessibilityStringForRange:",trampoline,"@@:{_NSRange=QQ}")
+    let rectangle_trampoline = Target.rectangle_forwarding()
+    add(type,"accessibilityFrameForRange:",rectangle_trampoline,"{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}")
     let forward:func(uint,uint,uint) void = forward_range
     add(type, "forwardInvocation:", C.function_address(forward), "v@:@")
     let state:func(uint,uint) uint8 = read_state
-    for name in ["isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "isAccessibilitySelected", "isAccessibilityExpanded"] {
+    for name in ["isAccessibilityElement", "isAccessibilityEnabled", "isAccessibilityFocused", "isAccessibilitySelected", "isAccessibilityExpanded", "isAccessibilityDisclosed", "isAccessibilityModal"] {
         add(type, name, C.function_address(state), "B@:")
     }
     let check:func(uint,uint,uint) uint8 = allowed
     add(type, "isAccessibilitySelectorAllowed:", C.function_address(check), "B@::")
     let perform:func(uint,uint) uint8 = press
-    for name in ["accessibilityPerformPress", "accessibilityPerformIncrement", "accessibilityPerformDecrement"] {
+    for name in ["accessibilityPerformPress", "accessibilityPerformIncrement", "accessibilityPerformDecrement", "accessibilityPerformCancel", "accessibilityPerformShowMenu"] {
         add(type, name, C.function_address(perform), "B@:")
     }
     let focus:func(uint,uint,uint8) void = set_focused
     add(type, "setAccessibilityFocused:", C.function_address(focus), "v@:B")
     let state_setter:func(uint,uint,uint8) void = set_state
-    for name in ["setAccessibilitySelected:", "setAccessibilityExpanded:"] {
+    for name in ["setAccessibilitySelected:", "setAccessibilityExpanded:", "setAccessibilityDisclosed:"] {
         add(type, name, C.function_address(state_setter), "v@:B")
     }
     let value:func(uint,uint,uint) void = set_value

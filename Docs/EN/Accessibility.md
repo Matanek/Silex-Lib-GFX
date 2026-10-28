@@ -141,6 +141,61 @@ cell. Negative or out-of-range coordinates and cells with mismatched metadata
 are rejected. Sources without a `Rows` view do not advertise it. These queries
 change neither selection nor scroll position.
 
-Headless native tests cover these exchanges on macOS ARM64 and Intel. Native
-column arrays, sort properties and complete screen-reader navigation of
-collections still need to be connected and qualified.
+Headless native tests cover these exchanges on macOS ARM64 and Intel. Column
+relations and sorting are described below; complete screen-reader collection
+navigation still needs qualification.
+
+
+## Columns, headers and selection
+
+`Source.columns(id)` optionally supplies a live `Columns` view: `count()` reads
+its size and `column(index)` returns an opaque model identity without scanning
+rows. A column has role `column`, its table `parent`, `column_index` and the
+`header` relation. The header keeps its identity and actions;
+`sorted_descending` describes current sorting, or `null` when unsorted.
+Existing sources return `null` unless they implement this capability.
+
+AppKit projects these relations into native columns. Their cells are requested
+through the table’s indexed rows; a query never constructs every cell.
+`Rows.selected()` returns only selected identities, with a compatible empty
+default. A tree row’s row view describes its disclosed children and follows
+collapse. Retained native arrays become inert when detached, like row arrays.
+
+## Text geometry
+
+`Source.text_geometry(id)` optionally supplies `TextGeometry`, queried only on
+demand. `TextRange(start,length)` counts whole graphemes, like selection
+requests. `bounds(selection)` returns the visible enclosing rectangle, or
+`null` outside the viewport; an empty span describes the caret.
+`range_at(x,y)` describes the grapheme at a position, while
+`line_for_index(index)` and `range_for_line(line)` connect indices and lines.
+A line span includes its newline. `visible_range()` describes visible text.
+Coordinates share the top-left origin of `Element.bounds`; the contract
+contains no AppKit coordinates.
+
+UI supplies this capability for single-line and multiline editors from their
+current layout and scrolling. A retained provider does not expose a removed
+editor or one outside a new modal scope. AppKit converts UTF-16 indices
+and screen coordinates at its boundary. Span, line and position queries do
+not edit the application’s selection.
+
+## Other macOS controls
+
+The bridge distinguishes tabs, scrollbars, splitters, help tags and headers.
+Dialogs expose modality and cancellation. Tabs expose their titles and
+selection, and radio groups expose their selected choice. Choice opening and
+scrolling use actions announced by the source, rejecting disabled actions.
+Declared shortcuts supplement accessible command help.
+
+Native tests exercise queries and detachment without a window on macOS ARM64
+and Intel, in Debug and Release. A real-window inspector and VoiceOver run is
+a separate qualification. These tests make no Linux or Windows native claim.
+
+Row selection changes notify the presented collection.
+Disclosure transitions use native row-expanded/row-collapsed notifications,
+without announcing another disclosure for unrelated state changes.
+
+When `Rows.selected()` changes, the source notifies the collection with
+`ChangeKind.selection`. UI retains a selection observation per container,
+refreshed by model or location revision even when children have not been read.
+A live read does not consume that event.

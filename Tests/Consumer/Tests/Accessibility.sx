@@ -39,3 +39,15 @@ test "a standalone public accessibility source retains typed descriptions and dy
     assert(source.read("removed") == null)
     assert(source.rows(initial.id) == null) // Existing sources need no new method.
 }
+
+
+class LegacyRows:Accessibility.Rows {
+    func count() int { return 0 }
+    func row(index:int) str? { return null }
+}
+test "new optional accessibility capabilities preserve legacy source and row conformances" {
+    var source:Accessibility.Source = VolumeSource()
+    assert(source.columns("root") == null && source.text_geometry("root") == null)
+    var rows:Accessibility.Rows = LegacyRows()
+    assert(rows.selected().is_empty())
+}

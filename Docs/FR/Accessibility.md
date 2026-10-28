@@ -150,5 +150,63 @@ dont les métadonnées ne correspondent pas sont refusées. Les sources sans vue
 `Rows` ne l’annoncent pas. Ces requêtes ne modifient ni sélection ni défilement.
 
 Les tests natifs sans fenêtre couvrent ces échanges sur macOS ARM64 et Intel.
-Les tableaux natifs de colonnes, les propriétés de tri et la navigation complète
-des collections avec un lecteur d’écran restent à raccorder et qualifier.
+Les relations de colonnes et de tri sont décrites ci-dessous ; la navigation
+complète des collections avec un lecteur d’écran reste à qualifier.
+
+
+## Colonnes, en-têtes et sélection
+
+`Source.columns(id)` fournit une vue `Columns` facultative : `count()` lit la
+taille, `column(index)` retourne une identité opaque du modèle sans parcourir
+ses lignes. Une colonne porte le rôle `column`, son `parent` tableau,
+`column_index` et la relation `header`. Son en-tête conserve son identité et
+ses actions ; `sorted_descending` décrit le tri courant, ou `null` sans tri.
+Les sources existantes qui n’implémentent pas cette capacité retournent `null`.
+
+AppKit projette ces relations en colonnes natives. Leurs cellules sont demandées
+par les lignes indexées du tableau ; une requête ne construit pas toutes les
+cellules. `Rows.selected()` retourne les seules identités sélectionnées, avec
+un défaut vide compatible. Les vues de lignes d’un nœud d’arbre décrivent ses
+enfants dépliés et suivent le repli. Les tableaux natifs conservés deviennent
+inertes au détachement, comme les lignes déjà exposées.
+
+## Géométrie du texte
+
+`Source.text_geometry(id)` fournit une capacité `TextGeometry` facultative,
+consultée uniquement à la demande. `TextRange(start,length)` compte des
+graphèmes complets, comme les requêtes de sélection. `bounds(selection)`
+retourne le rectangle visible englobant la plage, ou `null` hors du viewport ;
+une plage vide décrit le caret. `range_at(x,y)` décrit le graphème à une
+position, `line_for_index(index)` et `range_for_line(line)` relient indices et
+lignes. Une plage de ligne inclut son saut de ligne. `visible_range()` décrit
+la plage visible. Les coordonnées utilisent la même origine en haut à gauche
+que `Element.bounds` ; aucune coordonnée AppKit n’entre dans ce contrat.
+
+UI fournit cette capacité pour ses champs simples et multilignes à partir de
+leur layout et de leur défilement actuels. Un fournisseur conservé ne réexpose
+pas un champ retiré ou caché par une nouvelle portée modale. AppKit traduit les
+indices UTF-16 et les coordonnées écran à la frontière ; les lectures de
+plages, lignes et positions n’éditent pas la sélection applicative.
+
+## Autres contrôles macOS
+
+Le pont distingue onglets, barres de défilement, séparateurs, infobulles et
+en-têtes. Les dialogues exposent leur caractère modal et l’action d’annulation.
+Les onglets exposent leurs titres et leur sélection ; les groupes radio leur
+choix sélectionné. L’ouverture des choix et le défilement utilisent les actions
+annoncées par la source, avec le même refus des actions désactivées. Les
+raccourcis déclarés complètent l’aide accessible des commandes.
+
+Les tests natifs exercent les requêtes et le détachement sans fenêtre, sur
+macOS ARM64 et Intel, en Debug et Release. Le parcours dans une fenêtre réelle
+avec l’inspecteur et VoiceOver reste une qualification distincte ; aucune
+prise en charge native Linux ou Windows n’est déduite de ces tests.
+
+Les changements de sélection de lignes notifient la collection présentée ; les transitions de dépliage utilisent les notifications
+natives de ligne dépliée/repliée, sans annoncer un nouveau dépliage pour un
+autre changement d’état.
+
+Quand `Rows.selected()` change, la source notifie la collection avec
+`ChangeKind.selection`. UI conserve une observation de sélection par conteneur,
+réévaluée à la révision du modèle ou de ses emplacements, même sans lecture
+préalable des enfants. Une lecture courante ne consomme pas cet événement.

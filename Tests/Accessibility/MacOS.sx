@@ -30,6 +30,11 @@ class Source:AX.Source {
     var selection_allowed:bool = true
     var selection_requests:int = 0
     var multiline:bool = false
+    var geometry_x:float = 0.0
+    var geometry_y:float = 0.0
+    var geometry_start:int = -1
+    var geometry_length:int = -1
+    func text_geometry(id:str) AX.TextGeometry? { if id == "field" { return Geometry(self) } return null }
     func root() str? { return "root" }
     func focused() str? { if self.focus { return "field" } return null }
     func read(id:str) AX.Element? {
@@ -495,17 +500,39 @@ func verify_geometry() {
 }
 test "AppKit geometry follows host height and origin without double translating descendants" { verify_geometry() }
 
+class Geometry:AX.TextGeometry {
+    private var source:Source
+    init(source:Source) { self.source = source }
+    func bounds(selection:AX.TextRange) AX.Bounds? {
+        self.source.geometry_start = selection.start; self.source.geometry_length = selection.length
+        return AX.Bounds(20.0,30.0,40.0,15.0)
+    }
+    func range_at(x:float,y:float) AX.TextRange? {
+        self.source.geometry_x = x; self.source.geometry_y = y
+        return AX.TextRange(2,1)
+    }
+    func line_for_index(index:int) int? { if index < 0 || index > 5 { return null } if index < 3 { return 0 } return 1 }
+    func range_for_line(line:int) AX.TextRange? { if line == 0 { return AX.TextRange(0,3) } if line == 1 { return AX.TextRange(3,2) } return null }
+    func visible_range() AX.TextRange? { return AX.TextRange(1,3) }
+}
+
 class CollectionSource:AX.Source {
     var requested:int = 0
     var row_requests:int = 0
     var rows_supported:bool = true
     var row_total:int = 50000
-    var columns:int = 4
+    var column_total:int = 4
     var position:int? = 49999
     var column:int? = 3
+    var sorting:bool? = false
+    var column_requests:int = 0
     var collection_role:AX.Role = AX.Role.table
     var row_role:AX.Role = AX.Role.row
     var level:int = 1
+    func columns(id:str) AX.Columns? {
+        if id == "collection" && self.collection_role == AX.Role.table { return CollectionColumns(self) }
+        return null
+    }
     func rows(id:str) AX.Rows? {
         if id == "collection" && self.rows_supported { return CollectionRows(self) }
         return null
@@ -515,9 +542,12 @@ class CollectionSource:AX.Source {
     func read(id:str) AX.Element? {
         if id == "collection" {
             return AX.Element(id:id, role:self.collection_role, child_count:self.row_total,
-                row_count:self.row_total, column_count:self.columns)
+                row_count:self.row_total, column_count:self.column_total)
         }
-        if id == "header" { return AX.Element(id:id, role:AX.Role.column_header) }
+        if id == "header" { return AX.Element(id:id, parent:"opaque-column", role:AX.Role.column_header, sorted_descending:self.sorting) }
+        if id == "opaque-column" {
+            return AX.Element(id:id, parent:"collection", role:AX.Role.column, column_index:3, header:"header", sorted_descending:self.sorting)
+        }
         if id == "opaque-row" {
             // Sibling position differs from flattened model position in trees.
             return AX.Element(id:id, parent:"collection", role:self.row_role,
@@ -540,9 +570,21 @@ class CollectionSource:AX.Source {
     func changes() AX.Change[] { return [] }
 }
 
+class CollectionColumns:AX.Columns {
+    private var source:CollectionSource
+    init(source:CollectionSource) { self.source = source }
+    func count() int { return self.source.column_total }
+    func column(index:int) str? {
+        self.source.column_requests++
+        if index == 3 && index < self.source.column_total { return "opaque-column" }
+        return null
+    }
+}
+
 class CollectionRows:AX.Rows {
     private var source:CollectionSource
     init(source:CollectionSource) { self.source = source }
+    func selected() str[] { if self.source.row_total > 0 { return ["opaque-row"] } return [] }
     func count() int { return self.source.row_total }
     func row(index:int) str? {
         self.source.row_requests++
@@ -659,12 +701,12 @@ func verify_collection_positions() {
     assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityIndex")) == 0 as uint8)
     assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityRowCount:")) == 0 as uint8)
     // Reread live model metadata without rebuilding peers or scanning children.
-    source.row_total = 0; source.columns = 0; source.position = 7; source.column = 1
+    source.row_total = 0; source.column_total = 0; source.position = 7; source.column = 1
     assert(object(root, "accessibilityRowCount") == 0 as uint && object(root, "accessibilityColumnCount") == 0 as uint)
     assert(object(row, "accessibilityIndex") == 7 as uint)
     let moved = native_span(cell, "accessibilityColumnIndexRange")
     assert(moved[0] == 1 as uint && moved[1] == 1 as uint)
-    source.position = null; source.column = -1; source.columns = -1
+    source.position = null; source.column = -1; source.column_total = -1
     assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityRowIndexRange")) == 0 as uint8)
     assert(compare(cell, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityColumnIndexRange")) == 0 as uint8)
     assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("accessibilityColumnCount")) == 0 as uint8)
@@ -703,4 +745,160 @@ func verify_outline_positions() {
 }
 test "AppKit outline indices use model positions and zero based indentation only on tree rows" { verify_outline_positions() }
 
-func main() { verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); verify_collection_positions(); verify_outline_positions(); verify_indexed_rows(); verify_row_array_lifetime(); verify_outline_rows(); print("AppKit accessibility : OK (sans fenêtre)") }
+
+func verify_columns() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = CollectionSource(); var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle(); let columns = object(root, "accessibilityColumns")
+    assert(object(columns, "count") == 4 as uint && source.column_requests == 0 && host.peer_count() == 1)
+    let column = send_arg(columns, selector("objectAtIndex:"), 3 as uint)
+    assert(column != 0 as uint && source.column_requests == 1 && host.peer_count() == 2)
+    assert(compare(object(column, "accessibilityRole"), selector("isEqualToString:"), native_string("AXColumn")) != 0 as uint8)
+    assert(object(column, "accessibilityIndex") == 3 as uint)
+    let header = object(column, "accessibilityHeader")
+    assert(header != 0 as uint && object(header, "accessibilityParent") == column)
+    assert(object(header, "accessibilitySortDirection") == 1 as uint)
+    source.sorting = true
+    assert(object(header, "accessibilitySortDirection") == 2 as uint && object(column, "accessibilitySortDirection") == 2 as uint)
+    source.sorting = null
+    assert(object(header, "accessibilitySortDirection") == 0 as uint)
+    let selected = object(root,"accessibilitySelectedRows")
+    assert(object(selected,"count") == 1 as uint && source.row_requests == 0)
+    let cells = object(column, "accessibilityChildren")
+    assert(object(cells, "count") == 50000 as uint && source.row_requests == 0)
+    let cell = send_arg(cells, selector("objectAtIndex:"), 49999 as uint)
+    assert(cell == send_cell(root, selector("accessibilityCellForColumn:row:"), 3, 49999))
+    assert(host.peer_count() <= 5)
+    let held = object(columns, "retain"); let held_cells = object(cells, "retain"); let held_selected = object(selected,"retain")
+    source.column_total = 0; assert(object(columns, "count") == 0 as uint)
+    host.remove(); assert(object(held, "count") == 0 as uint && object(held_cells, "count") == 0 as uint)
+    assert(object(held_selected,"count") == 0 as uint)
+    send_void(held_selected,selector("release"))
+    send_void(held, selector("release")); send_void(held_cells, selector("release")); send_void(pool, selector("drain"))
+}
+test "AppKit columns project headers sorting and cells lazily and detach retained arrays" { verify_columns() }
+
+class RoleSource:AX.Source {
+    var role:AX.Role = AX.Role.tab
+    var enabled:bool = true
+    var cancelled:int = 0
+    var first:bool = true
+    var last:AX.Action = AX.Action.activate
+    var actions:AX.Action[] = [AX.Action.activate, AX.Action.dismiss, AX.Action.expand]
+    func root() str? { return "role" }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? {
+        if id == "tab:0" || id == "tab:1" {
+            return AX.Element(id:id,parent:"role",role:AX.Role.tab,selected:(id == "tab:0") == self.first,actions:[AX.Action.activate])
+        }
+        if id != "role" { return null }
+        var count = 0; if self.role == AX.Role.tab_group { count = 2 }
+        return AX.Element(id:id, role:self.role, enabled:self.enabled, horizontal:true,
+            expanded:false, child_count:count, actions:self.actions)
+    }
+    func child(id:str,index:int) str? { if id == "role" && index >= 0 && index < 2 { return "tab:$(index)" } return null }
+    func changes() AX.Change[] { return [] }
+    func perform(id:str, request:AX.Request) bool { self.cancelled++; self.last = request.action; if id == "tab:1" { self.first = false } return true }
+}
+func verify_remaining_roles() {
+    let pool = object(system_class("NSAutoreleasePool"), "new")
+    var source = RoleSource(); var host = Presentation(source, 0 as uint, 0 as uint, 200.0, false)
+    let root = host.root_handle()
+    let roles:AX.Role[] = [AX.Role.tab, AX.Role.tab_group, AX.Role.scrollbar, AX.Role.separator, AX.Role.tooltip, AX.Role.column_header]
+    let expected:str[] = ["AXRadioButton", "AXTabGroup", "AXScrollBar", "AXSplitter", "AXHelpTag", "AXButton"]
+    for index, role in roles.indexed() {
+        source.role = role
+        assert(compare(object(root, "accessibilityRole"), selector("isEqualToString:"), native_string(expected[index])) != 0 as uint8)
+    }
+    source.role = AX.Role.dialog
+    assert(send_bool(root,selector("isAccessibilityModal")) != 0 as uint8)
+    assert(compare(object(root, "accessibilitySubrole"), selector("isEqualToString:"), native_string("AXDialog")) != 0 as uint8)
+    assert(send_bool(root, selector("accessibilityPerformCancel")) != 0 as uint8 && source.cancelled == 1)
+    source.enabled = false
+    assert(send_bool(root, selector("accessibilityPerformCancel")) == 0 as uint8 && source.cancelled == 1)
+    source.enabled = true; source.role = AX.Role.tree_item
+    assert(compare(root, selector("isAccessibilitySelectorAllowed:"), selector("setAccessibilityDisclosed:")) != 0 as uint8)
+    set_bool(root, selector("setAccessibilityDisclosed:"), 1 as uint8)
+    assert(source.cancelled == 2)
+    source.role = AX.Role.tab_group
+    let tabs = object(root,"accessibilityTabs")
+    assert(object(tabs,"count") == 2 as uint && object(object(root,"accessibilitySelectedChildren"),"count") == 1 as uint)
+    let second = send_arg(tabs,selector("objectAtIndex:"),1 as uint)
+    assert(send_bool(second,selector("accessibilityPerformPress")) != 0 as uint8)
+    assert(object(object(second,"accessibilityValue"),"intValue") == 1 as uint)
+    source.role = AX.Role.scroll_view; source.actions = [AX.Action.scroll_forward,AX.Action.scroll_backward]
+    assert(send_bool(root,selector("accessibilityPerformIncrement")) != 0 as uint8 && source.last == AX.Action.scroll_forward)
+    assert(send_bool(root,selector("accessibilityPerformDecrement")) != 0 as uint8 && source.last == AX.Action.scroll_backward)
+    source.role = AX.Role.combo_box; source.actions = [AX.Action.expand]
+    assert(send_bool(root,selector("accessibilityPerformShowMenu")) != 0 as uint8 && source.last == AX.Action.expand)
+    let held = object(root, "retain")
+    host.remove(); assert(send_bool(held, selector("accessibilityPerformCancel")) == 0 as uint8)
+    send_void(held, selector("release"))
+    send_void(pool, selector("drain"))
+}
+test "AppKit remaining control roles dialog cancellation and outline disclosure reach the live Source" { verify_remaining_roles() }
+
+func text_invocation(element:uint,name:str,input:uint = 0 as uint) uint {
+    let method = selector(name)
+    let signature = send_arg(element,selector("methodSignatureForSelector:"),method)
+    let call = send_arg(system_class("NSInvocation"),selector("invocationWithMethodSignature:"),signature)
+    set_object(call,selector("setSelector:"),method); set_object(call,selector("setTarget:"),element)
+    if input != 0 as uint { argument(call,selector("setArgument:atIndex:"),input,2) }
+    send_void(call,selector("invoke")); return call
+}
+func returned_span(call:uint) uint[2] {
+    var value:uint[2] = [0,0]
+    set_object(call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(value)))
+    return value
+}
+func verify_text_geometry() {
+    let pool = object(system_class("NSAutoreleasePool"),"new")
+    var source = Source(); source.value = "Aé👩‍💻中Z"
+    var host = Presentation(source,0 as uint,0 as uint,200.0,false,Math.Vec2(5.0,7.0))
+    let field = send_arg(object(host.root_handle(),"accessibilityChildren"),selector("objectAtIndex:"),49999 as uint)
+    var index:int = 4
+    let cluster = returned_span(text_invocation(field,"accessibilityRangeForIndex:",C.address_bits(C.mutable_pointer(index))))
+    assert(cluster[0] == 3 as uint && cluster[1] == 5 as uint)
+    var line:int = 0
+    let first = returned_span(text_invocation(field,"accessibilityRangeForLine:",C.address_bits(C.mutable_pointer(line))))
+    assert(first[0] == 0 as uint && first[1] == 8 as uint)
+    let visible = returned_span(text_invocation(field,"accessibilityVisibleCharacterRange"))
+    assert(visible[0] == 1 as uint && visible[1] == 8 as uint)
+    var selection:uint[2] = [2,3]
+    let call = text_invocation(field,"accessibilityFrameForRange:",C.address_bits(C.mutable_pointer(selection)))
+    var rect:float64[4] = [0.0,0.0,0.0,0.0]
+    set_object(call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(rect)))
+    assert(source.geometry_start == 1 && source.geometry_length == 2)
+    assert(rect[0] == 25.0 && rect[1] == 148.0 && rect[2] == 40.0 && rect[3] == 15.0)
+    var point:float64[2] = [27.0,161.0]
+    let hit = returned_span(text_invocation(field,"accessibilityRangeForPosition:",C.address_bits(C.mutable_pointer(point))))
+    assert(source.geometry_x == 22.0 && source.geometry_y == 32.0 && hit[0] == 3 as uint && hit[1] == 5 as uint)
+    index = 9
+    let line_call = text_invocation(field,"accessibilityLineForIndex:",C.address_bits(C.mutable_pointer(index)))
+    var line_result:int = -1
+    set_object(line_call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(line_result)))
+    assert(line_result == 1)
+    selection = [1,7]
+    let substring_call = text_invocation(field,"accessibilityStringForRange:",C.address_bits(C.mutable_pointer(selection)))
+    var text:uint = 0; set_object(substring_call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(text)))
+    assert(compare(text,selector("isEqualToString:"),native_string("é👩‍💻")) != 0 as uint8)
+    index = -1
+    let invalid = returned_span(text_invocation(field,"accessibilityRangeForIndex:",C.address_bits(C.mutable_pointer(index))))
+    assert(invalid[0] == 9223372036854775807 as uint && invalid[1] == 0 as uint)
+    var flipped = Presentation(source,0 as uint,0 as uint,300.0,true,Math.Vec2(-4.0,18.0))
+    let flipped_field = send_arg(object(flipped.root_handle(),"accessibilityChildren"),selector("objectAtIndex:"),49999 as uint)
+    let flipped_call = text_invocation(flipped_field,"accessibilityFrameForRange:",C.address_bits(C.mutable_pointer(selection)))
+    set_object(flipped_call,selector("getReturnValue:"),C.address_bits(C.mutable_pointer(rect)))
+    assert(rect[0] == 16.0 && rect[1] == 48.0)
+    point = [18.0,50.0]
+    let flipped_hit = returned_span(text_invocation(flipped_field,"accessibilityRangeForPosition:",C.address_bits(C.mutable_pointer(point))))
+    assert(flipped_hit[0] == 3 as uint && source.geometry_x == 22.0 && source.geometry_y == 32.0)
+    flipped.remove()
+    let retained = object(field,"retain"); host.remove()
+    let detached = returned_span(text_invocation(retained,"accessibilityVisibleCharacterRange"))
+    assert(detached[0] == 9223372036854775807 as uint && detached[1] == 0 as uint)
+    send_void(retained,selector("release")); send_void(pool,selector("drain"))
+}
+test "AppKit text queries marshal UTF16 ranges points and screen rectangles without a window" { verify_text_geometry() }
+
+func main() { verify_text_geometry(); verify_columns(); verify_remaining_roles(); verify_appkit(); verify_attachment(); verify_controls(); verify_relationships(); verify_selection_expansion(); verify_text_selection(); verify_multiline_selection(); verify_geometry(); verify_collection_positions(); verify_outline_positions(); verify_indexed_rows(); verify_row_array_lifetime(); verify_outline_rows(); print("AppKit accessibility : OK (sans fenêtre)") }

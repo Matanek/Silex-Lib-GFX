@@ -1,0 +1,12 @@
+use Interop.C
+use Interop.Boundary
+
+// NSRect is 32 bytes. Intel needs the stret forwarding entry; ARM64 uses
+// the ordinary forwarding entry for every aggregate. No public ABI leaks.
+func rectangle_forwarding() uint {
+    return C.address_bits(lookup_implementation(lookup_class(C.terminated_pointer("NSObject")),register_name(C.terminated_pointer("silexUnimplementedTextRect"))))
+}
+
+let lookup_class = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu,name:"objc_getClass")
+let register_name = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu,name:"sel_registerName")
+let lookup_implementation = C.function<func(C.Pointer<uint8>,C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu,name:"class_getMethodImplementation_stret" )

@@ -19,6 +19,7 @@ public enum Role {
     table
     row
     column_header
+    column
     cell
     tab_group
     tab
@@ -105,6 +106,7 @@ public struct Element {
     let column_index:int? = null
     let row_count:int? = null
     let column_count:int? = null
+    let header:str? = null
     let labelled_by:str? = null
     let labels:str? = null
     let sorted_descending:bool? = null
@@ -124,6 +126,29 @@ public struct Change {
 public protocol Rows {
     func count() int
     func row(index:int) str?
+    func selected() str[] { return [] }
+}
+
+// Column identities and their header relation are independent of row order.
+// Like Rows, this view is live and only realizes a requested identity.
+public protocol Columns {
+    func count() int
+    func column(index:int) str?
+}
+
+// Text indices count graphemes, like Request's selection. Geometry uses the
+// same top-left coordinates as Element.bounds, is live and queried on demand.
+public struct TextRange {
+    let start:int
+    let length:int
+    init(start:int, length:int) { self.start = start; self.length = length }
+}
+public protocol TextGeometry {
+    func bounds(selection:TextRange) Bounds?
+    func range_at(x:float, y:float) TextRange?
+    func line_for_index(index:int) int?
+    func range_for_line(line:int) TextRange?
+    func visible_range() TextRange?
 }
 
 // Children are requested by index, never returned as an eagerly built tree.
@@ -134,6 +159,8 @@ public protocol Source {
     func read(id:str) Element?
     func child(id:str, index:int) str?
     func rows(id:str) Rows? { return null }
+    func columns(id:str) Columns? { return null }
+    func text_geometry(id:str) TextGeometry? { return null }
     func perform(id:str, request:Request) bool
     func changes() Change[]
 }
