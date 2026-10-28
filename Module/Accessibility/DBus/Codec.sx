@@ -1,0 +1,185 @@
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Kind
+use STD.Text
+use Interop.C
+
+// Function addresses belong to the enclosing dynamically loaded libdbus.
+// DBusMessageIter is 72 bytes, aligned to eight bytes, on both supported Linux
+// ABIs: two pointers, ten 32-bit fields, then two pointers (dbus-message.h).
+package class Codec {
+    private let init_read:uint
+    private let init_append:uint
+    private let arg_type:uint
+    private let signature:uint
+    private let get_basic:uint
+    private let next:uint
+    private let recurse:uint
+    private let append_basic:uint
+    private let open_container:uint
+    private let close_container:uint
+    private let abandon_container:uint
+    private let free:uint
+    init(symbol:func(str) uint) {
+        self.init_read = symbol("dbus_message_iter_init")
+        self.init_append = symbol("dbus_message_iter_init_append")
+        self.arg_type = symbol("dbus_message_iter_get_arg_type")
+        self.signature = symbol("dbus_message_iter_get_signature")
+        self.get_basic = symbol("dbus_message_iter_get_basic")
+        self.next = symbol("dbus_message_iter_next")
+        self.recurse = symbol("dbus_message_iter_recurse")
+        self.append_basic = symbol("dbus_message_iter_append_basic")
+        self.open_container = symbol("dbus_message_iter_open_container")
+        self.close_container = symbol("dbus_message_iter_close_container")
+        self.abandon_container = symbol("dbus_message_iter_abandon_container")
+        self.free = symbol("dbus_free")
+    }
+    func available() bool {
+        return self.init_read != 0 && self.init_append != 0 && self.arg_type != 0 && self.signature != 0 &&
+            self.get_basic != 0 && self.next != 0 && self.recurse != 0 && self.append_basic != 0 &&
+            self.open_container != 0 && self.close_container != 0 && self.abandon_container != 0 && self.free != 0
+    }
+    func decode(message:uint) Value[]? {
+        if !self.available() || message == 0 { return null }
+        var iter:uint[9] = [0,0,0,0,0,0,0,0,0]
+        let initialized = C.call<func(uint,C.MutablePointer<uint>) uint32>(self.init_read,message,C.mutable_pointer(iter))
+        if initialized == 0 { return [] }
+        return self.read_sequence(C.address_bits(C.mutable_pointer(iter)),0)
+    }
+    private func read_sequence(iter:uint, depth:int) Value[]? {
+        if depth > 32 { return null }
+        var result:Value[] = []
+        while C.call<func(uint) int32>(self.arg_type,iter) != 0 {
+            if result.count() >= 65536 { return null }
+            if var value = self.read_value(iter,depth) { result.append(value) }
+            else { return null }
+            if C.call<func(uint) uint32>(self.next,iter) == 0 { break }
+        }
+        return result
+    }
+    private func read_value(iter:uint, depth:int) Value? {
+        let type = C.call<func(uint) int32>(self.arg_type,iter)
+        if type == 98 || type == 105 || type == 110 || type == 117 || type == 120 || type == 100 || type == 115 || type == 111 {
+            var data:uint = 0
+            C.call<func(uint,C.MutablePointer<uint>) void>(self.get_basic,iter,C.mutable_pointer(data))
+            if type == 98 { return Value.boolean(data != 0) }
+            if type == 105 { return Value.signed(C.load<int32>(C.address_bits(C.mutable_pointer(data)),0 as uint) as int) }
+            if type == 110 { return Value.signed(C.load<int16>(C.address_bits(C.mutable_pointer(data)),0 as uint) as int,signature:"n") }
+            if type == 117 { return Value.unsigned(data as uint32) }
+            if type == 120 { return Value.signed(C.load<int>(C.address_bits(C.mutable_pointer(data)),0 as uint),signature:"x") }
+            if type == 100 {
+                var number:float64 = 0.0
+                C.call<func(uint,C.MutablePointer<float64>) void>(self.get_basic,iter,C.mutable_pointer(number))
+                return Value.real(number)
+            }
+            if type == 115 { return Value.text(read_string(data)) }
+            return Value.path(read_string(data))
+        }
+        if type != 97 && type != 114 && type != 101 && type != 118 { return null }
+        var nested:uint[9] = [0,0,0,0,0,0,0,0,0]
+        C.call<func(uint,C.MutablePointer<uint>) void>(self.recurse,iter,C.mutable_pointer(nested))
+        if var members = self.read_sequence(C.address_bits(C.mutable_pointer(nested)),depth+1) {
+            if type == 114 { return Value.record(members) }
+            if type == 118 { if members.count() != 1 { return null } return Value.variant(members[0]) }
+            if type == 101 {
+                if members.count() != 2 || members[0].kind != Kind.text { return null }
+                return Value.entry(members[0].string_value,members[1])
+            }
+            let address = C.call<func(uint) uint>(self.signature,iter)
+            if address == 0 { return null }
+            let signature = read_string(address)
+            C.call<func(uint) void>(self.free,address)
+            if !Text.starts_with(signature,"a") { return null }
+            let element = Text.slice(signature,1,signature.count())
+            for member in members { if member.signature != element { return null } }
+            return Value.array(element,members)
+        }
+        return null
+    }
+    func encode(message:uint, values:Value[]) bool {
+        if !self.available() || message == 0 { return false }
+        var iter:uint[9] = [0,0,0,0,0,0,0,0,0]
+        C.call<func(uint,C.MutablePointer<uint>) void>(self.init_append,message,C.mutable_pointer(iter))
+        for value in values {
+            if !self.write_value(C.address_bits(C.mutable_pointer(iter)),value,0) { return false }
+        }
+        return true
+    }
+    private func write_value(iter:uint, value:Value, depth:int) bool {
+        if depth > 32 { return false }
+        var type:int32 = 0
+        if value.kind == Kind.boolean {
+            var data:uint32 = value.integer_value as uint32
+            return C.call<func(uint,int32,C.MutablePointer<uint32>) uint32>(self.append_basic,iter,98,C.mutable_pointer(data)) != 0
+        }
+        if value.kind == Kind.unsigned {
+            var data:uint32 = value.integer_value as uint32
+            return C.call<func(uint,int32,C.MutablePointer<uint32>) uint32>(self.append_basic,iter,117,C.mutable_pointer(data)) != 0
+        }
+        if value.kind == Kind.signed {
+            if value.signature == "i" {
+                if value.integer_value < -2147483648 || value.integer_value > 2147483647 { return false }
+                var data:int32 = value.integer_value as int32
+                return C.call<func(uint,int32,C.MutablePointer<int32>) uint32>(self.append_basic,iter,105,C.mutable_pointer(data)) != 0
+            }
+            if value.signature == "n" {
+                if value.integer_value < -32768 || value.integer_value > 32767 { return false }
+                // libdbus takes const void*, pointing at DBusBasicValue's
+                // native union. Describe its eight-byte storage and short
+                // member explicitly; do not reinterpret a checked Silex cast
+                // as a native bit cast or expose this layout to applications.
+                var data:uint = 0
+                C.store<int16>(C.address_bits(C.mutable_pointer(data)),0 as uint,value.integer_value as int16)
+                return C.call<func(uint,int32,C.MutablePointer<uint>) uint32>(self.append_basic,iter,110,C.mutable_pointer(data)) != 0
+            }
+            var data:int = value.integer_value
+            return C.call<func(uint,int32,C.MutablePointer<int>) uint32>(self.append_basic,iter,120,C.mutable_pointer(data)) != 0
+        }
+        if value.kind == Kind.real {
+            var data:float64 = value.real_value
+            return C.call<func(uint,int32,C.MutablePointer<float64>) uint32>(self.append_basic,iter,100,C.mutable_pointer(data)) != 0
+        }
+        if value.kind == Kind.text || value.kind == Kind.path {
+            var index = 0 as uint
+            while index < C.byte_count(value.string_value) {
+                if C.byte_at(value.string_value,index) == 0 as uint8 { return false }
+                index++
+            }
+            type = 115; if value.kind == Kind.path { type = 111 }
+            // Keep the terminated backing string alive while libdbus copies it.
+            let terminated = value.string_value+"\0"
+            var data = C.address_bits(C.pointer(terminated))
+            return C.call<func(uint,int32,C.MutablePointer<uint>) uint32>(self.append_basic,iter,type,C.mutable_pointer(data)) != 0
+        }
+        var nested:uint[9] = [0,0,0,0,0,0,0,0,0]
+        var contained = ""
+        if value.kind == Kind.array { type = 97; contained = Text.slice(value.signature,1,value.signature.count()) }
+        elif value.kind == Kind.record { type = 114 }
+        elif value.kind == Kind.entry { type = 101 }
+        elif value.kind == Kind.variant { type = 118; contained = value.content!.signature }
+        else { return false }
+        var opened = 0 as uint32
+        if type == 97 || type == 118 {
+            opened = C.call<func(uint,int32,C.Pointer<uint8>,C.MutablePointer<uint>) uint32>(self.open_container,iter,type,C.terminated_pointer(contained),C.mutable_pointer(nested))
+        } else {
+            opened = C.call<func(uint,int32,uint,C.MutablePointer<uint>) uint32>(self.open_container,iter,type,0 as uint,C.mutable_pointer(nested))
+        }
+        if opened == 0 { return false }
+        var success = true
+        if value.kind == Kind.variant { success = self.write_value(C.address_bits(C.mutable_pointer(nested)),value.content!,depth+1) }
+        else {
+            for member in value.members {
+                if !self.write_value(C.address_bits(C.mutable_pointer(nested)),member,depth+1) { success = false; break }
+            }
+        }
+        if success { success = C.call<func(uint,C.MutablePointer<uint>) uint32>(self.close_container,iter,C.mutable_pointer(nested)) != 0 }
+        if !success { C.call<func(uint,C.MutablePointer<uint>) void>(self.abandon_container,iter,C.mutable_pointer(nested)) }
+        return success
+    }
+}
+
+package func read_string(address:uint) str {
+    if address == 0 { return "" }
+    var bytes:uint8[] = []; var index = 0 as uint
+    while C.load<uint8>(address,index) != 0 as uint8 { bytes.append(C.load<uint8>(address,index)); index++ }
+    return C.string(@bytes[0:bytes.count()])
+}

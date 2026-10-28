@@ -1,0 +1,10 @@
+use GFX.Accessibility.DBus.Library
+use GFX.Accessibility.BusValue.Value
+
+test "an unavailable optional D-Bus library leaves no callable codec or connection" {
+    var library = Library("/silex-accessibility-test/no-such-library")
+    assert(!library.available())
+    assert(library.open() == 0 as uint)
+    assert(library.decode(0 as uint) == null)
+    assert(!library.encode(0 as uint,[Value.text("Hello")]))
+}

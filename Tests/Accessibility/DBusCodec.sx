@@ -1,0 +1,47 @@
+use GFX.Accessibility.DBus.Library
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Kind
+use STD.Process
+
+func same(first:Value, second:Value) bool {
+    if first.kind != second.kind || first.signature != second.signature ||
+        first.string_value != second.string_value || first.integer_value != second.integer_value ||
+        first.real_value != second.real_value || first.members.count() != second.members.count() { return false }
+    if first.kind == Kind.variant { if !same(first.content!,second.content!) { return false } }
+    for index, value in first.members.indexed() { if !same(value,second.members[index]) { return false } }
+    return true
+}
+
+func main() {
+    let arguments = Process.arguments()
+    assert(arguments.count() == 2)
+    var library = Library(arguments[1]); assert(library.available())
+    let message = library.method("org.silex.Test","/org/silex/Test","org.silex.Test","RoundTrip")
+    assert(message != 0 as uint)
+    let decimal:float64 = 0.1
+    var reference = Value.record([Value.text(":1.42"),Value.path("/org/a11y/atspi/accessible/root")])
+    var values:Value[] = [Value.signed(-2147483648),Value.signed(-32768,signature:"n"),
+        Value.signed(-9223372036854775807,signature:"x"),Value.unsigned(0xFFFF_FFFF as uint32),
+        Value.boolean(true),Value.boolean(false),Value.real(decimal),Value.text("Aé👩‍💻中"),
+        Value.array("(so)",[reference]),Value.array("s",[]),
+        Value.variant(Value.array("{sv}",[Value.entry("Name",Value.variant(Value.text("Été"))),
+            Value.entry("Count",Value.variant(Value.signed(-17)))])),Value.text("After containers")]
+    assert(library.encode(message,values))
+    var decoded = library.decode(message)!
+    assert(decoded.count() == values.count())
+    for index, value in values.indexed() { assert(same(value,decoded[index])) }
+    library.release(message)
+
+    let invalid = library.method("org.silex.Test","/org/silex/Test","org.silex.Test","Invalid")
+    assert(!library.encode(invalid,[Value.text("before\0after")]))
+    library.release(invalid)
+    let overflow = library.method("org.silex.Test","/org/silex/Test","org.silex.Test","Overflow")
+    assert(!library.encode(overflow,[Value.signed(2147483648)]))
+    library.release(overflow)
+    let nesting = library.method("org.silex.Test","/org/silex/Test","org.silex.Test","Nesting")
+    var nested = Value.text("deep"); var depth = 0
+    while depth < 34 { nested = Value.variant(nested); depth++ }
+    assert(!library.encode(nesting,[nested]))
+    library.release(nesting)
+    print("D-Bus codec : OK (sans bus ni fenêtre)")
+}
