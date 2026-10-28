@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The macOS bridge accepts native decimal values and positions by explicitly rounding to UI precision. Non-finite or overflowing numbers are rejected before callbacks; control policy remains in Source.
+
 - Accessibility sources can query an element at coordinates and describe multiple-selection support, with compatible defaults for existing producers.
 
 - The macOS bridge adds columns/headers/sorting, collection selection/disclosure, remaining control roles and on-demand text geometry. Source keeps compatible defaults; rectangle forwarding follows ARM64 and Intel ABIs.

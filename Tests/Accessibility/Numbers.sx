@@ -1,0 +1,17 @@
+use GFX.Accessibility.Numbers
+
+test "native doubles are rounded to UI precision without changing control policy" {
+    let decimal:float64 = 0.1
+    assert(Numbers.scalar(decimal) == 0.1)
+    assert(Numbers.scalar(0.75 as float64) == 0.75)
+    assert(Numbers.scalar(100.0 as float64) == 100.0)
+    let negative:float64 = -0.0
+    assert(1.0/Numbers.scalar(negative)! < 0.0)
+}
+
+test "non finite and overflowing native numbers are rejected before callbacks" {
+    let huge:float64 = 1e300; let zero:float64 = 0.0
+    assert(Numbers.scalar(huge) == null && Numbers.scalar(-huge) == null)
+    assert(Numbers.scalar(huge*huge) == null)
+    assert(Numbers.scalar(zero/zero) == null)
+}

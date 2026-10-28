@@ -1,4 +1,5 @@
 use GFX.Accessibility as AX
+use GFX.Accessibility.Numbers
 use STD.Collections.Dictionary
 use STD.Math
 use STD.Text.Grapheme
@@ -370,8 +371,9 @@ package nocopy class Host {
             } elif operation == selector("accessibilityRangeForPosition:") {
                 var point:float64[2] = [0.0,0.0]
                 set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(point)), 2)
-                let position = self.source_point(point)
-                if var layout = geometry { selection = layout.range_at(position.x,position.y) }
+                if let position = self.source_point(point) {
+                    if var layout = geometry { selection = layout.range_at(position.x,position.y) }
+                }
             } elif operation == selector("accessibilityLineForIndex:") || operation == selector("accessibilityRangeForIndex:") {
                 var index:int = 0
                 set_argument(invocation, selector("getArgument:atIndex:"), C.address_bits(C.mutable_pointer(index)), 2)
@@ -435,13 +437,16 @@ package nocopy class Host {
         if self.window != 0 as uint { rect = convert_rect(self.window,"convertRectToScreen:",rect,false) }
         return rect
     }
-    private func source_point(point:float64[2]) Math.Vec2 {
+    private func source_point(point:float64[2]) Math.Vec2? {
+        if !Math.is_finite(point[0]) || !Math.is_finite(point[1]) { return null }
         var position = point
         if self.window != 0 as uint { position = convert_point(self.window,"convertPointFromScreen:",position,false) }
         if self.view != 0 as uint { position = convert_point(self.view,"convertPoint:fromView:",position,true) }
-        var y = position[1] as float
+        let x = Numbers.scalar(position[0]); let vertical = Numbers.scalar(position[1])
+        if x == null || vertical == null { return null }
+        var y = vertical!
         if !self.flipped { y = self.height-y }
-        return Math.Vec2(position[0] as float-self.origin.x,y-self.origin.y)
+        return Math.Vec2(x!-self.origin.x,y-self.origin.y)
     }
 
     module func child_count(peer:Peer) uint {
@@ -702,7 +707,9 @@ package nocopy class Host {
         if !self.allows(peer, selector("setAccessibilityValue:")) { return }
         if let element = self.source.read(peer.id) {
             if element.number != null {
-                let changed = self.perform(peer, AX.Request(AX.Action.set_value, number:read_double(value, selector("doubleValue")) as float))
+                if let number = Numbers.scalar(read_double(value, selector("doubleValue"))) {
+                    let changed = self.perform(peer, AX.Request(AX.Action.set_value, number:number))
+                }
             } else {
                 let changed = self.perform(peer, AX.Request(AX.Action.set_value, text:copy_string(value)))
             }
@@ -1130,7 +1137,7 @@ func set_frame(element:uint, x:float, y:float, width:float, height:float) {
     send_void(invocation, selector("invoke"))
 }
 func notify(element:uint, name:str) { post_notification(element, string(name)) }
-func view(window:uint) uint { return object(window, "contentView") }
+func view(window:uint, runtime_window:uint = 0 as uint) uint { return object(window, "contentView") }
 func flipped(view:uint) bool { return read_bool(view, selector("isFlipped")) != 0 as uint8 }
 
 let get_class = C.function<func(C.Pointer<uint8>) C.Pointer<uint8> >(library:Boundary.SystemMenu, name:"objc_getClass")

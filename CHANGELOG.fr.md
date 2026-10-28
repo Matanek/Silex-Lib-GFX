@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Le pont macOS accepte les valeurs et positions décimales natives en les arrondissant explicitement vers la précision UI. Les nombres non finis ou hors de cette précision sont refusés avant les callbacks ; la politique des contrôles reste dans Source.
+
 - Les sources accessibles peuvent rechercher un élément par coordonnées et annoncer la sélection multiple, avec des défauts compatibles pour les producteurs existants.
 
 - Le pont macOS complète colonnes/en-têtes/tri, sélection et dépliage des collections, rôles des contrôles et géométrie textuelle à la demande. Source conserve des défauts compatibles ; les retours de rectangles respectent les ABI ARM64/Intel.

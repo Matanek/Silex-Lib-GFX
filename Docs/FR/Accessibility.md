@@ -223,3 +223,10 @@ visible, sans parcourir ni construire ses lignes logiques hors écran.
 `Element.multiple_selection` annonce si la collection accepte plusieurs
 sélections, indépendamment du nombre actuellement sélectionné. Le défaut est
 `false`. Un changement de cette capacité est un changement d’état.
+
+## Valeurs natives décimales
+
+Le pont macOS arrondit les valeurs et positions natives vers la précision
+flottante de la source. Il refuse les nombres non finis ou trop grands avant
+d’appeler la source. La validation de plage et le bornage restent définis par
+`Source.perform`, comme pour les autres entrées du contrôle.

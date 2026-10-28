@@ -269,6 +269,13 @@ func verify_controls() {
     assert(Math.abs(source.amount - 12.1) < 0.001)
     assert(send_bool(slider, selector("accessibilityPerformDecrement")) != 0 as uint8)
     assert(Math.abs(source.amount - 12.0) < 0.001)
+    let native_decimal:float64 = 12.1
+    set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), native_decimal))
+    assert(Math.abs(source.amount - 12.1) < 0.001)
+    let before_invalid = source.control_requests; let huge:float64 = 1e300; let zero:float64 = 0.0
+    set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), huge))
+    set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), zero/zero))
+    assert(source.control_requests == before_invalid && Math.abs(source.amount - 12.1) < 0.001)
     set_object(slider, selector("setAccessibilityValue:"), make_number(system_class("NSNumber"), selector("numberWithDouble:"), 100.0))
     assert(source.amount == 20.0)
     assert(read_double(object(slider, "accessibilityValue"), selector("doubleValue")) == 20.0)
@@ -873,6 +880,13 @@ func verify_text_geometry() {
     var point:float64[2] = [27.0,161.0]
     let hit = returned_span(text_invocation(field,"accessibilityRangeForPosition:",C.address_bits(C.mutable_pointer(point))))
     assert(source.geometry_x == 22.0 && source.geometry_y == 32.0 && hit[0] == 3 as uint && hit[1] == 5 as uint)
+    let native_x:float64 = 27.1; let native_y:float64 = 161.2
+    point = [native_x,native_y]
+    let fractional = returned_span(text_invocation(field,"accessibilityRangeForPosition:",C.address_bits(C.mutable_pointer(point))))
+    assert(Math.abs(source.geometry_x-22.1) < 0.001 && Math.abs(source.geometry_y-31.8) < 0.001 && fractional[0] == 3 as uint)
+    point = [1e300 as float64,161.2 as float64]
+    let outside = returned_span(text_invocation(field,"accessibilityRangeForPosition:",C.address_bits(C.mutable_pointer(point))))
+    assert(outside[0] == 9223372036854775807 as uint && Math.abs(source.geometry_x-22.1) < 0.001)
     index = 9
     let line_call = text_invocation(field,"accessibilityLineForIndex:",C.address_bits(C.mutable_pointer(index)))
     var line_result:int = -1

@@ -1,0 +1,11 @@
+use STD.Math
+
+// Native accessibility APIs use doubles; Source intentionally uses the UI's
+// float precision. Accept rounding here, while leaving clamping and other
+// control policy to Source.perform. Non-finite values never reach a callback.
+package func scalar(value:float64) float? {
+    if !Math.is_finite(value) { return null }
+    let rounded = round_float<float>(value)
+    if !Math.is_finite(rounded) { return null }
+    return rounded
+}

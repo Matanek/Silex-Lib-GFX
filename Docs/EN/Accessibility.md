@@ -212,3 +212,10 @@ without scanning or constructing logical rows outside the viewport.
 `Element.multiple_selection` reports whether the collection accepts multiple
 selections, independently of its current selected count. It defaults to `false`.
 A change to this capability is a state change.
+
+## Native decimal values
+
+The macOS bridge rounds native values and positions to the source's floating
+precision. It rejects non-finite or overflowing numbers before calling the
+source. Range validation and clamping remain defined by `Source.perform`,
+consistently with the control's other inputs.
