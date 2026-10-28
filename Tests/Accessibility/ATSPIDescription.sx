@@ -24,7 +24,7 @@ test "AT-SPI high state bits and disabled controls retain their independent prop
         editable:false,selection_anchor:0,selection_cursor:1))
     assert((text.members[0].unsigned_value()! & (1 as uint32 << 17)) != 0)
     assert((text.members[1].unsigned_value()! & (1 as uint32 << 6)) != 0 && (text.members[1].unsigned_value()! & (1 as uint32 << 11)) != 0)
-    var collection = Native.states(AX.Element(id:"table",role:AX.Role.table),true,true)
+    var collection = Native.states(AX.Element(id:"table",role:AX.Role.table,multiple_selection:true),true)
     assert((collection.members[0].unsigned_value()! & (1 as uint32 << 31)) != 0)
     assert((collection.members[0].unsigned_value()! & (1 as uint32 << 18)) != 0)
 }

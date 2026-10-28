@@ -210,3 +210,16 @@ Quand `Rows.selected()` change, la source notifie la collection avec
 `ChangeKind.selection`. UI conserve une observation de sélection par conteneur,
 réévaluée à la révision du modèle ou de ses emplacements, même sans lecture
 préalable des enfants. Une lecture courante ne consomme pas cet événement.
+
+## Rechercher un élément et décrire la sélection
+
+`Source.element_at(x,y)` retourne l’identité de l’élément accessible à ces
+coordonnées, dans le repère de `Element.bounds`. Cette requête sémantique inclut
+les éléments statiques et désactivés ; elle ne change ni focus ni sélection.
+Son défaut `null` préserve les producteurs existants qui ne fournissent pas
+cette capacité. Un producteur de grande collection doit utiliser son layout
+visible, sans parcourir ni construire ses lignes logiques hors écran.
+
+`Element.multiple_selection` annonce si la collection accepte plusieurs
+sélections, indépendamment du nombre actuellement sélectionné. Le défaut est
+`false`. Un changement de cette capacité est un changement d’état.

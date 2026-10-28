@@ -112,6 +112,7 @@ public struct Element {
     let sorted_descending:bool? = null
     let shortcut:str? = null
     let actions:Action[] = []
+    let multiple_selection:bool = false
 }
 
 public enum ChangeKind { structure; name; value; relations; state; selection; focus; bounds; removed }
@@ -163,6 +164,9 @@ public protocol Source {
     func text_geometry(id:str) TextGeometry? { return null }
     func perform(id:str, request:Request) bool
     func changes() Change[]
+    // A semantic query, including disabled/static elements, in the same
+    // coordinates as bounds. A producer can use its retained visible layout.
+    func element_at(x:float, y:float) str? { return null }
 }
 
 package struct EmptySource:Source {

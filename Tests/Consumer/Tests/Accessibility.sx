@@ -48,6 +48,8 @@ class LegacyRows:Accessibility.Rows {
 test "new optional accessibility capabilities preserve legacy source and row conformances" {
     var source:Accessibility.Source = VolumeSource()
     assert(source.columns("root") == null && source.text_geometry("root") == null)
+    assert(source.element_at(0.0,0.0) == null)
+    assert(!Accessibility.Element(id:"collection").multiple_selection)
     var rows:Accessibility.Rows = LegacyRows()
     assert(rows.selected().is_empty())
 }

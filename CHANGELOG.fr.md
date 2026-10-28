@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Les sources accessibles peuvent rechercher un élément par coordonnées et annoncer la sélection multiple, avec des défauts compatibles pour les producteurs existants.
+
 - Le pont macOS complète colonnes/en-têtes/tri, sélection et dépliage des collections, rôles des contrôles et géométrie textuelle à la demande. Source conserve des défauts compatibles ; les retours de rectangles respectent les ABI ARM64/Intel.
 
 - Les sources accessibles peuvent fournir une vue Rows vivante et indexée, facultative pour les sources existantes. AppKit expose les lignes et l’accès direct aux cellules sans énumération globale ; identités, mutations et détachement sont éprouvés sans fenêtre. La navigation complète avec lecteur d’écran reste à qualifier.

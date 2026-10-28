@@ -69,7 +69,7 @@ package func role_name(value:AX.Role) str {
     return "panel"
 }
 
-package func states(element:AX.Element, manages_descendants:bool = false, multiple:bool = false) Value {
+package func states(element:AX.Element, manages_descendants:bool = false) Value {
     // Each state contributes a distinct bit once; sum their disjoint weights.
     var bits:uint = 1 as uint << 30 // VISIBLE, independently of current clipping.
     if element.enabled { bits = bits + (1 as uint << 8) + (1 as uint << 24) }
@@ -99,7 +99,7 @@ package func states(element:AX.Element, manages_descendants:bool = false, multip
     }
     if element.invalid { bits = bits + (1 as uint << 36) }
     if manages_descendants { bits = bits + (1 as uint << 31) }
-    if multiple { bits = bits + (1 as uint << 18) }
+    if element.multiple_selection { bits = bits + (1 as uint << 18) }
     return Value.array("u",[Value.unsigned((bits & 0xFFFF_FFFF) as uint32),Value.unsigned((bits >> 32) as uint32)])
 }
 

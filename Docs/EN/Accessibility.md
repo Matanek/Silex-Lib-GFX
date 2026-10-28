@@ -199,3 +199,16 @@ When `Rows.selected()` changes, the source notifies the collection with
 `ChangeKind.selection`. UI retains a selection observation per container,
 refreshed by model or location revision even when children have not been read.
 A live read does not consume that event.
+
+## Locate an element and describe selection
+
+`Source.element_at(x,y)` returns the identity of the accessible element at
+those coordinates, in the same coordinate system as `Element.bounds`. This
+semantic query includes static and disabled elements; it changes neither focus
+nor selection. Its `null` default preserves existing sources that do not supply
+this capability. A large-collection producer should use its visible layout
+without scanning or constructing logical rows outside the viewport.
+
+`Element.multiple_selection` reports whether the collection accepts multiple
+selections, independently of its current selected count. It defaults to `false`.
+A change to this capability is a state change.
