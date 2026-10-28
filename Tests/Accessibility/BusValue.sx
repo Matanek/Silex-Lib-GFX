@@ -1,0 +1,30 @@
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Kind
+use GFX.Accessibility.BusValue.Reply
+
+test "D-Bus values retain native signatures and reject incompatible reads" {
+    var integer = Value.signed(-7)
+    assert(integer.signature == "i" && integer.signed_value() == -7)
+    assert(integer.text_value() == null && integer.unsigned_value() == null)
+    assert(Value.unsigned(0xFFFF_FFFF as uint32).integer_value == 4294967295)
+    assert(Value.boolean(false).boolean_value() == false)
+    assert(Value.text("é👩‍💻中").text_value() == "é👩‍💻中")
+    var relation = Value.record([Value.text(":1.42"),Value.path("/org/a11y/atspi/null")])
+    var variant = Value.variant(relation)
+    assert(relation.signature == "(so)" && variant.signature == "v")
+    assert(variant.content!.members[1].kind == Kind.path)
+    assert(Value.array("(so)",[relation]).signature == "a(so)")
+    var property = Value.entry("Name",Value.variant(Value.text("Slider")))
+    assert(Value.array("{sv}",[property]).signature == "a{sv}")
+}
+
+test "AT-SPI cache signatures and method errors remain distinguishable without a system bus" {
+    var reference = Value.record([Value.text(":1.42"),Value.path("/org/a11y/atspi/accessible/root")])
+    var entry = Value.record([reference,reference,reference,Value.signed(0),Value.signed(1),
+        Value.array("s",[Value.text("org.a11y.atspi.Accessible")]),Value.text("Silex"),
+        Value.unsigned(75 as uint32),Value.text("Application"),Value.array("u",[Value.unsigned(0 as uint32),Value.unsigned(0 as uint32)])])
+    var reply = Reply([Value.array(entry.signature,[entry])])
+    assert(reply.signature() == "a((so)(so)(so)iiassusau)" && reply.error == null)
+    var failed = Reply.failure("org.freedesktop.DBus.Error.UnknownObject","detached")
+    assert(failed.error != null && failed.values.is_empty() && failed.detail == "detached")
+}

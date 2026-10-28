@@ -1,0 +1,125 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.BusValue.Value
+
+// Values follow the public atspi-constants.h ABI. No native library or UI
+// object is required to verify the translation on the development host.
+package func role(value:AX.Role) uint32 {
+    if value == AX.Role.text { return 29 as uint32 }
+    if value == AX.Role.button { return 43 as uint32 }
+    if value == AX.Role.checkbox { return 7 as uint32 }
+    if value == AX.Role.radio { return 44 as uint32 }
+    if value == AX.Role.radio_group { return 99 as uint32 }
+    if value == AX.Role.text_field { return 79 as uint32 }
+    if value == AX.Role.text_area { return 61 as uint32 }
+    if value == AX.Role.slider { return 51 as uint32 }
+    if value == AX.Role.scrollbar { return 48 as uint32 }
+    if value == AX.Role.scroll_view { return 49 as uint32 }
+    if value == AX.Role.list { return 31 as uint32 }
+    if value == AX.Role.list_item { return 32 as uint32 }
+    if value == AX.Role.tree { return 65 as uint32 }
+    if value == AX.Role.tree_item { return 91 as uint32 }
+    if value == AX.Role.table { return 55 as uint32 }
+    if value == AX.Role.row { return 90 as uint32 }
+    if value == AX.Role.column_header { return 57 as uint32 }
+    if value == AX.Role.cell { return 56 as uint32 }
+    if value == AX.Role.tab_group { return 38 as uint32 }
+    if value == AX.Role.tab { return 37 as uint32 }
+    if value == AX.Role.menu { return 33 as uint32 }
+    if value == AX.Role.menu_item { return 35 as uint32 }
+    if value == AX.Role.combo_box { return 11 as uint32 }
+    if value == AX.Role.dialog { return 16 as uint32 }
+    if value == AX.Role.tooltip { return 64 as uint32 }
+    if value == AX.Role.image { return 27 as uint32 }
+    if value == AX.Role.progress { return 42 as uint32 }
+    if value == AX.Role.separator { return 50 as uint32 }
+    // AT-SPI has no column container role. The header and table relations
+    // carry its semantics; preserve its container and opaque identity.
+    return 39 as uint32
+}
+
+package func role_name(value:AX.Role) str {
+    if value == AX.Role.text { return "label" }
+    if value == AX.Role.button { return "push button" }
+    if value == AX.Role.checkbox { return "check box" }
+    if value == AX.Role.radio { return "radio button" }
+    if value == AX.Role.radio_group { return "grouping" }
+    if value == AX.Role.text_field { return "entry" }
+    if value == AX.Role.text_area { return "text" }
+    if value == AX.Role.slider { return "slider" }
+    if value == AX.Role.scrollbar { return "scroll bar" }
+    if value == AX.Role.scroll_view { return "scroll pane" }
+    if value == AX.Role.list { return "list" }
+    if value == AX.Role.list_item { return "list item" }
+    if value == AX.Role.tree { return "tree" }
+    if value == AX.Role.tree_item { return "tree item" }
+    if value == AX.Role.table { return "table" }
+    if value == AX.Role.row { return "table row" }
+    if value == AX.Role.column_header { return "table column header" }
+    if value == AX.Role.cell { return "table cell" }
+    if value == AX.Role.tab_group { return "page tab list" }
+    if value == AX.Role.tab { return "page tab" }
+    if value == AX.Role.menu { return "menu" }
+    if value == AX.Role.menu_item { return "menu item" }
+    if value == AX.Role.combo_box { return "combo box" }
+    if value == AX.Role.dialog { return "dialog" }
+    if value == AX.Role.tooltip { return "tool tip" }
+    if value == AX.Role.image { return "image" }
+    if value == AX.Role.progress { return "progress bar" }
+    if value == AX.Role.separator { return "separator" }
+    return "panel"
+}
+
+package func states(element:AX.Element, manages_descendants:bool = false, multiple:bool = false) Value {
+    // Each state contributes a distinct bit once; sum their disjoint weights.
+    var bits:uint = 1 as uint << 30 // VISIBLE, independently of current clipping.
+    if element.enabled { bits = bits + (1 as uint << 8) + (1 as uint << 24) }
+    if !element.offscreen { bits = bits + (1 as uint << 25) }
+    if element.focusable { bits = bits + (1 as uint << 11) }
+    if element.focused { bits = bits + (1 as uint << 12) }
+    if element.checked != null { bits = bits + (1 as uint << 41) }
+    if element.checked == true { bits = bits + (1 as uint << 4) }
+    if element.selected != null { bits = bits + (1 as uint << 22) }
+    if element.selected == true { bits = bits + (1 as uint << 23) }
+    if element.expanded != null {
+        bits = bits + (1 as uint << 9)
+        if element.expanded == true { bits = bits + (1 as uint << 10) }
+        else { bits = bits + (1 as uint << 5) }
+    }
+    if element.editable { bits = bits + (1 as uint << 7) }
+    if element.role == AX.Role.text_field || element.role == AX.Role.text_area {
+        if element.multiline { bits = bits + (1 as uint << 17) }
+        else { bits = bits + (1 as uint << 26) }
+        if !element.editable { bits = bits + (1 as uint << 43) }
+        if element.selection_anchor != null && element.selection_cursor != null { bits = bits + (1 as uint << 38) }
+    }
+    if element.role == AX.Role.dialog { bits = bits + (1 as uint << 16) }
+    if element.role == AX.Role.slider || element.role == AX.Role.scrollbar || element.role == AX.Role.separator || element.role == AX.Role.progress {
+        if element.horizontal { bits = bits + (1 as uint << 14) }
+        else { bits = bits + (1 as uint << 29) }
+    }
+    if element.invalid { bits = bits + (1 as uint << 36) }
+    if manages_descendants { bits = bits + (1 as uint << 31) }
+    if multiple { bits = bits + (1 as uint << 18) }
+    return Value.array("u",[Value.unsigned((bits & 0xFFFF_FFFF) as uint32),Value.unsigned((bits >> 32) as uint32)])
+}
+
+package func actions(element:AX.Element) AX.Action[] {
+    var result:AX.Action[] = []
+    for action in element.actions { if action_name(action) != "" { result.append(action) } }
+    return result
+}
+package func action_name(action:AX.Action) str {
+    if action == AX.Action.activate { return "click" }
+    if action == AX.Action.select { return "select" }
+    if action == AX.Action.deselect { return "deselect" }
+    if action == AX.Action.expand { return "expand" }
+    if action == AX.Action.collapse { return "collapse" }
+    if action == AX.Action.increment { return "increment" }
+    if action == AX.Action.decrement { return "decrement" }
+    if action == AX.Action.reveal { return "show" }
+    if action == AX.Action.dismiss { return "dismiss" }
+    if action == AX.Action.scroll_forward { return "scroll forward" }
+    if action == AX.Action.scroll_backward { return "scroll backward" }
+    // Parameterized setters and focus have their dedicated AT-SPI interfaces.
+    return ""
+}

@@ -1,0 +1,63 @@
+// Private typed D-Bus values. The native codec owns the ABI; the accessibility
+// model can be exercised without loading libdbus or starting a system bus.
+package enum Kind { boolean; signed; unsigned; real; text; path; array; record; entry; variant }
+
+package class Value {
+    let kind:Kind
+    let signature:str
+    let string_value:str
+    let integer_value:int
+    let real_value:float64
+    var members:Value[]
+    var content:Value?
+    private init(kind:Kind, signature:str, text:str = "", integer:int = 0,
+        real:float64 = 0.0, members:Value[] = [], content:Value? = null) {
+        self.kind = kind; self.signature = signature; self.string_value = text
+        self.integer_value = integer; self.real_value = real
+        self.members = members; self.content = content
+    }
+    static func boolean(value:bool) Value {
+        var bits = 0; if value { bits = 1 }
+        return Value(Kind.boolean,"b",integer:bits)
+    }
+    static func signed(value:int, signature:str = "i") Value {
+        if signature != "i" && signature != "n" && signature != "x" { panic("invalid signed D-Bus type") }
+        return Value(Kind.signed,signature,integer:value)
+    }
+    static func unsigned(value:uint32) Value { return Value(Kind.unsigned,"u",integer:value as int) }
+    static func real(value:float64) Value { return Value(Kind.real,"d",real:value) }
+    static func text(value:str) Value { return Value(Kind.text,"s",text:value) }
+    static func path(value:str) Value { return Value(Kind.path,"o",text:value) }
+    static func array(element_signature:str, values:Value[]) Value {
+        for value in values { if value.signature != element_signature { panic("heterogeneous D-Bus array") } }
+        return Value(Kind.array,"a"+element_signature,members:values)
+    }
+    static func record(values:Value[]) Value {
+        var signature = "("
+        for value in values { signature += value.signature }
+        return Value(Kind.record,signature+")",members:values)
+    }
+    static func entry(key:str, value:Value) Value {
+        return Value(Kind.entry,"{s"+value.signature+"}",members:[Value.text(key),value])
+    }
+    static func variant(value:Value) Value { return Value(Kind.variant,"v",content:value) }
+    func signed_value() int? { if self.kind == Kind.signed { return self.integer_value } return null }
+    func unsigned_value() uint32? { if self.kind == Kind.unsigned { return self.integer_value as uint32 } return null }
+    func text_value() str? { if self.kind == Kind.text { return self.string_value } return null }
+    func boolean_value() bool? { if self.kind == Kind.boolean { return self.integer_value != 0 } return null }
+}
+
+package struct Reply {
+    var values:Value[]
+    let error:str?
+    let detail:str
+    init(values:Value[] = [], error:str? = null, detail:str = "") {
+        self.values = values; self.error = error; self.detail = detail
+    }
+    static func failure(name:str, detail:str) Reply { return Reply(error:name,detail:detail) }
+    func signature() str {
+        var result = ""
+        for value in self.values { result += value.signature }
+        return result
+    }
+}

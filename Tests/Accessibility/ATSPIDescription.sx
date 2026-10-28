@@ -1,0 +1,37 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Description as Native
+
+test "AT-SPI roles preserve text editing collections and independent column headers" {
+    assert(Native.role(AX.Role.text_field) == 79 as uint32)
+    assert(Native.role(AX.Role.text_area) == 61 as uint32)
+    assert(Native.role(AX.Role.table) == 55 as uint32)
+    assert(Native.role(AX.Role.tree_item) == 91 as uint32)
+    assert(Native.role(AX.Role.column_header) == 57 as uint32)
+    assert(Native.role(AX.Role.tab) == 37 as uint32)
+    assert(Native.role(AX.Role.dialog) == 16 as uint32)
+    assert(Native.role_name(AX.Role.button) == "push button")
+}
+
+test "AT-SPI high state bits and disabled controls retain their independent properties" {
+    let disabled = AX.Element(id:"choice",role:AX.Role.checkbox,enabled:false,
+        checked:true,selected:false,offscreen:true,invalid:true)
+    var states = Native.states(disabled)
+    let low = states.members[0].unsigned_value()!; let high = states.members[1].unsigned_value()!
+    assert((low & (1 as uint32 << 4)) != 0 && (low & (1 as uint32 << 22)) != 0)
+    assert((low & (1 as uint32 << 8)) == 0 && (low & (1 as uint32 << 24)) == 0 && (low & (1 as uint32 << 25)) == 0)
+    assert((high & (1 as uint32 << 9)) != 0 && (high & (1 as uint32 << 4)) != 0)
+    var text = Native.states(AX.Element(id:"text",role:AX.Role.text_area,multiline:true,
+        editable:false,selection_anchor:0,selection_cursor:1))
+    assert((text.members[0].unsigned_value()! & (1 as uint32 << 17)) != 0)
+    assert((text.members[1].unsigned_value()! & (1 as uint32 << 6)) != 0 && (text.members[1].unsigned_value()! & (1 as uint32 << 11)) != 0)
+    var collection = Native.states(AX.Element(id:"table",role:AX.Role.table),true,true)
+    assert((collection.members[0].unsigned_value()! & (1 as uint32 << 31)) != 0)
+    assert((collection.members[0].unsigned_value()! & (1 as uint32 << 18)) != 0)
+}
+
+test "AT-SPI action indices exclude parameterized setters without losing disabled capabilities" {
+    let element = AX.Element(id:"button",enabled:false,
+        actions:[AX.Action.focus,AX.Action.set_value,AX.Action.activate,AX.Action.set_text_selection,AX.Action.dismiss])
+    let actions = Native.actions(element)
+    assert(actions.count() == 2 && actions[0] == AX.Action.activate && actions[1] == AX.Action.dismiss)
+}
