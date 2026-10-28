@@ -1,0 +1,67 @@
+use STD.Text.Grapheme
+use STD.Text.UTF8
+
+// Source selections count graphemes, AT-SPI counts Unicode scalars, and UIA
+// and AppKit count UTF-16 units. These are three different coordinate spaces.
+// Built lazily for a queried text snapshot, never as per-frame UI work.
+package class Offsets {
+    let text:str
+    private let scalars:uint32[]
+    private let graphemes:int[]
+    private let utf16:int[]
+    init(text:str) {
+        self.text = text
+        let scalars = UTF8.scalars(text); let bytes = Grapheme.boundaries(text)
+        var graphemes:int[] = [0]; var utf16:int[] = [0]
+        var byte = 0; var position = 0; var next = 1; var units = 0
+        for scalar in scalars {
+            if scalar <= 127 as uint32 { byte++ }
+            elif scalar <= 2047 as uint32 { byte += 2 }
+            elif scalar <= 65535 as uint32 { byte += 3 }
+            else { byte += 4 }
+            units++; if scalar > 65535 as uint32 { units++ }
+            utf16.append(units); position++
+            if next < bytes.count() && byte == bytes[next] { graphemes.append(position); next++ }
+        }
+        self.scalars = scalars; self.graphemes = graphemes; self.utf16 = utf16
+    }
+    func scalar_count() int { return self.scalars.count() }
+    func grapheme_count() int { return self.graphemes.count()-1 }
+    func utf16_count() int { return self.utf16[self.utf16.count()-1] }
+    func scalar_at(index:int) uint32? {
+        if index < 0 || index >= self.scalars.count() { return null }
+        return self.scalars[index]
+    }
+    func scalar_for_grapheme(index:int) int? {
+        if index < 0 || index >= self.graphemes.count() { return null }
+        return self.graphemes[index]
+    }
+    func utf16_for_grapheme(index:int) int? {
+        if let scalar = self.scalar_for_grapheme(index) { return self.utf16[scalar] }
+        return null
+    }
+    func grapheme_for_scalar(index:int, round_up:bool = false) int? {
+        return boundary(self.graphemes,index,round_up)
+    }
+    func grapheme_for_utf16(index:int, round_up:bool = false) int? {
+        if let scalar = boundary(self.utf16,index,round_up) { return self.grapheme_for_scalar(scalar,round_up) }
+        return null
+    }
+    func substring(start:int, end:int) str? {
+        if start < 0 || end < start || end > self.scalars.count() { return null }
+        return UTF8.from_scalars(@self.scalars[start:end])
+    }
+}
+
+func boundary(offsets:@int[], value:int, round_up:bool) int? {
+    if value < 0 || value > offsets[offsets.count()-1] { return null }
+    var first = 0; var last = offsets.count()
+    while first < last {
+        let middle = first+(last-first)/2
+        if offsets[middle] <= value { first = middle+1 }
+        else { last = middle }
+    }
+    let floor = first-1
+    if offsets[floor] == value || !round_up { return floor }
+    return first
+}

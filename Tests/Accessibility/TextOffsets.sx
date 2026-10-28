@@ -1,0 +1,21 @@
+use GFX.Accessibility.TextOffsets.Offsets
+
+test "native text units distinguish graphemes Unicode scalars and UTF16" {
+    var offsets = Offsets("Aé👩‍💻中\r\nZ")
+    assert(offsets.scalar_count() == 10 && offsets.grapheme_count() == 6 && offsets.utf16_count() == 12)
+    assert(offsets.scalar_for_grapheme(2) == 3 && offsets.utf16_for_grapheme(3) == 8)
+    assert(offsets.substring(1,3) == "é" && offsets.substring(3,6) == "👩‍💻")
+    assert(offsets.scalar_at(6) == 20013 as uint32)
+    assert(offsets.grapheme_for_scalar(2) == 1 && offsets.grapheme_for_scalar(2,true) == 2)
+    assert(offsets.grapheme_for_utf16(4) == 2 && offsets.grapheme_for_utf16(4,true) == 3)
+    assert(offsets.grapheme_for_scalar(8) == 4 && offsets.grapheme_for_scalar(8,true) == 5)
+    assert(offsets.scalar_for_grapheme(6) == 10 && offsets.utf16_for_grapheme(6) == 12)
+}
+
+test "empty text and invalid native ranges remain distinguishable" {
+    var offsets = Offsets("")
+    assert(offsets.scalar_count() == 0 && offsets.grapheme_count() == 0 && offsets.utf16_count() == 0)
+    assert(offsets.substring(0,0) == "" && offsets.substring(0,1) == null)
+    assert(offsets.grapheme_for_scalar(-1) == null && offsets.grapheme_for_utf16(1) == null)
+    assert(offsets.scalar_for_grapheme(1) == null && offsets.scalar_at(0) == null)
+}
