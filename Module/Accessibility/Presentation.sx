@@ -7,8 +7,8 @@ package nocopy class Presentation {
     init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2 = Math.Vec2()) {
         self.host = Platform.Host(source, view, window, height, flipped, origin)
     }
-    static func for_window(source:Accessibility.Source, window:uint, height:float, origin:Math.Vec2 = Math.Vec2()) Presentation {
-        let view = Platform.view(window)
+    static func for_window(source:Accessibility.Source, window:uint, height:float, origin:Math.Vec2 = Math.Vec2(), runtime_window:uint = 0 as uint) Presentation {
+        let view = Platform.view(window,runtime_window)
         return Presentation(source, view, window, height, Platform.flipped(view), origin)
     }
     func synchronize(height:float, origin:Math.Vec2? = null) bool { return self.host.synchronize(height, origin) }

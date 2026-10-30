@@ -1,0 +1,147 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.BusValue.Value
+use STD.Math
+use STD.Text as Strings
+
+class Source:AX.Source {
+    var reads:int = 0
+    var children:int = 0
+    var calls:int = 0
+    var enabled:bool = true
+    var shown:bool = true
+    var removed:bool = false
+    var volume:float = 0.5
+    func root() str? { if self.shown { return "opaque:/root:é" } return null }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? {
+        self.reads++
+        if !self.shown { return null }
+        if id == "opaque:/root:é" { return AX.Element(id:id,name:"Collection",child_count:50000,bounds:AX.Bounds(0.0,0.0,400.0,200.0)) }
+        if id == "last" { return AX.Element(id:id,parent:"opaque:/root:é",role:AX.Role.slider,name:"Volume",description:"Help",value:"50%",number:self.volume,
+            minimum:0.0,maximum:1.0,enabled:self.enabled,focusable:true,checked:false,index:49999,
+            bounds:AX.Bounds(10.25,20.5,100.5,30.5),actions:[AX.Action.focus,AX.Action.set_value,AX.Action.activate]) }
+        return null
+    }
+    func child(id:str, index:int) str? { self.children++; if id == "opaque:/root:é" && index == 49999 { return "last" } return null }
+    func perform(id:str, request:AX.Request) bool {
+        self.calls++
+        if request.action == AX.Action.set_value { self.volume = request.number! }
+        return true
+    }
+    func changes() AX.Change[] { if self.removed { self.removed = false; return [AX.Change("last",AX.ChangeKind.removed)] } return [] }
+    func element_at(x:float, y:float) str? { if x >= 10.25 && x < 110.75 && y >= 20.5 && y < 51.0 { return "last" } return null }
+}
+
+struct Collision:AX.Source {
+    func root() str? { return Model.application_path() }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? { if id == Model.application_path() { return AX.Element(id:id,role:AX.Role.button,name:"Real control") } return null }
+    func child(id:str, index:int) str? { return null }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] { return [] }
+}
+test "AT-SPI synthetic application and window cannot collide with opaque Source IDs" {
+    var model = Model.Model(Collision(),":1.42","Host")
+    let accessible = Model.interface_name("Accessible")
+    let path = model.request(Model.window_path(),accessible,"GetChildAtIndex",[Value.signed(0)]).values[0].members[1].string_value
+    assert(path != Model.application_path() && path != Model.window_path())
+    assert(model.request(path,accessible,"GetRole").values[0].integer_value == 43)
+    assert(model.request(Model.application_path(),accessible,"GetRole").values[0].integer_value == 75)
+    assert(model.request(Model.window_path(),accessible,"GetRole").values[0].integer_value == 23)
+    let xml = model.request(path,"org.freedesktop.DBus.Introspectable","Introspect").values[0].string_value
+    assert(Strings.contains(xml,"org.a11y.atspi.Accessible") && Strings.contains(xml,"org.a11y.atspi.Component"))
+    assert(!Strings.contains(xml,"org.a11y.atspi.Text"))
+    assert(model.request(path,"org.freedesktop.DBus.Peer","Ping").error == null)
+    assert(model.request("/missing","org.freedesktop.DBus.Introspectable","Introspect").error == "org.freedesktop.DBus.Error.UnknownObject")
+}
+
+test "AT-SPI native window geometry stays independent of placed or absent Source content" {
+    var source = Source(); var model = Model.Model(source,":1.42","Window")
+    model.place(Math.Vec2(5.0,6.0),Math.Vec2(100.0,200.0),Math.Vec2(800.0,600.0))
+    let component = Model.interface_name("Component")
+    var frame = model.request(Model.window_path(),component,"GetExtents",[Value.unsigned(0 as uint32)]).values[0].members
+    assert(frame[0].integer_value == 100 && frame[1].integer_value == 200 && frame[2].integer_value == 800 && frame[3].integer_value == 600)
+    let root = model.reference(source.root()).members[1].string_value
+    var content = model.request(root,component,"GetExtents",[Value.unsigned(0 as uint32)]).values[0].members
+    assert(content[0].integer_value == 105 && content[1].integer_value == 206 && content[2].integer_value == 400)
+    var hit = model.request(Model.window_path(),component,"GetAccessibleAtPoint",[Value.signed(120),Value.signed(230),Value.unsigned(0 as uint32)])
+    assert(hit.values[0].members[1].string_value == model.reference("last").members[1].string_value)
+    assert(model.presentation_changed(true,true).count() == 2)
+    source.shown = false
+    assert(model.request(Model.window_path(),component,"GetSize").values[0].integer_value == 800)
+    model.place(Math.Vec2(5.0,6.0),null,Math.Vec2(800.0,600.0))
+    assert(model.request(Model.window_path(),component,"GetExtents",[Value.unsigned(0 as uint32)]).error == "org.a11y.atspi.Error.NotSupported")
+    assert(model.request(Model.window_path(),component,"GetExtents",[Value.unsigned(1 as uint32)]).values[0].members[0].integer_value == 0)
+}
+
+test "AT-SPI application and indexed identities do not enumerate a large source or decode its IDs" {
+    var source = Source(); var model = Model.Model(source,":1.42","App")
+    var app = model.request(Model.application_path(),Model.interface_name("Accessible"),"GetChildAtIndex",[Value.signed(0)])
+    let window = app.values[0].members[1].string_value
+    assert(window == Model.window_path() && model.request(window,Model.interface_name("Accessible"),"GetRole").values[0].integer_value == 23)
+    let root = model.request(window,Model.interface_name("Accessible"),"GetChildAtIndex",[Value.signed(0)]).values[0].members[1].string_value
+    assert(root != "opaque:/root:é" && source.children == 0 && source.reads == 0 && model.peer_count() == 1)
+    var last = model.request(root,Model.interface_name("Accessible"),"GetChildAtIndex",[Value.signed(49999)])
+    let path = last.values[0].members[1].string_value
+    assert(source.children == 1 && source.reads == 1 && model.peer_count() == 2)
+    assert(model.request(root,Model.interface_name("Accessible"),"GetChildren").error == "org.a11y.atspi.Error.NotSupported")
+    var name = model.request(path,"org.freedesktop.DBus.Properties","Get",[Value.text(Model.interface_name("Accessible")),Value.text("Name")])
+    assert(name.signature() == "v" && name.values[0].content!.string_value == "Volume")
+    var parent = model.request(root,"org.freedesktop.DBus.Properties","Get",[Value.text(Model.interface_name("Accessible")),Value.text("Parent")])
+    assert(parent.values[0].content!.members[1].string_value == Model.window_path())
+    assert(model.request(Model.application_path(),Model.interface_name("Accessible"),"GetRole").values[0].integer_value == 75)
+}
+
+test "AT-SPI actions properties and stale references reject malformed disabled and detached requests" {
+    var source = Source(); var model = Model.Model(source,":1.42","App")
+    let path = model.reference("last").members[1].string_value
+    assert(model.request(path,Model.interface_name("Action"),"GetName",[Value.signed(0)]).values[0].string_value == "click")
+    assert(model.request(path,Model.interface_name("Action"),"DoAction",[Value.text("0")]).error == "org.freedesktop.DBus.Error.InvalidArgs")
+    source.enabled = false
+    assert(model.request(path,Model.interface_name("Action"),"DoAction",[Value.signed(0)]).values[0].boolean_value() == false && source.calls == 0)
+    source.enabled = true
+    assert(model.request(path,Model.interface_name("Action"),"DoAction",[Value.signed(0)]).values[0].boolean_value() == true && source.calls == 1 && model.dirty)
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Set",[Value.text(Model.interface_name("Value")),Value.text("CurrentValue"),Value.variant(Value.real(0.75 as float64))]).error == null)
+    assert(source.volume == 0.75)
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Set",[Value.text(Model.interface_name("Value")),Value.text("CurrentValue"),Value.variant(Value.real(0.1 as float64))]).error == null)
+    let accepted = source.calls
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Set",[Value.text(Model.interface_name("Value")),Value.text("CurrentValue"),Value.variant(Value.real(0.1 as float64))]).error == null && source.calls == accepted)
+    assert(source.volume == 0.1)
+    let calls = source.calls; let huge:float64 = 1e300; let zero:float64 = 0.0
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Set",[Value.text(Model.interface_name("Value")),Value.text("CurrentValue"),Value.variant(Value.real(huge))]).error == "org.freedesktop.DBus.Error.InvalidArgs")
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Set",[Value.text(Model.interface_name("Value")),Value.text("CurrentValue"),Value.variant(Value.real(zero/zero))]).error != null)
+    assert(source.calls == calls && source.volume == 0.1)
+    source.shown = false
+    assert(model.request(path,Model.interface_name("Accessible"),"GetRole").error == "org.freedesktop.DBus.Error.UnknownObject")
+    source.shown = true
+    let fresh = model.reference("last").members[1].string_value
+    assert(fresh != path && model.request(path,Model.interface_name("Accessible"),"GetRole").error != null)
+    model.detach(); let reads = source.reads
+    assert(model.request(fresh,Model.interface_name("Accessible"),"GetRole").error != null && source.reads == reads)
+    assert(model.peer_count() == 0)
+}
+
+test "AT-SPI coordinates use explicit origins and hit testing without changing the source" {
+    var source = Source(); var model = Model.Model(source,":1.42","App")
+    let path = model.reference("last").members[1].string_value
+    assert(model.request(path,Model.interface_name("Component"),"GetExtents",[Value.unsigned(0 as uint32)]).error == "org.a11y.atspi.Error.NotSupported")
+    model.place(Math.Vec2(5.0,6.0),Math.Vec2(100.0,200.0))
+    var frame = model.request(path,Model.interface_name("Component"),"GetExtents",[Value.unsigned(0 as uint32)]).values[0]
+    assert(frame.signature == "(iiii)" && frame.members[0].integer_value == 115 && frame.members[1].integer_value == 226 && frame.members[2].integer_value == 101)
+    var hit = model.request(path,Model.interface_name("Component"),"GetAccessibleAtPoint",[Value.signed(120),Value.signed(230),Value.unsigned(0 as uint32)])
+    assert(hit.values[0].members[1].string_value == path && source.calls == 0 && !model.dirty)
+    assert(model.request(path,Model.interface_name("Component"),"GrabFocus").values[0].boolean_value() == true && source.calls == 1)
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Get",[Value.text(Model.interface_name("Text")),Value.text("CharacterCount")]).error == "org.freedesktop.DBus.Error.UnknownInterface")
+}
+
+test "AT-SPI removal retires an advertised path even before the client reads its properties" {
+    var source = Source(); var model = Model.Model(source,":1.42","Lifetime")
+    let previous = model.reference("last").members[1].string_value
+    source.shown = false; source.removed = true
+    var events = model.synchronize()
+    source.shown = true; source.volume = 0.75
+    assert(model.request(previous,Model.interface_name("Accessible"),"GetRole").error == "org.freedesktop.DBus.Error.UnknownObject")
+    assert(model.reference("last").members[1].string_value != previous)
+    assert(source.reads == 0)
+}

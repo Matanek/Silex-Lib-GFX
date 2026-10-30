@@ -1,14 +1,201 @@
-use GFX.Accessibility
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model as Protocol
+use GFX.Accessibility.ATSPI.EditableText
+use GFX.Accessibility.DBus.Library
+use GFX.Accessibility.DBus.Codec.read_string
 use STD.Math
+use Interop.C
+use Interop.Boundary
 
-// The Linux bridge is tracked separately; retaining no native state here does
-// not claim AT-SPI support.
+// Source and protocol work are confined to the UI thread. The native worker
+// owns only I/O and an SDL wake event; no application objects cross threads.
 package nocopy class Host {
-    init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2) {}
-    func synchronize(height:float, origin:Math.Vec2?) bool { return false }
-    func remove() {}
-    func root_handle() uint { return 0 as uint }
-    func peer_count() int { return 0 }
+    private var library:Library? = null
+    private var model:Protocol.Model? = null
+    private var connection:uint = 0
+    private var context:uint = 0
+    private var thread:uint = 0
+    private var semaphore:uint = 0
+    private var embed_serial:uint32 = 0
+    private var embedded:bool = false
+    private let window:uint
+    private var origin:Math.Vec2
+    private var height:float
+    init(source:AX.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2) {
+        self.window = view; self.origin = origin; self.height = height
+        // Zero handles are inert for the headless provider tests.
+        if view != 0 && window != 0 { self.attach(source) }
+    }
+    private func attach(source:AX.Source) {
+        var library = Library()
+        let connection = library.open()
+        if connection == 0 { return }
+        let bus = library.unique_name(connection)
+        let wake = register_events(1)
+        let semaphore = create_semaphore(0 as uint32)
+        let context = allocate(1 as uint,64 as uint)
+        if bus == "" || wake == 0 || semaphore == 0 || context == 0 {
+            if semaphore != 0 { destroy_semaphore(semaphore) }
+            if context != 0 { free(context) }
+            library.close(connection); return
+        }
+        C.store<uint>(context,8 as uint,connection)
+        C.store<uint>(context,16 as uint,library.symbol("dbus_connection_read_write"))
+        C.store<uint>(context,24 as uint,library.symbol("dbus_connection_get_dispatch_status"))
+        C.store<uint32>(context,32 as uint,wake)
+        C.store<uint>(context,40 as uint,semaphore)
+        let thread = create_thread(C.function_address(bus_worker),C.terminated_pointer("Silex AT-SPI"),context,0 as uint,0 as uint)
+        if thread == 0 { free(context); destroy_semaphore(semaphore); library.close(connection); return }
+        self.library = library; self.connection = connection
+        self.context = context; self.thread = thread; self.semaphore = semaphore
+        self.model = Protocol.Model(source,bus,read_string(window_title(self.window)))
+        self.model!.set_clipboard(Clipboard())
+        self.place()
+        // Registryd calls Application.Id during Embed. An asynchronous call
+        // lets those incoming requests run instead of deadlocking this thread.
+        let message = library.method("org.a11y.atspi.Registry","/org/a11y/atspi/accessible/root",Protocol.interface_name("Socket"),"Embed")
+        if message != 0 {
+            if library.encode(message,[self.model!.application_reference()]) { self.embed_serial = library.send(connection,message) }
+            library.release(message)
+        }
+    }
+    private func place() {
+        if var model = self.model {
+            var screen:Math.Vec2? = null
+            let properties = window_properties(self.window)
+            let x11 = number_property(properties,C.terminated_pointer("SDL.window.x11.window"),0)
+            if x11 != 0 {
+                var x:int32 = 0; var y:int32 = 0
+                if window_position(self.window,C.mutable_pointer(x),C.mutable_pointer(y)) != 0 { screen = Math.Vec2(round_float<float>(x),round_float<float>(y)) }
+            }
+            // A Wayland surface has no globally knowable screen position.
+            var width:int32 = 0; var height:int32 = 0
+            let sized = window_size(self.window,C.mutable_pointer(width),C.mutable_pointer(height))
+            var viewport:Math.Vec2? = null
+            if sized != 0 { viewport = Math.Vec2(round_float<float>(width),round_float<float>(height)) }
+            model.place(self.origin,screen,viewport)
+        }
+    }
+    func synchronize(height:float, origin:Math.Vec2?) bool {
+        if self.connection == 0 { return false }
+        if get_atomic(self.context) != 0 { self.remove(); return false }
+        let moved = origin != null && origin != self.origin
+        let resized = height != self.height; self.height = height
+        if let next = origin { self.origin = next }
+        var library = self.library!; var model = self.model!
+        var located = moved || resized
+        if located {
+            self.place()
+            if self.embedded { for event in model.presentation_changed(moved,resized) { let sent = library.signal(self.connection,event.path,event.interface,event.name,event.values) } }
+        }
+        // Consume UI changes before answering this batch of native queries.
+        // Idle frames keep one pass; only an incoming batch needs a second
+        // pass for native actions and newly exposed cache objects.
+        if self.embedded { for event in model.synchronize() { let sent = library.signal(self.connection,event.path,event.interface,event.name,event.values) } }
+        var count = 0
+        while count < 64 {
+            let message = library.pop(self.connection)
+            if message == 0 { break }
+            let type = library.type(message)
+            if type == 1 {
+                if !located { self.place(); located = true }
+                var reply = Protocol.invalid_arguments()
+                if var values = library.decode(message) { reply = model.request(library.path(message),library.interface(message),library.member(message),values) }
+                library.reply(self.connection,message,reply)
+            } elif library.reply_serial(message) == self.embed_serial && self.embed_serial != 0 as uint32 {
+                if type == 2 {
+                    if var values = library.decode(message) {
+                        if Protocol.arguments(values) == "(so)" {
+                            model.set_desktop(values[0].members[0].string_value,values[0].members[1].string_value)
+                            self.embedded = true
+                        }
+                    }
+                }
+                self.embed_serial = 0 as uint32
+            }
+            library.release(message); count++
+        }
+        if set_atomic(self.context+4 as uint,0) != 0 { signal_semaphore(self.semaphore) }
+        if self.embedded && count > 0 {
+            for event in model.synchronize() { let sent = library.signal(self.connection,event.path,event.interface,event.name,event.values) }
+        }
+        let changed = model.dirty; model.dirty = false
+        return changed
+    }
+    func remove() {
+        if var model = self.model { model.detach() }
+        if self.context != 0 {
+            let previous = set_atomic(self.context,1)
+            signal_semaphore(self.semaphore)
+            var result:int32 = 0
+            wait_thread(self.thread,C.mutable_pointer(result))
+            destroy_semaphore(self.semaphore); free(self.context)
+            self.context = 0; self.thread = 0; self.semaphore = 0
+        }
+        if self.connection != 0 { self.library!.close(self.connection); self.connection = 0 }
+        self.embedded = false; self.model = null; self.library = null
+    }
+    drop { self.remove() }
+    func root_handle() uint { if self.embedded { return self.connection } return 0 as uint }
+    func peer_count() int { if var model = self.model { return model.peer_count() } return 0 }
 }
-func view(window:uint) uint { return 0 as uint }
+
+func bus_worker(context:uint) int32 {
+    let connection = C.load<uint>(context,8 as uint)
+    let read_write = C.load<uint>(context,16 as uint)
+    let status = C.load<uint>(context,24 as uint)
+    let semaphore = C.load<uint>(context,40 as uint)
+    while get_atomic(context) == 0 {
+        if C.call<func(uint,int32) uint32>(read_write,connection,20) == 0 {
+            let previous = set_atomic(context,2)
+            var disconnected:uint[16] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            disconnected[0] = C.load<uint32>(context,32 as uint) as uint
+            let pushed = push_event(C.mutable_pointer(disconnected))
+            break
+        }
+        if C.call<func(uint) int32>(status,connection) == 0 {
+            var event:uint[16] = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+            event[0] = C.load<uint32>(context,32 as uint) as uint
+            if compare_atomic(context+4 as uint,0,1) != 0 {
+                if push_event(C.mutable_pointer(event)) == 0 { let old = set_atomic(context+4 as uint,0) }
+            }
+            let awakened = wait_semaphore(semaphore,20)
+        }
+    }
+    return 0
+}
+
+func view(window:uint, runtime_window:uint = 0 as uint) uint { return runtime_window }
 func flipped(view:uint) bool { return false }
+
+// The host already owns a live SDL window. Do not initialize or quit video
+// while servicing clipboard requests from an accessibility client.
+struct Clipboard:EditableText.Clipboard {
+    func read() str? {
+        let address = get_clipboard()
+        if address == 0 { return null }
+        let text = read_string(address); free(address); return text
+    }
+    func write(text:str) bool { return set_clipboard(C.terminated_pointer(text)) != 0 }
+}
+let get_clipboard = C.function<func() uint>(library:Boundary.SDL3,name:"SDL_GetClipboardText")
+let set_clipboard = C.function<func(C.Pointer<uint8>) uint8>(library:Boundary.SDL3,name:"SDL_SetClipboardText")
+
+let allocate = C.function<func(uint,uint) uint>(library:Boundary.SDL3,name:"SDL_calloc")
+let free = C.function<func(uint) void>(library:Boundary.SDL3,name:"SDL_free")
+let create_thread = C.function<func(uint,C.Pointer<uint8>,uint,uint,uint) uint>(library:Boundary.SDL3,name:"SDL_CreateThreadRuntime")
+let wait_thread = C.function<func(uint,C.MutablePointer<int32>) void>(library:Boundary.SDL3,name:"SDL_WaitThread")
+let create_semaphore = C.function<func(uint32) uint>(library:Boundary.SDL3,name:"SDL_CreateSemaphore")
+let destroy_semaphore = C.function<func(uint) void>(library:Boundary.SDL3,name:"SDL_DestroySemaphore")
+let signal_semaphore = C.function<func(uint) void>(library:Boundary.SDL3,name:"SDL_SignalSemaphore")
+let wait_semaphore = C.function<func(uint,int32) uint8>(library:Boundary.SDL3,name:"SDL_WaitSemaphoreTimeout")
+let get_atomic = C.function<func(uint) int32>(library:Boundary.SDL3,name:"SDL_GetAtomicInt")
+let set_atomic = C.function<func(uint,int32) int32>(library:Boundary.SDL3,name:"SDL_SetAtomicInt")
+let compare_atomic = C.function<func(uint,int32,int32) uint8>(library:Boundary.SDL3,name:"SDL_CompareAndSwapAtomicInt")
+let register_events = C.function<func(int32) uint32>(library:Boundary.SDL3,name:"SDL_RegisterEvents")
+let push_event = C.function<func(C.MutablePointer<uint>) uint8>(library:Boundary.SDL3,name:"SDL_PushEvent")
+let window_title = C.function<func(uint) uint>(library:Boundary.SDL3,name:"SDL_GetWindowTitle")
+let window_properties = C.function<func(uint) uint32>(library:Boundary.SDL3,name:"SDL_GetWindowProperties")
+let number_property = C.function<func(uint32,C.Pointer<uint8>,int) int>(library:Boundary.SDL3,name:"SDL_GetNumberProperty")
+let window_position = C.function<func(uint,C.MutablePointer<int32>,C.MutablePointer<int32>) uint8>(library:Boundary.SDL3,name:"SDL_GetWindowPosition")
+let window_size = C.function<func(uint,C.MutablePointer<int32>,C.MutablePointer<int32>) uint8>(library:Boundary.SDL3,name:"SDL_GetWindowSize")

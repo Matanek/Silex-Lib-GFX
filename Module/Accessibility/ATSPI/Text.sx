@@ -1,0 +1,215 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.TextOffsets.Offsets
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+use STD.Math
+
+package func supports(element:AX.Element) bool {
+    return element.role == AX.Role.text || element.role == AX.Role.text_field || element.role == AX.Role.text_area ||
+        ((element.role == AX.Role.combo_box || element.role == AX.Role.cell) && element.value != null)
+}
+package func property(data:Offsets, element:AX.Element, name:str) Value? {
+    if name == "version" { return Value.unsigned(1 as uint32) }
+    if name == "CharacterCount" { return Value.signed(data.scalar_count()) }
+    if name == "CaretOffset" {
+        if let cursor = element.selection_cursor { return Value.signed(data.scalar_for_grapheme(cursor) ?? -1) }
+        return Value.signed(-1)
+    }
+    return null
+}
+func unsupported() Reply { return Reply.failure("org.a11y.atspi.Error.NotSupported","Text operation is unavailable") }
+func selected(data:Offsets, element:AX.Element) AX.TextRange? {
+    if element.selection_anchor == null || element.selection_cursor == null { return null }
+    let anchor = data.scalar_for_grapheme(element.selection_anchor!); let cursor = data.scalar_for_grapheme(element.selection_cursor!)
+    if anchor == null || cursor == null || anchor == cursor { return null }
+    var start = anchor!; var end = cursor!
+    if start > end { start = cursor!; end = anchor! }
+    return AX.TextRange(start,end-start)
+}
+func set_selection(model:Model.Model, data:Offsets, element:AX.Element, start:int, end:int) bool {
+    if end < start { return false }
+    let anchor = data.grapheme_for_scalar(start); var cursor = data.grapheme_for_scalar(end,true)
+    if start == end { cursor = anchor }
+    if anchor == null || cursor == null { return false }
+    return model.perform(element,AX.Request(AX.Action.set_text_selection,anchor:anchor!,cursor:cursor!))
+}
+func line_range(model:Model.Model, data:Offsets, element:AX.Element, offset:int, paragraph:bool) AX.TextRange? {
+    if offset < 0 || offset > data.scalar_count() { return null }
+    if !paragraph {
+        if var geometry = model.text_geometry(element.id) {
+            if let line = geometry.line_for_index(data.grapheme_for_scalar(offset)!) {
+                if let span = geometry.range_for_line(line) {
+                    let start = data.scalar_for_grapheme(span.start); let end = data.scalar_for_grapheme(span.start+span.length)
+                    if start != null && end != null { return AX.TextRange(start!,end!-start!) }
+                }
+            }
+        }
+    }
+    var start = 0; var end = data.scalar_count(); var index = 0
+    while index < data.scalar_count() {
+        let scalar = data.scalar_at(index)!
+        if scalar == 10 as uint32 || scalar == 13 as uint32 {
+            var next = index+1
+            if scalar == 13 as uint32 && data.scalar_at(next) == 10 as uint32 { next++ }
+            if next <= offset { start = next } else { end = next; break }
+            index = next
+        } else { index++ }
+    }
+    return AX.TextRange(start,end-start)
+}
+func extents(model:Model.Model, element:AX.Element, bounds:AX.Bounds, kind:uint32) Value[]? {
+    if let origin = model.coordinate_origin(element,kind) {
+        let left = Math.floor(bounds.x+origin.x) as int; let top = Math.floor(bounds.y+origin.y) as int
+        let right = Math.ceil(bounds.x+origin.x+bounds.width) as int; let bottom = Math.ceil(bounds.y+origin.y+bounds.height) as int
+        return [Value.signed(left),Value.signed(top),Value.signed(right-left),Value.signed(bottom-top)]
+    }
+    return null
+}
+
+func text_segment(model:Model.Model, data:Offsets, element:AX.Element, offset:int, kind:uint32, modern:bool) AX.TextRange? {
+    if modern {
+        if kind == 1 as uint32 { return model.word_range(element,data,offset,false) }
+        if kind == 2 as uint32 || kind == 4 as uint32 { return line_range(model,data,element,offset,true) }
+        if kind == 3 as uint32 { return line_range(model,data,element,offset,false) }
+    } else {
+        if kind == 1 as uint32 || kind == 2 as uint32 { return model.word_range(element,data,offset,kind == 2 as uint32) }
+        if kind == 3 as uint32 { return line_range(model,data,element,offset,true) }
+        if kind == 5 as uint32 { return line_range(model,data,element,offset,false) }
+        if kind == 4 as uint32 || kind == 6 as uint32 {
+            // Shift start-delimited paragraphs/visual lines to end delimiters.
+            // CRLF remains one delimiter even though AT-SPI counts two scalars.
+            if let current = line_range(model,data,element,offset,kind == 4 as uint32) {
+                var end = current.start+current.length
+                while end > current.start && (data.scalar_at(end-1) == 10 as uint32 || data.scalar_at(end-1) == 13 as uint32) { end-- }
+                if offset >= end && end < data.scalar_count() {
+                    if let next = line_range(model,data,element,current.start+current.length,kind == 4 as uint32) {
+                        var last = next.start+next.length
+                        while last > next.start && (data.scalar_at(last-1) == 10 as uint32 || data.scalar_at(last-1) == 13 as uint32) { last-- }
+                        return AX.TextRange(end,last-end)
+                    }
+                }
+                var start = current.start
+                while start > 0 && (data.scalar_at(start-1) == 10 as uint32 || data.scalar_at(start-1) == 13 as uint32) { start-- }
+                return AX.TextRange(start,end-start)
+            }
+        }
+    }
+    return null
+}
+
+package func reply(model:Model.Model, data:Offsets, element:AX.Element, method:str, values:Value[]) Reply {
+    let signature = Model.arguments(values)
+    if method == "GetText" {
+        if signature != "ii" { return Model.invalid_arguments() }
+        var end = values[1].integer_value; if end == -1 { end = data.scalar_count() }
+        if let text = data.substring(values[0].integer_value,end) { return Reply([Value.text(text)]) }
+        return Model.invalid_arguments()
+    }
+    if method == "GetCharacterAtOffset" {
+        if signature != "i" { return Model.invalid_arguments() }
+        return Reply([Value.signed((data.scalar_at(values[0].integer_value) ?? 0 as uint32) as int)])
+    }
+    if method == "GetStringAtOffset" || method == "GetTextAtOffset" || method == "GetTextBeforeOffset" || method == "GetTextAfterOffset" {
+        if signature != "iu" { return Model.invalid_arguments() }
+        let offset = values[0].integer_value; let kind = values[1].unsigned_value()!
+        var segment:AX.TextRange? = null
+        if kind == 0 as uint32 {
+            var index = offset
+            if method == "GetTextBeforeOffset" { index-- }
+            if method == "GetTextAfterOffset" { index++ }
+            if index >= 0 && index <= data.scalar_count() {
+                var count = 1; if index == data.scalar_count() { count = 0 }
+                segment = AX.TextRange(index,count)
+            }
+        } else {
+            let modern = method == "GetStringAtOffset"
+            if (modern && kind <= 4 as uint32) || (!modern && kind <= 6 as uint32) {
+                segment = text_segment(model,data,element,offset,kind,modern)
+                if let current = segment {
+                    if method == "GetTextBeforeOffset" { segment = text_segment(model,data,element,current.start-1,kind,modern) }
+                    if method == "GetTextAfterOffset" { segment = text_segment(model,data,element,current.start+current.length,kind,modern) }
+                }
+            } else { return unsupported() }
+        }
+        if let span = segment { return Reply([Value.text(data.substring(span.start,span.start+span.length)!),Value.signed(span.start),Value.signed(span.start+span.length)]) }
+        return Reply([Value.text(""),Value.signed(0),Value.signed(0)])
+    }
+    if method == "GetNSelections" {
+        if signature != "" { return Model.invalid_arguments() }
+        var count = 0; if selected(data,element) != null { count = 1 }
+        return Reply([Value.signed(count)])
+    }
+    if method == "GetSelection" {
+        if signature != "i" { return Model.invalid_arguments() }
+        if values[0].integer_value == 0 { if let span = selected(data,element) { return Reply([Value.signed(span.start),Value.signed(span.start+span.length)]) } }
+        return Model.invalid_arguments()
+    }
+    if method == "SetCaretOffset" || method == "RemoveSelection" {
+        if signature != "i" { return Model.invalid_arguments() }
+        var offset = values[0].integer_value
+        if method == "RemoveSelection" {
+            if offset != 0 || selected(data,element) == null { return Reply([Value.boolean(false)]) }
+            offset = data.scalar_for_grapheme(element.selection_cursor!)!
+        }
+        let cursor = data.grapheme_for_scalar(offset)
+        if cursor == null { return Reply([Value.boolean(false)]) }
+        return Reply([Value.boolean(model.perform(element,AX.Request(AX.Action.set_text_selection,anchor:cursor!,cursor:cursor!)))])
+    }
+    if method == "AddSelection" || method == "SetSelection" {
+        var start = 0; var end = 0
+        if method == "AddSelection" {
+            if signature != "ii" { return Model.invalid_arguments() }
+            if selected(data,element) != null { return Reply([Value.boolean(false)]) }
+            start = values[0].integer_value; end = values[1].integer_value
+        } else {
+            if signature != "iii" { return Model.invalid_arguments() }
+            if values[0].integer_value != 0 { return Reply([Value.boolean(false)]) }
+            start = values[1].integer_value; end = values[2].integer_value
+        }
+        return Reply([Value.boolean(set_selection(model,data,element,start,end))])
+    }
+    if method == "GetDefaultAttributes" || method == "GetDefaultAttributeSet" {
+        if signature != "" { return Model.invalid_arguments() }
+        return Reply([Value.array("{ss}",[])])
+    }
+    if method == "GetAttributes" || method == "GetAttributeRun" || method == "GetAttributeValue" {
+        var expected = "i"; if method == "GetAttributeRun" { expected = "ib" } if method == "GetAttributeValue" { expected = "is" }
+        if signature != expected { return Model.invalid_arguments() }
+        if values[0].integer_value < 0 || values[0].integer_value > data.scalar_count() { return Model.invalid_arguments() }
+        if method == "GetAttributeValue" { return Reply([Value.text("")]) }
+        return Reply([Value.array("{ss}",[]),Value.signed(0),Value.signed(data.scalar_count())])
+    }
+    if method == "GetOffsetAtPoint" {
+        if signature != "iiu" { return Model.invalid_arguments() }
+        if let origin = model.coordinate_origin(element,values[2].unsigned_value()!) {
+            if var geometry = model.text_geometry(element.id) {
+                if let span = geometry.range_at(round_float<float>(values[0].integer_value)-origin.x,round_float<float>(values[1].integer_value)-origin.y) { return Reply([Value.signed(data.scalar_for_grapheme(span.start) ?? -1)]) }
+                return Reply([Value.signed(-1)])
+            }
+        }
+        return unsupported()
+    }
+    if method == "GetCharacterExtents" || method == "GetRangeExtents" {
+        var start = 0; var end = 0; var kind = 0 as uint32
+        if method == "GetCharacterExtents" {
+            if signature != "iu" { return Model.invalid_arguments() }
+            start = values[0].integer_value; end = start+1; if start == data.scalar_count() { end = start }
+            kind = values[1].unsigned_value()!
+        } else {
+            if signature != "iiu" { return Model.invalid_arguments() }
+            start = values[0].integer_value; end = values[1].integer_value; kind = values[2].unsigned_value()!
+        }
+        let anchor = data.grapheme_for_scalar(start); var cursor = data.grapheme_for_scalar(end,true)
+        if start == end { cursor = anchor }
+        if anchor == null || cursor == null || end < start { return Model.invalid_arguments() }
+        if var geometry = model.text_geometry(element.id) {
+            if let bounds = geometry.bounds(AX.TextRange(anchor!,cursor!-anchor!)) {
+                if var result = extents(model,element,bounds,kind) { return Reply(result) }
+            }
+        }
+        return unsupported()
+    }
+    if method == "ScrollSubstringTo" || method == "ScrollSubstringToPoint" { return Reply([Value.boolean(false)]) }
+    return unsupported()
+}

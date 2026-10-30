@@ -1,0 +1,49 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.TextOffsets.Offsets
+use STD.Regex
+use STD.Text.Grapheme
+use STD.Text.UTF8
+
+// Same Unicode word/space classification as UI keyboard word navigation.
+// AT-SPI permits application-defined sentence boundaries; this plain-text
+// provider uses paragraphs for sentences, without claiming UAX #29 sentences.
+package class Words {
+    private let starts:int[]
+    private let ends:int[]
+    init(data:Offsets) {
+        var starts:int[] = [0]; var ends:int[] = [0]
+        var word = Regex.compile("\\p{Word}+")
+        var whitespace = Regex.compile("\\p{White_Space}+")
+        var previous = 0; var scalar = 0
+        for cluster in Grapheme.split(data.text) {
+            var kind = 2
+            if whitespace.match(cluster) { kind = 0 }
+            elif word.match(cluster) { kind = 1 }
+            if previous != 0 && (kind != previous || previous == 2) {
+                if ends[ends.count()-1] != scalar { ends.append(scalar) }
+            }
+            if kind != 0 && (kind != previous || kind == 2) {
+                if starts[starts.count()-1] != scalar { starts.append(scalar) }
+            }
+            scalar += UTF8.scalars(cluster).count(); previous = kind
+        }
+        if starts[starts.count()-1] != scalar { starts.append(scalar) }
+        if ends[ends.count()-1] != scalar { ends.append(scalar) }
+        self.starts = starts; self.ends = ends
+    }
+    func at(offset:int, end_boundary:bool) AX.TextRange? {
+        if end_boundary { return interval(self.ends,offset) }
+        return interval(self.starts,offset)
+    }
+}
+func interval(points:int[], offset:int) AX.TextRange? {
+    let total = points[points.count()-1]
+    if offset < 0 || offset > total { return null }
+    if offset == total { return AX.TextRange(total,0) }
+    var low = 0; var high = points.count()
+    while low < high {
+        let middle = low+(high-low)/2
+        if points[middle] <= offset { low = middle+1 } else { high = middle }
+    }
+    return AX.TextRange(points[low-1],points[low]-points[low-1])
+}

@@ -1,0 +1,39 @@
+use STD.Collections.Dictionary
+
+class Row { var cells:Dictionary<str,bool> = Dictionary<str,bool>() }
+class Table { var rows:Dictionary<str,Row> = Dictionary<str,Row>() }
+
+// Only queried cells are indexed. A row-selection change looks up changed
+// selected row IDs, never scans a table's logical rows or every native peer.
+package class Index {
+    private var tables:Dictionary<str,Table> = Dictionary<str,Table>()
+    private var owners:Dictionary<str,str> = Dictionary<str,str>()
+    private var rows:Dictionary<str,str> = Dictionary<str,str>()
+    func add(cell:str, table:str, row:str) {
+        if self.owners.find(cell) == table && self.rows.find(cell) == row { return }
+        self.remove(cell)
+        var group = self.tables.find(table)
+        if group == null { group = Table(); self.tables.set(table,group!) }
+        var table_value = group!
+        var parent = table_value.rows.find(row)
+        if parent == null { parent = Row(); table_value.rows.set(row,parent!) }
+        var row_value = parent!
+        row_value.cells.set(cell,true); self.owners.set(cell,table); self.rows.set(cell,row)
+    }
+    func cells(table:str, row:str) str[] {
+        if var group = self.tables.find(table) { if var parent = group.rows.find(row) { return parent.cells.get_keys() } }
+        return []
+    }
+    func remove(cell:str) {
+        let table = self.owners.find(cell); let row = self.rows.find(cell)
+        if table != null && row != null {
+            if var group = self.tables.find(table!) { if var parent = group.rows.find(row!) {
+                parent.cells.remove(cell)
+                if parent.cells.is_empty() { group.rows.remove(row!) }
+                if group.rows.is_empty() { self.tables.remove(table!) }
+            } }
+        }
+        self.owners.remove(cell); self.rows.remove(cell)
+    }
+    func clear() { self.tables.clear(); self.owners.clear(); self.rows.clear() }
+}

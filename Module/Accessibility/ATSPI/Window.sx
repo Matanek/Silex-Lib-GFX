@@ -1,0 +1,38 @@
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+use STD.Math
+
+// The native frame belongs to the window, not to a possibly smaller modal
+// Source root or to a Canvas placed away from the window origin.
+package func reply(model:Model.Model, method:str, values:Value[]) Reply {
+    let signature = Model.arguments(values); let size = model.window_size()
+    if method == "GetSize" { if signature != "" { return Model.invalid_arguments() } return Reply([Value.signed(Math.ceil(size.x) as int),Value.signed(Math.ceil(size.y) as int)]) }
+    if method == "GetLayer" { if signature != "" { return Model.invalid_arguments() } return Reply([Value.unsigned(7 as uint32)]) }
+    if method == "GetMDIZOrder" { if signature != "" { return Model.invalid_arguments() } return Reply([Value.signed(0,signature:"n")]) }
+    if method == "GetAlpha" { if signature != "" { return Model.invalid_arguments() } return Reply([Value.real(1.0 as float64)]) }
+    if method == "GrabFocus" || method == "SetExtents" || method == "SetPosition" || method == "SetSize" || method == "ScrollTo" || method == "ScrollToPoint" { return Reply([Value.boolean(false)]) }
+    if method == "GetExtents" || method == "GetPosition" || method == "Contains" || method == "GetAccessibleAtPoint" {
+        var kind = 0 as uint32
+        if method == "GetExtents" || method == "GetPosition" {
+            if signature != "u" { return Model.invalid_arguments() }
+            kind = values[0].unsigned_value()!
+        } else {
+            if signature != "iiu" { return Model.invalid_arguments() }
+            kind = values[2].unsigned_value()!
+        }
+        if let origin = model.window_origin(kind) {
+            let left = Math.floor(origin.x) as int; let top = Math.floor(origin.y) as int
+            let width = Math.ceil(origin.x+size.x) as int-left; let height = Math.ceil(origin.y+size.y) as int-top
+            if method == "GetPosition" { return Reply([Value.signed(left),Value.signed(top)]) }
+            if method == "GetExtents" { return Reply([Value.record([Value.signed(left),Value.signed(top),Value.signed(width),Value.signed(height)])]) }
+            let x = round_float<float>(values[0].integer_value)-origin.x; let y = round_float<float>(values[1].integer_value)-origin.y
+            let inside = x >= 0.0 && y >= 0.0 && x < size.x && y < size.y
+            if method == "Contains" { return Reply([Value.boolean(inside)]) }
+            var id:str? = null; if inside { id = model.window_hit(x,y) }
+            return Reply([model.reference(id)])
+        }
+        return Reply.failure("org.a11y.atspi.Error.NotSupported","Coordinate system is unavailable")
+    }
+    return Model.unknown_method()
+}

@@ -1,0 +1,114 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.Description
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+
+package class Application {
+    private let bus:str
+    private let title:str
+    private let locale:str
+    private var application_id:int = 0
+    private var desktop_bus:str = ""
+    private var desktop_path:str = "/org/a11y/atspi/null"
+    init(bus:str, title:str, locale:str) { self.bus = bus; self.title = title; self.locale = locale }
+    func locale_value() str { return self.locale }
+    func set_desktop(bus:str, path:str) { self.desktop_bus = bus; self.desktop_path = path }
+    func reference(window:bool = false) Value {
+        var path = Model.application_path(); if window { path = Model.window_path() }
+        return Value.record([Value.text(self.bus),Value.path(path)])
+    }
+    func interfaces(window:bool) Value {
+        var additional = "Application"; if window { additional = "Component" }
+        return Value.array("s",[Value.text(Model.interface_name("Accessible")),Value.text(Model.interface_name(additional))])
+    }
+    func parent(window:bool) Value {
+        if window { return self.reference() }
+        return Value.record([Value.text(self.desktop_bus),Value.path(self.desktop_path)])
+    }
+    func children(model:Model.Model, window:bool) Value[] {
+        if !window { return [self.reference(true)] }
+        if let root = model.source_root() { return [model.reference(root)] }
+        return []
+    }
+    func cache_item(model:Model.Model, window:bool = false) Value {
+        var role = 75 as uint32; var index = -1
+        if window { role = 23 as uint32; index = 0 }
+        return Value.record([self.reference(window),self.reference(),self.parent(window),Value.signed(index),Value.signed(self.children(model,window).count()),
+            self.interfaces(window),Value.text(self.title),Value.unsigned(role),Value.text(""),Description.states(AX.Element(id:""))])
+    }
+    // Synthetic objects have their own dispatch, rather than fabricating an
+    // application Source ID. A real Source may legitimately use this path text
+    // as one of its opaque IDs; it still receives an ordinary unique peer path.
+    private func property(model:Model.Model, window:bool, interface:str, name:str) Value? {
+        if !window && interface == Model.interface_name("Application") {
+            if name == "ToolkitName" { return Value.text("Silex GFX") }
+            if name == "Version" || name == "ToolkitVersion" { return Value.text("0.40.0") }
+            if name == "AtspiVersion" { return Value.text("2.1") }
+            if name == "InterfaceVersion" { return Value.unsigned(1 as uint32) }
+            if name == "Id" { return Value.signed(self.application_id) }
+        }
+        if interface == Model.interface_name("Accessible") {
+            if name == "version" { return Value.unsigned(1 as uint32) }
+            if name == "Name" { return Value.text(self.title) }
+            if name == "Description" || name == "HelpText" || name == "AccessibleId" { return Value.text("") }
+            if name == "Locale" { return Value.text(self.locale) }
+            if name == "Parent" { return self.parent(window) }
+            if name == "ChildCount" { return Value.signed(self.children(model,window).count()) }
+        }
+        if window && interface == Model.interface_name("Component") && name == "version" { return Value.unsigned(1 as uint32) }
+        return null
+    }
+    func request(model:Model.Model, interface:str, method:str, values:Value[], window:bool = false) Reply {
+        let signature = Model.arguments(values)
+        if interface == "org.freedesktop.DBus.Properties" {
+            if values.is_empty() || values[0].signature != "s" { return Model.invalid_arguments() }
+            var additional = "Application"; if window { additional = "Component" }
+            if values[0].string_value != Model.interface_name("Accessible") && values[0].string_value != Model.interface_name(additional) {
+                return Reply.failure("org.freedesktop.DBus.Error.UnknownInterface","Interface is unavailable for this object")
+            }
+            if method == "Get" {
+                if signature != "ss" { return Model.invalid_arguments() }
+                if var value = self.property(model,window,values[0].string_value,values[1].string_value) { return Reply([Value.variant(value)]) }
+                return Reply.failure("org.freedesktop.DBus.Error.UnknownProperty","Unknown application property")
+            }
+            if method == "Set" {
+                if signature != "ssv" { return Model.invalid_arguments() }
+                if !window && values[0].string_value == Model.interface_name("Application") && values[1].string_value == "Id" {
+                    if values[2].content!.signature != "i" { return Model.invalid_arguments() }
+                    self.application_id = values[2].content!.integer_value; return Reply()
+                }
+                return Reply.failure("org.freedesktop.DBus.Error.PropertyReadOnly","Property cannot be changed")
+            }
+            if method == "GetAll" {
+                if signature != "s" { return Model.invalid_arguments() }
+                var names:str[] = ["version","Name","Description","Parent","ChildCount","Locale","AccessibleId","HelpText"]
+                if window && values[0].string_value == Model.interface_name("Component") { names = ["version"] }
+                if !window && values[0].string_value == Model.interface_name("Application") { names = ["ToolkitName","Version","ToolkitVersion","AtspiVersion","InterfaceVersion","Id"] }
+                var properties:Value[] = []
+                for name in names { if var value = self.property(model,window,values[0].string_value,name) { properties.append(Value.entry(name,Value.variant(value))) } }
+                return Reply([Value.array("{sv}",properties)])
+            }
+            return Model.unknown_method()
+        }
+        if !window && interface == Model.interface_name("Application") {
+            if method == "GetLocale" { if signature != "u" { return Model.invalid_arguments() } return Reply([Value.text(self.locale)]) }
+            if method == "GetApplicationBusAddress" { if signature != "" { return Model.invalid_arguments() } return Reply([Value.text("")]) }
+        }
+        if interface == Model.interface_name("Accessible") {
+            if method == "GetChildAtIndex" { if signature != "i" { return Model.invalid_arguments() } var result = model.reference(null); if values[0].integer_value == 0 { var children = self.children(model,window); if !children.is_empty() { result = children[0] } } return Reply([result]) }
+            if signature != "" { return Model.invalid_arguments() }
+            if method == "GetChildren" { return Reply([Value.array("(so)",self.children(model,window))]) }
+            if method == "GetIndexInParent" { var index = -1; if window { index = 0 } return Reply([Value.signed(index)]) }
+            if method == "GetRole" { var role = 75 as uint32; if window { role = 23 as uint32 } return Reply([Value.unsigned(role)]) }
+            if method == "GetRoleName" || method == "GetLocalizedRoleName" { var name = "application"; if window { name = "frame" } return Reply([Value.text(name)]) }
+            if method == "GetApplication" { return Reply([self.reference()]) }
+            if method == "GetInterfaces" { return Reply([self.interfaces(window)]) }
+            if method == "GetState" { return Reply([Description.states(AX.Element(id:""))]) }
+            if method == "GetAttributes" { return Reply([Value.array("{ss}",[])]) }
+            if method == "GetRelationSet" { return Reply([Value.array("(ua(so))",[])]) }
+        }
+        if window && interface == Model.interface_name("Component") { return model.window_component(method,values) }
+        return Model.unknown_method()
+    }
+}

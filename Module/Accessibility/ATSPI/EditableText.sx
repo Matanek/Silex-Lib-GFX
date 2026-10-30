@@ -1,0 +1,92 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.TextOffsets.Offsets
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+use STD.Text.UTF8
+
+// Injected by the native host. Model tests never initialize a video subsystem.
+package protocol Clipboard {
+    func read() str?
+    func write(text:str) bool
+}
+package struct NoClipboard:Clipboard {
+    func read() str? { return null }
+    func write(text:str) bool { return false }
+}
+package func supports(element:AX.Element) bool {
+    if !element.editable || element.value == null { return false }
+    for action in element.actions { if action == AX.Action.set_value { return true } }
+    return false
+}
+func span(data:Offsets, start:int, end:int) AX.TextRange? {
+    if end < start { return null }
+    let first = data.grapheme_for_scalar(start)
+    var last = data.grapheme_for_scalar(end,true)
+    if first == null || last == null { return null }
+    if start == end { last = first }
+    let a = data.scalar_for_grapheme(first!)!; let b = data.scalar_for_grapheme(last!)!
+    return AX.TextRange(a,b-a)
+}
+func replace(model:Model.Model, data:Offsets, element:AX.Element, selection:AX.TextRange, text:str) bool {
+    if selection.length == 0 && text == "" { return true }
+    let prefix = data.substring(0,selection.start)!
+    let suffix = data.substring(selection.start+selection.length,data.scalar_count())!
+    if !model.perform(element,AX.Request(AX.Action.set_value,text:prefix+text+suffix)) { return false }
+    // The producer owns normalization and constraints. Read the accepted text
+    // before placing a caret, rather than assuming it accepted every byte.
+    if let current = model.source_element(element.id) {
+        var accepted = Offsets(current.value ?? "")
+        let desired = UTF8.scalars(prefix+text).count()
+        if let cursor = accepted.grapheme_for_scalar(desired,true) {
+            let placed = model.perform(current,AX.Request(AX.Action.set_text_selection,anchor:cursor,cursor:cursor))
+        }
+    }
+    return true
+}
+package func reply(model:Model.Model, data:Offsets, element:AX.Element, clipboard:Clipboard, method:str, values:Value[]) Reply {
+    let signature = Model.arguments(values)
+    if method == "SetTextContents" {
+        if signature != "s" { return Model.invalid_arguments() }
+        if element.enabled && element.value == values[0].string_value { return Reply([Value.boolean(true)]) }
+        return Reply([Value.boolean(model.perform(element,AX.Request(AX.Action.set_value,text:values[0].string_value)))])
+    }
+    if method == "InsertText" || method == "PasteText" {
+        var expected = "isi"; if method == "PasteText" { expected = "i" }
+        if signature != expected { return Model.invalid_arguments() }
+        if !element.enabled { return Reply([Value.boolean(false)]) }
+        let selection = span(data,values[0].integer_value,values[0].integer_value)
+        if selection == null { return Reply([Value.boolean(false)]) }
+        var text:str? = null
+        if method == "PasteText" { text = clipboard.read() }
+        else {
+            let length = values[2].integer_value
+            if length < 0 { return Model.invalid_arguments() }
+            let bytes = UTF8.bytes(values[1].string_value)
+            if length >= bytes.count() { text = values[1].string_value }
+            else {
+                match (try UTF8.decode(@bytes[0:length])) {
+                    success(value) => { text = value }
+                    failure(error) => { return Model.invalid_arguments() }
+                }
+            }
+        }
+        if text == null { return Reply([Value.boolean(false)]) }
+        return Reply([Value.boolean(replace(model,data,element,selection!,text!))])
+    }
+    if method == "CopyText" || method == "CutText" || method == "DeleteText" {
+        if signature != "ii" { return Model.invalid_arguments() }
+        let selection = span(data,values[0].integer_value,values[1].integer_value)
+        if method == "CopyText" {
+            if selection == null { return Model.invalid_arguments() }
+            if !clipboard.write(data.substring(selection!.start,selection!.start+selection!.length)!) {
+                return Reply.failure("org.freedesktop.DBus.Error.Failed","Clipboard is unavailable")
+            }
+            return Reply()
+        }
+        if selection == null || !element.enabled { return Reply([Value.boolean(false)]) }
+        if method == "CutText" && !clipboard.write(data.substring(selection!.start,selection!.start+selection!.length)!) { return Reply([Value.boolean(false)]) }
+        return Reply([Value.boolean(replace(model,data,element,selection!,""))])
+    }
+    return Model.unknown_method()
+}

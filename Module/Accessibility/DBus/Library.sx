@@ -93,6 +93,16 @@ package nocopy class Library {
         if success == 0 { return 0 as uint32 }
         return serial
     }
+    func new_signal(path:str, interface:str, name:str) uint {
+        return C.call<func(C.Pointer<uint8>,C.Pointer<uint8>,C.Pointer<uint8>) uint>(self.symbol("dbus_message_new_signal"),C.terminated_pointer(path),C.terminated_pointer(interface),C.terminated_pointer(name))
+    }
+    func signal(connection:uint, path:str, interface:str, name:str, values:Value[]) bool {
+        let message = self.new_signal(path,interface,name)
+        if message == 0 { return false }
+        var success = self.codec.encode(message,values)
+        if success { success = self.send(connection,message) != 0 as uint32 }
+        self.release(message); return success
+    }
     func reply(connection:uint, message:uint, result:Reply) {
         if C.call<func(uint) uint32>(self.symbol("dbus_message_get_no_reply"),message) != 0 { return }
         var response = 0 as uint

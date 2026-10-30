@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pont Linux AT-SPI expérimental : chargement D-Bus optionnel, requêtes sur le thread UI, texte Unicode, collections indexées et notifications. Les constructions croisées et tests sans fenêtre ne remplacent pas la qualification native Linux/Orca, qui reste ouverte.
+
 - Le pont macOS accepte les valeurs et positions décimales natives en les arrondissant explicitement vers la précision UI. Les nombres non finis ou hors de cette précision sont refusés avant les callbacks ; la politique des contrôles reste dans Source.
 
 - Les sources accessibles peuvent rechercher un élément par coordonnées et annoncer la sélection multiple, avec des défauts compatibles pour les producteurs existants.

@@ -1,0 +1,131 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.EditableText
+use GFX.Accessibility.BusValue.Value
+use STD.Math
+
+class Geometry:AX.TextGeometry {
+    var start:int = -1
+    var length:int = -1
+    var x:float = -1.0
+    var y:float = -1.0
+    func bounds(selection:AX.TextRange) AX.Bounds? { self.start = selection.start; self.length = selection.length; return AX.Bounds(10.25,20.5,30.5,15.0) }
+    func range_at(x:float, y:float) AX.TextRange? { self.x = x; self.y = y; return AX.TextRange(2,1) }
+    func line_for_index(index:int) int? { if index < 5 { return 0 } return 1 }
+    func range_for_line(line:int) AX.TextRange? { if line == 0 { return AX.TextRange(0,5) } return AX.TextRange(5,1) }
+    func visible_range() AX.TextRange? { return AX.TextRange(0,6) }
+}
+class Source:AX.Source {
+    var text:str = "Aé👩‍💻中\r\nZ"
+    var anchor:int = 1
+    var cursor:int = 3
+    var calls:int = 0
+    var shown:bool = true
+    var enabled:bool = true
+    var geometry:Geometry = Geometry()
+    func root() str? { if self.shown { return "editor" } return null }
+    func focused() str? { return self.root() }
+    func read(id:str) AX.Element? {
+        if !self.shown || id != "editor" { return null }
+        return AX.Element(id:id,role:AX.Role.text_area,value:self.text,editable:true,multiline:true,
+            enabled:self.enabled,selection_anchor:self.anchor,selection_cursor:self.cursor,
+            bounds:AX.Bounds(0.0,0.0,200.0,100.0),actions:[AX.Action.set_text_selection,AX.Action.set_value])
+    }
+    func child(id:str, index:int) str? { return null }
+    func perform(id:str, request:AX.Request) bool {
+        self.calls++
+        if request.action == AX.Action.set_text_selection { self.anchor = request.anchor; self.cursor = request.cursor; return true }
+        if request.action == AX.Action.set_value { self.text = request.text!; return true }
+        return false
+    }
+    func changes() AX.Change[] { return [] }
+    func text_geometry(id:str) AX.TextGeometry? { return self.geometry }
+}
+
+class Clipboard:EditableText.Clipboard {
+    var text:str = ""
+    var enabled:bool = true
+    func read() str? { if self.enabled { return self.text } return null }
+    func write(text:str) bool { if !self.enabled { return false } self.text = text; return true }
+}
+
+test "AT-SPI edits preserve graphemes and validate UTF-8 byte lengths before mutation" {
+    var source = Source(); var clipboard = Clipboard()
+    var model = Model.Model(source,":1.42","Editor"); model.set_clipboard(clipboard)
+    let path = model.reference("editor").members[1].string_value; let edit = Model.interface_name("EditableText")
+    assert(model.request(path,edit,"SetTextContents",[Value.text(source.text)]).values[0].boolean_value() == true && source.calls == 0)
+    assert(model.request(path,edit,"InsertText",[Value.signed(2),Value.text("été"),Value.signed(1)]).error != null && source.calls == 0)
+    assert(model.request(path,edit,"InsertText",[Value.signed(2),Value.text("été"),Value.signed(2)]).values[0].boolean_value() == true)
+    assert(source.text == "Aéé👩‍💻中\r\nZ" && source.cursor == 2)
+    source.text = "Aé👩‍💻中\r\nZ"
+    assert(model.request(path,edit,"CopyText",[Value.signed(4),Value.signed(5)]).signature() == "")
+    assert(clipboard.text == "👩‍💻")
+    clipboard.enabled = false
+    assert(model.request(path,edit,"CutText",[Value.signed(3),Value.signed(6)]).values[0].boolean_value() == false)
+    assert(source.text == "Aé👩‍💻中\r\nZ")
+    clipboard.enabled = true
+    assert(model.request(path,edit,"CutText",[Value.signed(4),Value.signed(5)]).values[0].boolean_value() == true)
+    assert(source.text == "Aé中\r\nZ" && clipboard.text == "👩‍💻" && source.cursor == 2)
+    assert(model.request(path,edit,"PasteText",[Value.signed(3)]).values[0].boolean_value() == true)
+    assert(source.text == "Aé👩‍💻中\r\nZ" && source.cursor == 3)
+    let unchanged = source.calls
+    assert(model.request(path,edit,"DeleteText",[Value.signed(2),Value.signed(2)]).values[0].boolean_value() == true && source.text == "Aé👩‍💻中\r\nZ" && source.calls == unchanged)
+    source.enabled = false; let calls = source.calls
+    assert(model.request(path,edit,"SetTextContents",[Value.text("Lost")]).values[0].boolean_value() == false && source.calls == calls)
+}
+
+test "AT-SPI reads use scalar offsets and selections preserve complete graphemes" {
+    var source = Source(); var model = Model.Model(source,":1.42","Editor")
+    let path = model.reference("editor").members[1].string_value; let text = Model.interface_name("Text")
+    var count = model.request(path,"org.freedesktop.DBus.Properties","Get",[Value.text(text),Value.text("CharacterCount")])
+    assert(count.values[0].content!.integer_value == 10)
+    assert(model.request(path,text,"GetText",[Value.signed(3),Value.signed(6)]).values[0].string_value == "👩‍💻")
+    var selected = model.request(path,text,"GetSelection",[Value.signed(0)])
+    assert(selected.values[0].integer_value == 1 && selected.values[1].integer_value == 6)
+    assert(model.request(path,text,"SetSelection",[Value.signed(0),Value.signed(2),Value.signed(4)]).values[0].boolean_value() == true)
+    assert(source.anchor == 1 && source.cursor == 3 && source.calls == 1)
+    assert(model.request(path,text,"SetCaretOffset",[Value.signed(4)]).values[0].boolean_value() == true && source.cursor == 2)
+    assert(model.request(path,text,"SetCaretOffset",[Value.signed(100)]).values[0].boolean_value() == false && source.calls == 2)
+    source.enabled = false
+    assert(model.request(path,text,"SetCaretOffset",[Value.signed(0)]).values[0].boolean_value() == false && source.calls == 2)
+    source.text = "中"; source.anchor = 0; source.cursor = 1
+    assert(model.request(path,text,"GetText",[Value.signed(0),Value.signed(-1)]).values[0].string_value == "中")
+    assert(model.request(path,text,"GetText",[Value.signed(0),Value.signed(2)]).error != null)
+}
+
+test "AT-SPI text geometry translates scalar ranges and presentation coordinates lazily" {
+    var source = Source(); var model = Model.Model(source,":1.42","Editor")
+    model.place(Math.Vec2(5.0,6.0),Math.Vec2(100.0,200.0))
+    let path = model.reference("editor").members[1].string_value; let text = Model.interface_name("Text")
+    var bounds = model.request(path,text,"GetRangeExtents",[Value.signed(2),Value.signed(4),Value.unsigned(0 as uint32)])
+    assert(bounds.error == null && bounds.signature() == "iiii")
+    assert(bounds.values[0].integer_value == 115 && bounds.values[1].integer_value == 226 && bounds.values[2].integer_value == 31)
+    assert(source.geometry.start == 1 && source.geometry.length == 2)
+    assert(model.request(path,text,"GetRangeExtents",[Value.signed(2),Value.signed(2),Value.unsigned(1 as uint32)]).error == null)
+    assert(source.geometry.start == 1 && source.geometry.length == 0)
+    assert(model.request(path,text,"GetOffsetAtPoint",[Value.signed(120),Value.signed(230),Value.unsigned(0 as uint32)]).values[0].integer_value == 3)
+    assert(source.geometry.x == 15.0 && source.geometry.y == 24.0 && source.calls == 0)
+    var line = model.request(path,text,"GetStringAtOffset",[Value.signed(4),Value.unsigned(3 as uint32)])
+    assert(line.values[0].string_value == "Aé👩‍💻中\r\n" && line.values[2].integer_value == 9)
+    source.shown = false
+    assert(model.request(path,text,"GetText",[Value.signed(0),Value.signed(-1)]).error == "org.freedesktop.DBus.Error.UnknownObject")
+}
+
+test "AT-SPI word and legacy boundaries share Unicode editing classes without frame work" {
+    var source = Source(); source.text = "Été, 中!\r\nSuite."
+    var model = Model.Model(source,":1.42","Editor")
+    let path = model.reference("editor").members[1].string_value; let text = Model.interface_name("Text")
+    var word = model.request(path,text,"GetStringAtOffset",[Value.signed(2),Value.unsigned(1 as uint32)])
+    assert(word.values[0].string_value == "Été" && word.values[1].integer_value == 0 && word.values[2].integer_value == 3)
+    assert(model.request(path,text,"GetStringAtOffset",[Value.signed(4),Value.unsigned(1 as uint32)]).values[0].string_value == ", ")
+    assert(model.request(path,text,"GetTextAfterOffset",[Value.signed(2),Value.unsigned(1 as uint32)]).values[0].string_value == ", ")
+    assert(model.request(path,text,"GetTextAtOffset",[Value.signed(4),Value.unsigned(2 as uint32)]).values[0].string_value == " 中")
+    assert(model.request(path,text,"GetStringAtOffset",[Value.signed(5),Value.unsigned(2 as uint32)]).values[0].string_value == "Été, 中!\r\n")
+    assert(model.request(path,text,"GetTextAtOffset",[Value.signed(7),Value.unsigned(4 as uint32)]).values[0].string_value == "\r\nSuite.")
+    assert(model.request(path,text,"GetStringAtOffset",[Value.signed(500),Value.unsigned(1 as uint32)]).values[0].string_value == "")
+    source.text = "Deux mots"
+    assert(model.request(path,text,"GetStringAtOffset",[Value.signed(6),Value.unsigned(1 as uint32)]).values[0].string_value == "mots")
+    source.text = ""
+    assert(model.request(path,text,"GetStringAtOffset",[Value.signed(0),Value.unsigned(1 as uint32)]).values[0].string_value == "")
+    assert(source.calls == 0)
+}

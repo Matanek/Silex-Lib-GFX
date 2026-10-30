@@ -5,7 +5,8 @@ de GFX.UI. Un hôte peut inspecter la source fournie par une interface existante
 ou implémenter `Source` pour ses propres contrôles. Le premier adaptateur macOS
 présente les éléments à AppKit ; le premier parcours bouton/champ a été vérifié
 avec l’inspecteur et VoiceOver. La qualification des autres contrôles continue.
-Les adaptateurs Linux et Windows ne sont pas encore fournis.
+Un adaptateur Linux AT-SPI est proposé à titre expérimental ; sa qualification
+sur Linux reste à faire. Le pont Windows UI Automation reste en préparation.
 
 ## Lire et actionner la même interface
 
@@ -230,3 +231,45 @@ Le pont macOS arrondit les valeurs et positions natives vers la précision
 flottante de la source. Il refuse les nombres non finis ou trop grands avant
 d’appeler la source. La validation de plage et le bornage restent définis par
 `Source.perform`, comme pour les autres entrées du contrôle.
+
+## Pont Linux expérimental
+
+`Window.set_accessibility_source` raccorde également la source au bus
+AT-SPI lorsqu’il est disponible. L’adaptateur charge `libdbus-1.so.3` à la
+demande et obtient l’adresse auprès de `org.a11y.Bus` sur le bus de session.
+Un système sans ce service ou sans cette bibliothèque conserve l’interface
+ordinaire. GTK et GLib ne deviennent pas des dépendances de l’application.
+
+Les requêtes et actions restent sur le thread UI. Le thread d’entrée/sortie ne
+fait que traiter le transport et réveiller l’hôte. L’inscription au registre
+est asynchrone ; le détachement arrête ce thread avant de fermer la connexion.
+Un outil système peut conserver un ancien chemin : il devient inaccessible et
+ne désigne pas un nouveau contrôle réutilisant le même ID de source.
+
+Le pont expose application, fenêtre, rôles, noms, relations, états, actions,
+valeurs et coordonnées. Les tableaux offrent leurs en-têtes puis leurs cellules
+par index, sans réaliser les lignes hors écran. Les requêtes de sélection
+utilisent `Rows.selected()` ; sélectionner toutes les lignes et sélectionner
+des colonnes ne sont pas simulés par des milliers d’actions individuelles.
+Le cache et les notifications restent limités aux éléments exposés ; les
+collections virtuelles annoncent qu’elles gèrent leurs descendants.
+
+AT-SPI compte les positions de texte en scalaires Unicode, alors que `Source`
+compte les graphèmes. Le pont convertit ces unités pour la lecture, le caret,
+la sélection, l’édition, le presse-papiers et la géométrie fournie par
+`TextGeometry`. Les mutations préservent les graphèmes entiers. La navigation
+par mots suit les classes Unicode de l’éditeur ; les phrases utilisent les
+paragraphes, sans segmentation grammaticale annoncée. Les attributs de texte
+sont ceux d’un texte simple. Les plages bornées complexes et le défilement vers
+une sous-plage de texte ne sont pas pris en charge.
+
+Sous X11, les coordonnées écran utilisent la position de la fenêtre. Sous
+Wayland, une position globale indisponible est signalée comme telle ; les
+coordonnées relatives restent utilisables. L’adaptateur n’invente pas une
+position écran à partir de l’origine locale.
+
+Les tests du modèle, du codec natif et les constructions croisées ne constituent
+pas une exécution sur Linux. Le fonctionnement du bus, Orca, les interactions
+avec le bureau et les conventions de coordonnées à différentes échelles
+restent à qualifier sur les systèmes ciblés. Ce statut expérimental ne change
+pas la validation en usage courant des contrôles macOS.

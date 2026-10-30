@@ -180,7 +180,7 @@ public class Window {
         if var presentation = self.accessible_presentation { presentation.remove() }
         self.accessible_presentation = null
         if var semantics = source {
-            self.accessible_presentation = AccessiblePresentation.for_window(semantics, self.presentation_handle(), self.size().y, origin)
+            self.accessible_presentation = AccessiblePresentation.for_window(semantics, self.presentation_handle(), self.size().y, origin,runtime_window:self.handle)
         }
     }
 

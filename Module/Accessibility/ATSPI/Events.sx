@@ -1,0 +1,236 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.Text
+use GFX.Accessibility.ATSPI.Table
+use GFX.Accessibility.TextOffsets.Offsets
+use GFX.Accessibility.BusValue.Value
+use STD.Collections.Dictionary
+
+package struct Signal {
+    let path:str
+    let interface:str
+    let name:str
+    var values:Value[]
+    init(path:str, interface:str, name:str, values:Value[]) {
+        self.path = path; self.interface = interface; self.name = name; self.values = values
+    }
+}
+package func object(path:str, name:str, detail:str = "", first:int = 0, second:int = 0, payload:Value = Value.signed(0)) Signal {
+    return Signal(path,Model.interface_name("Event.Object"),name,[Value.text(detail),Value.signed(first),Value.signed(second),Value.variant(payload),Value.array("{sv}",[])])
+}
+package func cache_path() str { return "/org/a11y/atspi/cache" }
+package func cache_signature() str { return "((so)(so)(so)iiassusau)" }
+package func manages(element:AX.Element) bool {
+    return element.child_count > 4096 || element.role == AX.Role.list || element.role == AX.Role.tree || element.role == AX.Role.tree_item || element.role == AX.Role.table
+}
+package func cache_item(model:Model.Model, element:AX.Element) Value {
+    model.refresh_binding(element)
+    return Value.record([model.reference(element.id),model.application_reference(),model.parent(element),Value.signed(model.index(element)),
+        Value.signed(model.child_count(element)),model.interface_values(element),Value.text(element.name),Value.unsigned(model.role(element)),
+        Value.text(element.description),model.states(element)])
+}
+package class Queue {
+    private var observed:Dictionary<str,AX.Element> = Dictionary<str,AX.Element>()
+    private var flags:Dictionary<str,Value> = Dictionary<str,Value>()
+    private var selected_rows:Dictionary<str,str[]> = Dictionary<str,str[]>()
+    private var added:str[] = []
+    private var pending:Signal[] = []
+    private var children:Dictionary<str,Dictionary<int,str>> = Dictionary<str,Dictionary<int,str>>()
+    private var bounded:Dictionary<str,bool> = Dictionary<str,bool>()
+    private var root:str?
+    init(root:str?) { self.root = root }
+    func clear() { self.observed.clear(); self.flags.clear(); self.selected_rows.clear(); self.children.clear(); self.bounded.clear(); self.added = []; self.pending = []; self.root = null }
+    func bounded_descendants(id:str) bool { return self.bounded.contains(id) }
+    func forget(model:Model.Model, id:str) {
+        if !self.observed.contains(id) { return }
+        var reference = model.reference(id)
+        self.pending.append(object(reference.members[1].string_value,"StateChanged","defunct",1))
+        self.pending.append(Signal(cache_path(),Model.interface_name("Cache"),"RemoveAccessible",[reference]))
+        self.observed.remove(id); self.flags.remove(id)
+        self.children.remove(id); self.bounded.remove(id)
+        self.selected_rows.remove(id)
+    }
+    func observe(model:Model.Model, element:AX.Element, flags:Value) {
+        if !self.observed.contains(element.id) {
+            self.observed.set(element.id,element); self.flags.set(element.id,flags); self.added.append(element.id)
+            if Table.supports(element) { self.selected_rows.set(element.id,Table.selected_rows(model,element)) }
+        }
+    }
+    func child(parent:str, index:int, id:str?) {
+        if id == null { return }
+        var known = self.children.find(parent) ?? Dictionary<int,str>()
+        if !known.contains(index) { known.set(index,id!); self.children.set(parent,known) }
+    }
+    private func structure(model:Model.Model, element:AX.Element, path:str, result:&Signal[]) {
+        let previous = self.children.find(element.id) ?? Dictionary<int,str>()
+        var next = Dictionary<int,str>()
+        var indices = previous.get_keys()
+        if !manages(element) && model.child_count(element) <= 4096 {
+            indices = []; var index = 0
+            while index < model.child_count(element) { indices.append(index); index++ }
+        }
+        for index in indices { if let id = model.child(element,index) { next.set(index,id) } }
+        for index in previous.get_keys() {
+            let id = previous.find(index)!
+            if next.find(index) != id { result.append(object(path,"ChildrenChanged","remove",index,0,model.reference(id))) }
+        }
+        for index in next.get_keys() {
+            let id = next.find(index)!
+            if previous.find(index) != id { result.append(object(path,"ChildrenChanged","add",index,0,model.reference(id))) }
+        }
+        self.children.set(element.id,next)
+    }
+    func items(model:Model.Model) Value[] {
+        // Cache small static trees; virtual collections explicitly manage
+        // descendants and remain indexed. Never realize their logical rows.
+        self.bounded.clear()
+        var pending:str[] = []; var seen = Dictionary<str,bool>()
+        if let root = model.source_root() { pending.append(root) }
+        var index = 0
+        while index < pending.count() && index < 4096 {
+            let id = pending[index]; index++
+            if seen.contains(id) { continue }
+            seen.set(id,true)
+            if let element = model.read(model.reference(id).members[1].string_value) {
+                if !manages(element) && pending.count()+model.child_count(element) <= 4096 {
+                    var child = 0
+                    while child < model.child_count(element) { if let next = model.child(element,child) { pending.append(next) } child++ }
+                } elif !manages(element) {
+                    self.bounded.set(element.id,true); self.flags.set(element.id,model.states(element))
+                }
+            }
+        }
+        var result:Value[] = [model.application_cache_item(),model.window_cache_item()]
+        for id in self.observed.get_keys() {
+            if let element = model.source_element(id) { result.append(cache_item(model,element)) }
+        }
+        return result
+    }
+    func poll(model:Model.Model, changes:AX.Change[], root:str?) Signal[] {
+        var result = self.pending; self.pending = []
+        if root != self.root {
+            if let previous = self.root { result.append(object(Model.window_path(),"ChildrenChanged","remove",0,0,model.reference(previous))) }
+            if let current = root { result.append(object(Model.window_path(),"ChildrenChanged","add",0,0,model.reference(current))) }
+            self.root = root
+        }
+        for id in self.added {
+            if let element = self.observed.find(id) { result.append(Signal(cache_path(),Model.interface_name("Cache"),"AddAccessible",[cache_item(model,element)])) }
+        }
+        self.added = []
+        if changes.is_empty() { return result }
+        var updated = Dictionary<str,AX.Element>(); var removed = Dictionary<str,bool>()
+        var states_sent = Dictionary<str,bool>()
+        var pending = changes
+        for change in changes {
+            if change.kind != AX.ChangeKind.selection { continue }
+            if let element = self.observed.find(change.id) { if Table.supports(element) {
+                let previous:str[] = self.selected_rows.find(element.id) ?? []; let current = Table.selected_rows(model,element)
+                var old = Dictionary<str,bool>(); var next = Dictionary<str,bool>()
+                for id in previous { old.set(id,true) }
+                for id in current { next.set(id,true) }
+                var changed:str[] = []
+                for id in previous { if !next.contains(id) { changed.append(id) } }
+                for id in current { if !old.contains(id) { changed.append(id) } }
+                for row in changed { for id in model.exposed_cells(element.id,row) {
+                    if self.observed.contains(id) { pending.append(AX.Change(id,AX.ChangeKind.state)) }
+                } }
+                self.selected_rows.set(element.id,current)
+            } }
+        }
+        for change in pending {
+            if removed.contains(change.id) { continue }
+            if change.kind == AX.ChangeKind.focus && !self.observed.contains(change.id) {
+                if let element = model.source_element(change.id) {
+                    if model.is_focused(element) {
+                        model.bind(element)
+                        self.observed.set(element.id,element); self.flags.set(element.id,model.states(element))
+                        let path = model.reference(element.id).members[1].string_value
+                        result.append(Signal(cache_path(),Model.interface_name("Cache"),"AddAccessible",[cache_item(model,element)]))
+                        result.append(object(path,"StateChanged","focused",1))
+                        result.append(object(model.parent(element).members[1].string_value,"ActiveDescendantChanged","",0,0,model.reference(element.id)))
+                    }
+                }
+                continue
+            }
+            if let previous = self.observed.find(change.id) {
+                let path = model.reference(change.id).members[1].string_value
+                var current = updated.find(change.id)
+                if current == null && change.kind != AX.ChangeKind.removed { current = model.source_element(change.id) }
+                if current == null || change.kind == AX.ChangeKind.removed {
+                    result.append(object(path,"StateChanged","defunct",1))
+                    result.append(Signal(cache_path(),Model.interface_name("Cache"),"RemoveAccessible",[model.reference(change.id)]))
+                    removed.set(change.id,true); continue
+                }
+                let element = current!; updated.set(change.id,element)
+                model.refresh_binding(element)
+                if change.kind == AX.ChangeKind.name {
+                    result.append(object(path,"PropertyChange","accessible-name",0,0,Value.text(element.name)))
+                    result.append(object(path,"PropertyChange","accessible-description",0,0,Value.text(element.description)))
+                }
+                if change.kind == AX.ChangeKind.value {
+                    if element.number != null { result.append(object(path,"PropertyChange","accessible-value",0,0,Value.real(element.number! as float64))) }
+                    if Text.supports(element) && previous.value != element.value { text_changes(path,previous.value ?? previous.name,element.value ?? element.name,result) }
+                    else { result.append(object(path,"VisibleDataChanged")) }
+                }
+                if !states_sent.contains(change.id) && (change.kind == AX.ChangeKind.state || change.kind == AX.ChangeKind.focus || change.kind == AX.ChangeKind.selection) {
+                    state_changes(path,self.flags.find(element.id)!,model.states(element),result)
+                    states_sent.set(change.id,true)
+                }
+                if change.kind == AX.ChangeKind.focus && model.is_focused(element) {
+                    result.append(object(model.parent(element).members[1].string_value,"ActiveDescendantChanged","",0,0,model.reference(element.id)))
+                }
+                if change.kind == AX.ChangeKind.selection {
+                    if Text.supports(element) {
+                        var data = Offsets(element.value ?? element.name)
+                        result.append(object(path,"TextSelectionChanged"))
+                        if let cursor = element.selection_cursor { result.append(object(path,"TextCaretMoved","",data.scalar_for_grapheme(cursor) ?? -1)) }
+                    } else { result.append(object(path,"SelectionChanged")) }
+                }
+                if change.kind == AX.ChangeKind.bounds {
+                    var extents = model.request(path,Model.interface_name("Component"),"GetExtents",[Value.unsigned(0 as uint32)])
+                    if extents.error == null { result.append(object(path,"BoundsChanged","",0,0,extents.values[0])) }
+                }
+                if change.kind == AX.ChangeKind.structure {
+                    self.structure(model,element,path,result)
+                    result.append(object(path,"PropertyChange","accessible-child-count",0,0,Value.signed(model.child_count(element))))
+                    result.append(object(path,"ModelChanged")); result.append(object(path,"VisibleDataChanged"))
+                }
+                if change.kind == AX.ChangeKind.relations { result.append(object(path,"AttributesChanged")) }
+            }
+        }
+        // A path can be advertised before any properties are read. Retire
+        // every removed identity, including peers without an observed snapshot.
+        for change in changes { if change.kind == AX.ChangeKind.removed { removed.set(change.id,true) } }
+        for id in updated.get_keys() {
+            if !removed.contains(id) {
+                let element = updated.find(id)!
+                self.observed.set(id,element)
+                self.flags.set(id,model.states(element))
+                result.append(Signal(cache_path(),Model.interface_name("Cache"),"AddAccessible",[cache_item(model,element)]))
+            }
+        }
+        for id in removed.get_keys() { self.observed.remove(id); self.flags.remove(id); self.selected_rows.remove(id); self.children.remove(id); self.bounded.remove(id); model.retire(id) }
+        return result
+    }
+}
+
+func text_changes(path:str, previous:str, current:str, result:&Signal[]) {
+    var old = Offsets(previous); var next = Offsets(current)
+    var prefix = 0
+    while prefix < old.scalar_count() && prefix < next.scalar_count() && old.scalar_at(prefix) == next.scalar_at(prefix) { prefix++ }
+    var old_end = old.scalar_count(); var next_end = next.scalar_count()
+    while old_end > prefix && next_end > prefix && old.scalar_at(old_end-1) == next.scalar_at(next_end-1) { old_end--; next_end-- }
+    if old_end > prefix { result.append(object(path,"TextChanged","delete",prefix,old_end-prefix,Value.text(old.substring(prefix,old_end)!))) }
+    if next_end > prefix { result.append(object(path,"TextChanged","insert",prefix,next_end-prefix,Value.text(next.substring(prefix,next_end)!))) }
+}
+func state_changes(path:str, old:Value, next:Value, result:&Signal[]) {
+    let names:str[] = ["invalid","active","armed","busy","checked","collapsed","defunct","editable","enabled","expandable","expanded","focusable","focused","has-tooltip","horizontal","iconified","modal","multi-line","multiselectable","opaque","pressed","resizable","selectable","selected","sensitive","showing","single-line","stale","transient","vertical","visible","manages-descendants","indeterminate","required","truncated","animated","invalid-entry","supports-autocompletion","selectable-text","is-default","visited","checkable","has-popup","read-only"]
+    var bit = 0
+    while bit < names.count() {
+        let mask = 1 as uint << ((bit%32) as uint)
+        let was = ((old.members[bit/32].integer_value as uint) & mask) != 0
+        let now = ((next.members[bit/32].integer_value as uint) & mask) != 0
+        if was != now { var enabled = 0; if now { enabled = 1 } result.append(object(path,"StateChanged",names[bit],enabled)) }
+        bit++
+    }
+}

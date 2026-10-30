@@ -1,0 +1,572 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Description
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+use STD.Collections.Dictionary
+use STD.Math
+use GFX.Accessibility.Numbers
+use GFX.Accessibility.ATSPI.Text
+use GFX.Accessibility.ATSPI.EditableText
+use GFX.Accessibility.ATSPI.TextSegments.Words
+use GFX.Accessibility.ATSPI.Table
+use GFX.Accessibility.ATSPI.TablePeers
+use GFX.Accessibility.ATSPI.Selection
+use GFX.Accessibility.ATSPI.Events
+use GFX.Accessibility.ATSPI.Introspection
+use GFX.Accessibility.ATSPI.Application as App
+use GFX.Accessibility.ATSPI.Window
+use STD.Text as Strings
+use GFX.Accessibility.TextOffsets.Offsets
+
+package func application_path() str { return "/org/a11y/atspi/accessible/root" }
+package func window_path() str { return "/org/a11y/atspi/accessible/window" }
+package func null_path() str { return "/org/a11y/atspi/null" }
+package func interface_name(name:str) str { return "org.a11y.atspi."+name }
+package func arguments(values:Value[]) str {
+    var result = ""; for value in values { result += value.signature } return result
+}
+package func invalid_arguments() Reply {
+    return Reply.failure("org.freedesktop.DBus.Error.InvalidArgs","Unexpected argument signature")
+}
+package func unknown_method() Reply {
+    return Reply.failure("org.freedesktop.DBus.Error.UnknownMethod","Unsupported accessibility method")
+}
+
+// All entry points belong to the Source's UI thread. Transport callbacks must
+// queue work here instead of calling a Source on a foreign I/O thread.
+package class Model {
+    private var source:AX.Source
+    private let bus:str
+    private var app:App.Application
+    private var next:int = 0
+    private var paths:Dictionary<str,str> = Dictionary<str,str>()
+    private var identities:Dictionary<str,str> = Dictionary<str,str>()
+    private var active:bool = true
+    private var origin:Math.Vec2 = Math.Vec2()
+    private var screen:Math.Vec2? = null
+    private var viewport:Math.Vec2? = null
+    private var texts:Dictionary<str,Offsets> = Dictionary<str,Offsets>()
+    private var words:Dictionary<str,Words> = Dictionary<str,Words>()
+    private var clipboard:EditableText.Clipboard = EditableText.NoClipboard()
+    private var tables:Dictionary<str,str> = Dictionary<str,str>()
+    private var headers:Dictionary<str,int> = Dictionary<str,int>()
+    private var bound_at:Dictionary<str,int> = Dictionary<str,int>()
+    private var binding_revision:int = 0
+    private var binding_root:str?
+    private var cells:TablePeers.Index = TablePeers.Index()
+    private var events:Events.Queue
+    private var focus_source:str? = null
+    private var focus_peer:str? = null
+    var dirty:bool = false
+
+    init(source:AX.Source, bus:str, title:str, locale:str = "") {
+        var live = source; let root = live.root()
+        self.source = live; self.bus = bus; self.app = App.Application(bus,title,locale)
+        self.events = Events.Queue(root); self.binding_root = root
+    }
+    func peer_count() int { return self.paths.count() }
+    func set_clipboard(clipboard:EditableText.Clipboard) { self.clipboard = clipboard }
+    func source_element(id:str) AX.Element? { if self.active { return self.source.read(id) } return null }
+    func source_child(id:str, index:int) str? { if self.active { return self.source.child(id,index) } return null }
+    func rows(id:str) AX.Rows? { if self.active { return self.source.rows(id) } return null }
+    func columns(id:str) AX.Columns? { if self.active { return self.source.columns(id) } return null }
+    func source_root() str? { if self.active { return self.source.root() } return null }
+    func synchronize() Events.Signal[] {
+        if !self.active { return [] }
+        let changes = self.source.changes(); var pending:AX.Change[] = []
+        let root = self.source.root(); var rebound = root != self.binding_root
+        for change in changes {
+            if change.kind == AX.ChangeKind.structure || change.kind == AX.ChangeKind.relations || change.kind == AX.ChangeKind.removed { rebound = true }
+        }
+        if rebound { self.binding_revision++; self.binding_root = root }
+        for change in changes { if change.kind != AX.ChangeKind.focus { pending.append(change) } }
+        let focused = self.source.focused()
+        if focused != self.focus_source {
+            if let previous = self.focus_peer { pending.append(AX.Change(previous,AX.ChangeKind.focus)) }
+            self.focus_peer = self.focus_target(focused); self.focus_source = focused
+            if let current = self.focus_peer { pending.append(AX.Change(current,AX.ChangeKind.focus)) }
+        }
+        return self.events.poll(self,pending,root)
+    }
+    private func focus_target(id:str?) str? {
+        if id == null { return null }
+        if let row = self.source.read(id!) {
+            if row.role == AX.Role.row && row.row_index != null {
+                var parent = row.parent; var seen = Dictionary<str,bool>()
+                while let current = parent {
+                    if seen.contains(current) { break } seen.set(current,true)
+                    if let element = self.source.read(current) {
+                        if Table.supports(element) { return Table.cell(self,element,row.row_index!,0) }
+                        parent = element.parent
+                    } else { break }
+                }
+            }
+        }
+        return id
+    }
+    func is_focused(element:AX.Element) bool {
+        let focused = self.source.focused()
+        return focused == element.id || (element.role == AX.Role.cell && element.column_index == 0 && element.parent != null && focused == element.parent)
+    }
+    func role(element:AX.Element) uint32 {
+        if self.headers.contains(element.id) { return 57 as uint32 }
+        return Description.role(element.role)
+    }
+    func states(element:AX.Element) Value {
+        var result = Description.states(element,Events.manages(element) || self.events.bounded_descendants(element.id))
+        if element.role == AX.Role.cell {
+            var bits = result.members[0].integer_value as uint
+            let focused = 1 as uint << 12; let focusable = 1 as uint << 11
+            if (bits & focused) != 0 { bits -= focused }
+            if self.is_focused(element) { bits += focused }
+            if element.parent != null { if let row = self.source.read(element.parent!) { if row.role == AX.Role.row {
+                if element.column_index == 0 && element.enabled && row.focusable && (bits & focusable) == 0 { bits += focusable }
+                if self.tables.contains(element.id) && row.selected != null {
+                    let selectable = 1 as uint << 22; let selected = 1 as uint << 23
+                    if (bits & selectable) == 0 { bits += selectable }
+                    if (bits & selected) != 0 { bits -= selected }
+                    if row.selected == true { bits += selected }
+                }
+            } } }
+            result.members[0] = Value.unsigned(bits as uint32)
+        }
+        return result
+    }
+    func application_cache_item() Value { return self.app.cache_item(self) }
+    func window_cache_item() Value { return self.app.cache_item(self,true) }
+    func window_reference() Value { return self.app.reference(true) }
+    func window_component(method:str, values:Value[]) Reply { return Window.reply(self,method,values) }
+    func window_size() Math.Vec2 {
+        if let viewport = self.viewport { return viewport }
+        if let id = self.source.root() { if let element = self.source.read(id) { return Math.Vec2(element.bounds.width,element.bounds.height) } }
+        return Math.Vec2()
+    }
+    func window_origin(kind:uint32) Math.Vec2? {
+        if kind == 0 as uint32 { return self.screen }
+        if kind == 1 as uint32 || kind == 2 as uint32 { return Math.Vec2() }
+        return null
+    }
+    func window_hit(x:float, y:float) str? { return self.source.element_at(x-self.origin.x,y-self.origin.y) }
+    func presentation_changed(root_moved:bool, resized:bool) Events.Signal[] {
+        var result:Events.Signal[] = []
+        if resized {
+            var bounds = self.window_component("GetExtents",[Value.unsigned(0 as uint32)])
+            if bounds.error == null { result.append(Events.object(window_path(),"BoundsChanged","",0,0,bounds.values[0])) }
+        }
+        if root_moved { if let id = self.source.root() { if let path = self.paths.find(id) {
+            var bounds = self.request(path,interface_name("Component"),"GetExtents",[Value.unsigned(0 as uint32)])
+            if bounds.error == null { result.append(Events.object(path,"BoundsChanged","",0,0,bounds.values[0])) }
+        } } }
+        return result
+    }
+    func table_part(id:str, table:str, header:int, row:str? = null) {
+        self.tables.set(id,table); self.bound_at.set(id,self.binding_revision)
+        if header >= 0 { self.headers.set(id,header); self.cells.remove(id) }
+        else { self.headers.remove(id); if let parent = row { self.cells.add(id,table,parent) } }
+    }
+    func exposed_cells(table:str, row:str) str[] { return self.cells.cells(table,row) }
+    func child_count(element:AX.Element) int {
+        if Table.supports(element) { return Table.count(self,element) }
+        return element.child_count
+    }
+    func index(element:AX.Element) int {
+        if element.id == self.source.root() { return 0 }
+        if let header = self.headers.find(element.id) { return header }
+        if let table = self.tables.find(element.id) {
+            if let description = self.source.read(table) {
+                if element.row_index != null && element.column_index != null {
+                    return Table.headers(self,description)+element.row_index!*(description.column_count ?? 0)+element.column_index!
+                }
+            }
+        }
+        return element.index
+    }
+    func word_range(element:AX.Element, data:Offsets, offset:int, end_boundary:bool) AX.TextRange? {
+        var cached = self.words.find(element.id)
+        if cached == null { cached = Words(data); self.words.set(element.id,cached!) }
+        return cached!.at(offset,end_boundary)
+    }
+    func set_desktop(bus:str, path:str) { self.app.set_desktop(bus,path) }
+    func place(origin:Math.Vec2, screen:Math.Vec2?, viewport:Math.Vec2? = null) { self.origin = origin; self.screen = screen; self.viewport = viewport }
+    func text_geometry(id:str) AX.TextGeometry? {
+        if !self.active { return null }
+        return self.source.text_geometry(id)
+    }
+    private func text_data(element:AX.Element) Offsets {
+        let value = element.value ?? element.name
+        if var cached = self.texts.find(element.id) { if cached.text == value { return cached } }
+        self.words.remove(element.id)
+        var result = Offsets(value); self.texts.set(element.id,result); return result
+    }
+    func detach() {
+        self.active = false; self.paths.clear(); self.identities.clear(); self.texts.clear(); self.words.clear()
+        self.tables.clear(); self.headers.clear(); self.bound_at.clear()
+        self.cells.clear()
+        self.events.clear()
+        self.source = AX.EmptySource()
+    }
+    func retire(id:str) {
+        self.events.forget(self,id)
+        self.texts.remove(id)
+        self.words.remove(id)
+        self.clear_binding(id)
+        if let path = self.paths.find(id) { self.identities.remove(path); self.paths.remove(id) }
+    }
+    func reference(id:str?) Value {
+        if !self.active || id == null { return Value.record([Value.text(""),Value.path(null_path())]) }
+        if let path = self.paths.find(id!) { return Value.record([Value.text(self.bus),Value.path(path)]) }
+        self.next++
+        let path = "/org/a11y/atspi/accessible/element_$(self.next)"
+        self.paths.set(id!,path); self.identities.set(path,id!)
+        return Value.record([Value.text(self.bus),Value.path(path)])
+    }
+    func application_reference() Value { return self.app.reference() }
+    func read(path:str) AX.Element? {
+        if !self.active { return null }
+        if let id = self.identities.find(path) {
+            if let element = self.source.read(id) { self.bind(element); self.events.observe(self,element,self.states(element)); return element }
+            self.retire(id)
+        }
+        return null
+    }
+    private func clear_binding(id:str) {
+        self.tables.remove(id); self.headers.remove(id); self.bound_at.remove(id); self.cells.remove(id)
+    }
+    func refresh_binding(element:AX.Element) {
+        if self.tables.contains(element.id) || element.role == AX.Role.cell || element.role == AX.Role.column_header { self.bind(element) }
+    }
+    func bind(element:AX.Element) {
+        if self.tables.contains(element.id) && self.bound_at.find(element.id) == self.binding_revision { return }
+        var header = -1; var candidate = element.role == AX.Role.cell || element.role == AX.Role.column_header
+        var parent = element.parent; var seen = Dictionary<str,bool>()
+        while let id = parent {
+            if seen.contains(id) { self.clear_binding(element.id); return }
+            seen.set(id,true)
+            if let description = self.source.read(id) {
+                if description.role == AX.Role.column && description.header == element.id { candidate = true; header = description.column_index ?? -1 }
+                if description.role == AX.Role.table {
+                    if candidate { self.table_part(element.id,id,header,element.parent) }
+                    else { self.clear_binding(element.id) }
+                    return
+                }
+                if !candidate { self.clear_binding(element.id); return }
+                parent = description.parent
+            } else {
+                // Indexed Rows/Columns can establish a native relationship
+                // even when a producer omits its visual wrapper description.
+                if self.tables.contains(element.id) { self.bound_at.set(element.id,self.binding_revision) }
+                return
+            }
+        }
+        self.clear_binding(element.id)
+    }
+    func child(element:AX.Element, index:int) str? {
+        if index < 0 || index >= self.child_count(element) { return null }
+        var id:str? = null
+        if Table.supports(element) { id = Table.child(self,element,index) }
+        else { id = self.source.child(element.id,index) }
+        self.events.child(element.id,index,id)
+        return id
+    }
+    func allows(element:AX.Element, requested:AX.Action) bool {
+        if !self.active || !element.enabled { return false }
+        for action in element.actions { if action == requested { return true } }
+        return false
+    }
+    func perform(element:AX.Element, request:AX.Request) bool {
+        if !self.active || !element.enabled { return false }
+        let supported = self.allows(element,request.action)
+        if !supported {
+            if request.action == AX.Action.focus && element.role == AX.Role.cell && element.column_index == 0 && element.parent != null {
+                if let row = self.source.read(element.parent!) { if row.role == AX.Role.row { return self.perform(row,request) } }
+            }
+            return false
+        }
+        let result = self.source.perform(element.id,request)
+        if result { self.dirty = true; self.binding_revision++ }
+        return result
+    }
+    func interfaces(element:AX.Element) str[] {
+        var result:str[] = [interface_name("Accessible")]
+        result.append(interface_name("Component"))
+        if !Description.actions(element).is_empty() { result.append(interface_name("Action")) }
+        if element.number != null { result.append(interface_name("Value")) }
+        if Text.supports(element) { result.append(interface_name("Text")) }
+        if EditableText.supports(element) { result.append(interface_name("EditableText")) }
+        if Table.supports(element) { result.append(interface_name("Table")) }
+        if Selection.supports(element) { result.append(interface_name("Selection")) }
+        return result
+    }
+    func interface_values(element:AX.Element) Value {
+        var result:Value[] = []
+        for name in self.interfaces(element) { result.append(Value.text(name)) }
+        return Value.array("s",result)
+    }
+    func parent(element:AX.Element) Value {
+        if element.id == self.source.root() { return self.window_reference() }
+        if let table = self.tables.find(element.id) { return self.reference(table) }
+        return self.reference(element.parent)
+    }
+    func property(element:AX.Element, interface:str, name:str) Value? {
+        if interface == interface_name("Text") { return Text.property(self.text_data(element),element,name) }
+        if interface == interface_name("EditableText") && name == "version" { return Value.unsigned(1 as uint32) }
+        if interface == interface_name("Table") { return Table.property(self,element,name) }
+        if interface == interface_name("Selection") { return Selection.property(self,element,name) }
+        if interface == interface_name("Accessible") {
+            if name == "version" { return Value.unsigned(1 as uint32) }
+            if name == "Name" { return Value.text(element.name) }
+            if name == "Description" || name == "HelpText" { return Value.text(element.description) }
+            if name == "Parent" { return self.parent(element) }
+            if name == "ChildCount" { return Value.signed(self.child_count(element)) }
+            if name == "Locale" { return Value.text(self.app.locale_value()) }
+            if name == "AccessibleId" { return Value.text(element.id) }
+        }
+        if interface == interface_name("Action") {
+            if name == "version" { return Value.unsigned(1 as uint32) }
+            if name == "NActions" { return Value.signed(Description.actions(element).count()) }
+        }
+        if interface == interface_name("Component") && name == "version" { return Value.unsigned(1 as uint32) }
+        if interface == interface_name("Value") {
+            if name == "version" { return Value.unsigned(1 as uint32) }
+            if name == "MinimumValue" { return Value.real((element.minimum ?? 0.0) as float64) }
+            if name == "MaximumValue" { return Value.real((element.maximum ?? 0.0) as float64) }
+            if name == "CurrentValue" { return Value.real((element.number ?? 0.0) as float64) }
+            // Source does not promise a minimum discrete increment.
+            if name == "MinimumIncrement" { return Value.real(0.0 as float64) }
+            if name == "Text" { return Value.text(element.value ?? "") }
+        }
+        return null
+    }
+    func properties(element:AX.Element, interface:str, method:str, values:Value[]) Reply {
+        if values.is_empty() || values[0].signature != "s" { return invalid_arguments() }
+        var available = false
+        for name in self.interfaces(element) { if name == values[0].string_value { available = true } }
+        if !available { return Reply.failure("org.freedesktop.DBus.Error.UnknownInterface","Interface is unavailable for this object") }
+        if method == "Get" {
+            if arguments(values) != "ss" { return invalid_arguments() }
+            if var value = self.property(element,values[0].string_value,values[1].string_value) { return Reply([Value.variant(value)]) }
+            return Reply.failure("org.freedesktop.DBus.Error.UnknownProperty","Unknown accessibility property")
+        }
+        if method == "GetAll" {
+            if arguments(values) != "s" { return invalid_arguments() }
+            let target = values[0].string_value
+            var names:str[] = []
+            if target == interface_name("Accessible") { names = ["version","Name","Description","Parent","ChildCount","Locale","AccessibleId","HelpText"] }
+            if target == interface_name("Application") { names = ["ToolkitName","Version","ToolkitVersion","AtspiVersion","InterfaceVersion","Id"] }
+            if target == interface_name("Action") { names = ["version","NActions"] }
+            if target == interface_name("Component") { names = ["version"] }
+            if target == interface_name("Text") { names = ["version","CharacterCount","CaretOffset"] }
+            if target == interface_name("EditableText") { names = ["version"] }
+            if target == interface_name("Table") { names = ["version","NRows","NColumns","Caption","Summary","NSelectedRows","NSelectedColumns"] }
+            if target == interface_name("Selection") { names = ["version","NSelectedChildren"] }
+            if target == interface_name("Value") { names = ["version","MinimumValue","MaximumValue","MinimumIncrement","CurrentValue","Text"] }
+            var result:Value[] = []
+            for name in names {
+                if var value = self.property(element,target,name) { result.append(Value.entry(name,Value.variant(value))) }
+            }
+            return Reply([Value.array("{sv}",result)])
+        }
+        if method == "Set" {
+            if arguments(values) != "ssv" { return invalid_arguments() }
+            let target = values[0].string_value; let name = values[1].string_value
+            var value = values[2].content!
+            if target == interface_name("Value") && element.number != null && name == "CurrentValue" {
+                if value.signature != "d" { return invalid_arguments() }
+                let number = Numbers.scalar(value.real_value)
+                if number == null { return invalid_arguments() }
+                if self.allows(element,AX.Action.set_value) && element.number == number { return Reply() }
+                if self.perform(element,AX.Request(AX.Action.set_value,number:number!)) { return Reply() }
+                return Reply.failure("org.freedesktop.DBus.Error.Failed","Value was not accepted")
+            }
+            return Reply.failure("org.freedesktop.DBus.Error.PropertyReadOnly","Property cannot be changed")
+        }
+        return unknown_method()
+    }
+    func request(path:str, interface:str, method:str, values:Value[] = []) Reply {
+        if self.active && (interface == "org.freedesktop.DBus.Introspectable" || interface == "org.freedesktop.DBus.Peer") {
+            var interfaces:str[] = []; var children:str[] = []
+            if path == window_path() { interfaces = [interface_name("Accessible"),interface_name("Component")] }
+            elif path == application_path() { interfaces = [interface_name("Accessible"),interface_name("Application")] }
+            elif path == Events.cache_path() { interfaces = [interface_name("Cache")] }
+            elif path == "/" { children = ["org"] }
+            elif path == "/org" { children = ["a11y"] }
+            elif path == "/org/a11y" { children = ["atspi"] }
+            elif path == "/org/a11y/atspi" { children = ["accessible","cache"] }
+            elif path == "/org/a11y/atspi/accessible" {
+                children = ["root","window"]
+                for value in self.paths.get_values() { children.append(Strings.slice(value,"/org/a11y/atspi/accessible/".count(),value.count())) }
+            } elif let element = self.read(path) { interfaces = self.interfaces(element) }
+            else { return Reply.failure("org.freedesktop.DBus.Error.UnknownObject","Accessibility object was detached") }
+            if !values.is_empty() { return invalid_arguments() }
+            if interface == "org.freedesktop.DBus.Peer" && method == "Ping" { return Reply() }
+            if interface == "org.freedesktop.DBus.Introspectable" && method == "Introspect" { return Reply([Value.text(Introspection.describe(interfaces,children))]) }
+            return unknown_method()
+        }
+        if self.active && path == Events.cache_path() {
+            if interface == interface_name("Cache") && method == "GetItems" {
+                if !values.is_empty() { return invalid_arguments() }
+                return Reply([Value.array(Events.cache_signature(),self.events.items(self))])
+            }
+            if interface == "org.freedesktop.DBus.Properties" {
+                if method == "Get" && arguments(values) == "ss" && values[0].string_value == interface_name("Cache") && values[1].string_value == "version" { return Reply([Value.variant(Value.unsigned(1 as uint32))]) }
+                if method == "GetAll" && arguments(values) == "s" && values[0].string_value == interface_name("Cache") { return Reply([Value.array("{sv}",[Value.entry("version",Value.variant(Value.unsigned(1 as uint32)))])]) }
+            }
+            return unknown_method()
+        }
+        if self.active && path == window_path() { return self.app.request(self,interface,method,values,true) }
+        if self.active && path == application_path() { return self.app.request(self,interface,method,values) }
+        if let element = self.read(path) {
+            if interface == "org.freedesktop.DBus.Properties" { return self.properties(element,interface,method,values) }
+            var available = false
+            for name in self.interfaces(element) { if name == interface { available = true } }
+            if !available { return Reply.failure("org.freedesktop.DBus.Error.UnknownInterface","Interface is unavailable for this object") }
+            if interface == interface_name("Accessible") { return self.accessible(element,method,values) }
+            if interface == interface_name("Action") { return self.action(element,method,values) }
+            if interface == interface_name("Component") { return self.component(element,method,values) }
+            if interface == interface_name("Text") { return Text.reply(self,self.text_data(element),element,method,values) }
+            if interface == interface_name("EditableText") { return EditableText.reply(self,self.text_data(element),element,self.clipboard,method,values) }
+            if interface == interface_name("Table") { return Table.reply(self,element,method,values) }
+            if interface == interface_name("Selection") { return Selection.reply(self,element,method,values) }
+            return unknown_method()
+        }
+        return Reply.failure("org.freedesktop.DBus.Error.UnknownObject","Accessibility object was detached")
+    }
+    private func accessible(element:AX.Element, method:str, values:Value[]) Reply {
+        if method == "GetChildAtIndex" {
+            if arguments(values) != "i" { return invalid_arguments() }
+            return Reply([self.reference(self.child(element,values[0].integer_value))])
+        }
+        if !values.is_empty() { return invalid_arguments() }
+        if method == "GetChildren" {
+            // AT-SPI explicitly permits an error for a prohibitive child list.
+            // Clients can use indexed queries without constructing every row.
+            if self.child_count(element) > 4096 { return Reply.failure("org.a11y.atspi.Error.NotSupported","Use indexed queries for large collections") }
+            var result:Value[] = []; var index = 0
+            while index < self.child_count(element) { result.append(self.reference(self.child(element,index))); index++ }
+            return Reply([Value.array("(so)",result)])
+        }
+        if method == "GetIndexInParent" {
+            return Reply([Value.signed(self.index(element))])
+        }
+        if method == "GetRole" { return Reply([Value.unsigned(self.role(element))]) }
+        if method == "GetRoleName" || method == "GetLocalizedRoleName" {
+            if self.headers.contains(element.id) { return Reply([Value.text("table column header")]) }
+            return Reply([Value.text(Description.role_name(element.role))])
+        }
+        if method == "GetState" { return Reply([self.states(element)]) }
+        if method == "GetApplication" { return Reply([self.application_reference()]) }
+        if method == "GetInterfaces" { return Reply([self.interface_values(element)]) }
+        if method == "GetAttributes" {
+            var attributes:Value[] = []
+            if element.level > 0 { attributes.append(Value.entry("level",Value.text("$(element.level)"))) }
+            if let descending = element.sorted_descending {
+                var order = "ascending"; if descending { order = "descending" }
+                attributes.append(Value.entry("sort",Value.text(order)))
+            }
+            return Reply([Value.array("{ss}",attributes)])
+        }
+        if method == "GetRelationSet" {
+            var result:Value[] = []
+            if let label = element.labelled_by { result.append(Value.record([Value.unsigned(2 as uint32),Value.array("(so)",[self.reference(label)])])) }
+            if let target = element.labels { result.append(Value.record([Value.unsigned(1 as uint32),Value.array("(so)",[self.reference(target)])])) }
+            return Reply([Value.array("(ua(so))",result)])
+        }
+        return unknown_method()
+    }
+    private func action(element:AX.Element, method:str, values:Value[]) Reply {
+        let actions = Description.actions(element)
+        if method == "GetActions" {
+            if !values.is_empty() { return invalid_arguments() }
+            var result:Value[] = []
+            for action in actions {
+                let name = Description.action_name(action)
+                result.append(Value.record([Value.text(name),Value.text(""),Value.text(element.shortcut ?? "")]))
+            }
+            return Reply([Value.array("(sss)",result)])
+        }
+        if arguments(values) != "i" { return invalid_arguments() }
+        let index = values[0].integer_value
+        if index < 0 || index >= actions.count() {
+            if method == "DoAction" { return Reply([Value.boolean(false)]) }
+            return Reply([Value.text("")])
+        }
+        if method == "DoAction" { return Reply([Value.boolean(self.perform(element,AX.Request(actions[index])))]) }
+        if method == "GetName" || method == "GetLocalizedName" { return Reply([Value.text(Description.action_name(actions[index]))]) }
+        if method == "GetKeyBinding" { return Reply([Value.text(element.shortcut ?? "")]) }
+        if method == "GetDescription" { return Reply([Value.text("")]) }
+        return unknown_method()
+    }
+    func coordinate_origin(element:AX.Element, kind:uint32) Math.Vec2? {
+        if kind == 1 as uint32 { return self.origin }
+        if kind == 0 as uint32 {
+            if let screen = self.screen { return self.origin+screen }
+            return null // Wayland may not supply global surface coordinates.
+        }
+        if kind == 2 as uint32 {
+            if element.id == self.source.root() { return self.origin }
+            var parent = element.parent
+            if let table = self.tables.find(element.id) { parent = table }
+            if let id = parent {
+                if let description = self.source.read(id) { return Math.Vec2(-description.bounds.x,-description.bounds.y) }
+            }
+            return Math.Vec2()
+        }
+        return null
+    }
+    private func component(element:AX.Element, method:str, values:Value[]) Reply {
+        let signature = arguments(values)
+        if method == "GrabFocus" {
+            if signature != "" { return invalid_arguments() }
+            return Reply([Value.boolean(self.perform(element,AX.Request(AX.Action.focus)))])
+        }
+        if method == "GetSize" {
+            if signature != "" { return invalid_arguments() }
+            return Reply([Value.signed(Math.ceil(element.bounds.width) as int),Value.signed(Math.ceil(element.bounds.height) as int)])
+        }
+        if method == "GetLayer" { if signature != "" { return invalid_arguments() } return Reply([Value.unsigned(3 as uint32)]) }
+        if method == "GetMDIZOrder" { if signature != "" { return invalid_arguments() } return Reply([Value.signed(0,signature:"n")]) }
+        if method == "GetAlpha" { if signature != "" { return invalid_arguments() } return Reply([Value.real(1.0 as float64)]) }
+        if method == "SetExtents" || method == "SetPosition" || method == "SetSize" || method == "ScrollToPoint" {
+            return Reply([Value.boolean(false)]) // Layout belongs to the application.
+        }
+        if method == "ScrollTo" {
+            if signature != "u" { return invalid_arguments() }
+            return Reply([Value.boolean(self.perform(element,AX.Request(AX.Action.reveal)))])
+        }
+        if method == "GetExtents" || method == "GetPosition" || method == "Contains" || method == "GetAccessibleAtPoint" {
+            var kind = 0 as uint32
+            if method == "GetExtents" || method == "GetPosition" {
+                if signature != "u" { return invalid_arguments() }
+                kind = values[0].unsigned_value()!
+            } else {
+                if signature != "iiu" { return invalid_arguments() }
+                kind = values[2].unsigned_value()!
+            }
+            if let offset = self.coordinate_origin(element,kind) {
+                let bounds = element.bounds
+                let left = Math.floor(bounds.x+offset.x) as int; let top = Math.floor(bounds.y+offset.y) as int
+                let width = Math.ceil(bounds.x+offset.x+bounds.width) as int-left
+                let height = Math.ceil(bounds.y+offset.y+bounds.height) as int-top
+                if method == "GetPosition" { return Reply([Value.signed(left),Value.signed(top)]) }
+                if method == "GetExtents" { return Reply([Value.record([Value.signed(left),Value.signed(top),Value.signed(width),Value.signed(height)])]) }
+                let x = round_float<float>(values[0].integer_value)-offset.x; let y = round_float<float>(values[1].integer_value)-offset.y
+                let inside = !element.offscreen && x >= bounds.x && y >= bounds.y && x < bounds.x+bounds.width && y < bounds.y+bounds.height
+                if method == "Contains" { return Reply([Value.boolean(inside)]) }
+                if !inside { return Reply([self.reference(null)]) }
+                if let hit = self.source.element_at(x,y) {
+                    var current:str? = hit; var seen = Dictionary<str,bool>()
+                    while let id = current {
+                        if id == element.id { return Reply([self.reference(hit)]) }
+                        if seen.contains(id) { break }
+                        seen.set(id,true)
+                        if let description = self.source.read(id) { current = description.parent }
+                        else { break }
+                    }
+                }
+                return Reply([self.reference(null)])
+            }
+            return Reply.failure("org.a11y.atspi.Error.NotSupported","Coordinate system is unavailable")
+        }
+        return unknown_method()
+    }
+}

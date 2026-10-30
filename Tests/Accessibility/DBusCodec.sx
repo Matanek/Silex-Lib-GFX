@@ -1,6 +1,7 @@
 use GFX.Accessibility.DBus.Library
 use GFX.Accessibility.BusValue.Value
 use GFX.Accessibility.BusValue.Kind
+use GFX.Accessibility.ATSPI.Events
 use STD.Process
 
 func same(first:Value, second:Value) bool {
@@ -31,6 +32,15 @@ func main() {
     assert(decoded.count() == values.count())
     for index, value in values.indexed() { assert(same(value,decoded[index])) }
     library.release(message)
+
+    var event = Events.object("/org/silex/Test","TextChanged","insert",1,3,Value.text("é中"))
+    let signal = library.new_signal(event.path,event.interface,event.name)
+    assert(signal != 0 as uint && library.type(signal) == 4)
+    assert(library.encode(signal,event.values))
+    decoded = library.decode(signal)!
+    assert(decoded.count() == event.values.count())
+    for index, value in event.values.indexed() { assert(same(value,decoded[index])) }
+    library.release(signal)
 
     let invalid = library.method("org.silex.Test","/org/silex/Test","org.silex.Test","Invalid")
     assert(!library.encode(invalid,[Value.text("before\0after")]))

@@ -1,0 +1,111 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.Events
+use GFX.Accessibility.BusValue.Value
+
+class Source:AX.Source {
+    var reads:int = 0
+    var root_id:str? = "root"
+    var shown:bool = true
+    var checked:bool = false
+    var has_focus:bool = false
+    var name:str = "Switch"
+    var text:str = "Aé👩‍💻Z"
+    var cursor:int = 0
+    var pending:AX.Change[] = []
+    var replacement:bool = false
+    func root() str? { return self.root_id }
+    func focused() str? { if self.has_focus { return "switch" } return null }
+    func read(id:str) AX.Element? {
+        self.reads++
+        if id == "root" { return AX.Element(id:id,child_count:2) }
+        if id == "dialog" { return AX.Element(id:id,role:AX.Role.dialog) }
+        if id == "switch" && self.shown { return AX.Element(id:id,parent:"root",role:AX.Role.checkbox,name:self.name,checked:self.checked,focused:self.has_focus,focusable:true) }
+        if id == "replacement" { return AX.Element(id:id,parent:"root",role:AX.Role.checkbox,name:"Replacement") }
+        if id == "text" { return AX.Element(id:id,parent:"root",role:AX.Role.text_field,name:"Text",value:self.text,selection_anchor:self.cursor,selection_cursor:self.cursor) }
+        return null
+    }
+    func child(id:str, index:int) str? { if id == "root" { if index == 0 { if self.replacement { return "replacement" } return "switch" } if index == 1 { return "text" } } return null }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] { let pending = self.pending; self.pending = []; return pending }
+}
+func count(events:Events.Signal[], name:str, detail:str = "") int {
+    var result = 0
+    for event in events {
+        if event.name == name && (detail == "" || event.values[0].string_value == detail) { result++ }
+    }
+    return result
+}
+test "AT-SPI cache exposes static controls and coalesces live state and text notifications" {
+    var source = Source(); var model = Model.Model(source,":1.42","Events")
+    var cache = model.request(Events.cache_path(),Model.interface_name("Cache"),"GetItems")
+    assert(cache.signature() == "a((so)(so)(so)iiassusau)" && cache.values[0].members.count() == 5)
+    assert(cache.values[0].members[0].signature == Events.cache_signature())
+    assert(count(model.synchronize(),"AddAccessible") == 3)
+    let before = source.reads
+    assert(model.synchronize().is_empty() && source.reads == before)
+    source.checked = true; source.has_focus = true; source.name = "Notifications"
+    source.pending = [AX.Change("switch",AX.ChangeKind.state),AX.Change("switch",AX.ChangeKind.focus),AX.Change("switch",AX.ChangeKind.name)]
+    var events = model.synchronize()
+    assert(count(events,"StateChanged","checked") == 1 && count(events,"StateChanged","focused") == 1)
+    assert(count(events,"ActiveDescendantChanged") == 1 && count(events,"PropertyChange","accessible-name") == 1)
+    assert(count(events,"AddAccessible") == 1 && source.reads == before+2)
+    source.text = "A中Z"; source.cursor = 2
+    source.pending = [AX.Change("text",AX.ChangeKind.value),AX.Change("text",AX.ChangeKind.selection)]
+    events = model.synchronize()
+    assert(count(events,"TextChanged","delete") == 1 && count(events,"TextChanged","insert") == 1)
+    assert(count(events,"TextSelectionChanged") == 1 && count(events,"TextCaretMoved") == 1)
+    for event in events {
+        if event.name == "TextChanged" {
+            assert(event.values[1].integer_value == 1)
+            if event.values[0].string_value == "delete" { assert(event.values[2].integer_value == 5 && event.values[3].content!.string_value == "é👩‍💻") }
+            else { assert(event.values[2].integer_value == 1 && event.values[3].content!.string_value == "中") }
+        }
+    }
+}
+test "AT-SPI removal keeps old peer paths defunct even if an opaque Source ID reappears" {
+    var source = Source(); var model = Model.Model(source,":1.42","Events")
+    let path = model.reference("switch").members[1].string_value
+    let accessible = Model.interface_name("Accessible")
+    assert(model.request(path,accessible,"GetState").error == null)
+    var initial = model.synchronize()
+    source.shown = false
+    assert(model.request(path,accessible,"GetState").error == "org.freedesktop.DBus.Error.UnknownObject")
+    var events = model.synchronize()
+    assert(count(events,"StateChanged","defunct") == 1 && count(events,"RemoveAccessible") == 1)
+    source.shown = true
+    let next = model.reference("switch").members[1].string_value
+    assert(next != path && model.request(next,accessible,"GetState").error == null)
+    assert(model.request(path,accessible,"GetState").error != null)
+    source.root_id = "dialog"
+    events = model.synchronize()
+    assert(count(events,"ChildrenChanged","remove") == 1 && count(events,"ChildrenChanged","add") == 1)
+    model.detach(); let reads = source.reads
+    assert(model.synchronize().is_empty() && model.request(next,accessible,"GetState").error != null && source.reads == reads)
+}
+
+struct Huge:AX.Source {
+    func root() str? { return "huge" }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? { if id == "huge" { return AX.Element(id:id,role:AX.Role.list,child_count:50000) } return null }
+    func child(id:str, index:int) str? { panic("Cache must not enumerate virtual descendants") }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] { return [] }
+}
+test "AT-SPI bulk cache marks virtual descendants managed without realizing them" {
+    var model = Model.Model(Huge(),":1.42","Huge")
+    var items = model.request(Events.cache_path(),Model.interface_name("Cache"),"GetItems").values[0].members
+    assert(items.count() == 3 && model.peer_count() == 1)
+    assert((items[2].members[9].members[0].integer_value as uint & (1 as uint << 31)) != 0 as uint)
+}
+
+test "AT-SPI structure notifications distinguish replacement from property updates" {
+    var source = Source(); var model = Model.Model(source,":1.42","Events")
+    var cache = model.request(Events.cache_path(),Model.interface_name("Cache"),"GetItems")
+    var initial = model.synchronize()
+    source.replacement = true; source.shown = false
+    source.pending = [AX.Change("root",AX.ChangeKind.structure),AX.Change("switch",AX.ChangeKind.removed)]
+    var events = model.synchronize()
+    assert(count(events,"ChildrenChanged","remove") == 1 && count(events,"ChildrenChanged","add") == 1)
+    assert(count(events,"RemoveAccessible") == 1)
+}

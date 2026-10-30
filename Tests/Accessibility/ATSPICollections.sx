@@ -1,0 +1,252 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.Events
+use GFX.Accessibility.BusValue.Value
+use STD.Collections.Dictionary
+
+struct Cell { let key:int; let column:int }
+class Data {
+    var row_ids:Dictionary<str,int> = Dictionary<str,int>()
+    var cell_ids:Dictionary<str,Cell> = Dictionary<str,Cell>()
+    var selected:str[] = []
+    var reverse:bool = false
+    var enabled:bool = true
+    var reads:int = 0
+    var rows:int = 0
+    var cells:int = 0
+    var calls:int = 0
+    var focused:str? = null
+    var pending:AX.Change[] = []
+    func index(key:int) int { if self.reverse { return 49999-key } return key }
+}
+class Rows:AX.Rows {
+    private var data:Data
+    init(data:Data) { self.data = data }
+    func count() int { return 50000 }
+    func row(index:int) str? {
+        self.data.rows++
+        if index < 0 || index >= 50000 { return null }
+        var key = index; if self.data.reverse { key = 49999-index }
+        let id = "opaque row / $(key)"; self.data.row_ids.set(id,key); return id
+    }
+    func selected() str[] { return self.data.selected }
+}
+struct Columns:AX.Columns {
+    func count() int { return 2 }
+    func column(index:int) str? { if index == 0 { return "column:α" } if index == 1 { return "column:β" } return null }
+}
+class Source:AX.Source {
+    var data:Data = Data()
+    func root() str? { return "table" }
+    func focused() str? { return self.data.focused }
+    func rows(id:str) AX.Rows? { if id == "table" { return Rows(self.data) } return null }
+    func columns(id:str) AX.Columns? { if id == "table" { return Columns() } return null }
+    func read(id:str) AX.Element? {
+        self.data.reads++
+        if id == "table" { return AX.Element(id:id,role:AX.Role.table,name:"People",row_count:50000,column_count:2,child_count:2,multiple_selection:true,enabled:self.data.enabled) }
+        if id == "column:α" { return AX.Element(id:id,role:AX.Role.column,header:"heading name",column_index:0) }
+        if id == "column:β" { return AX.Element(id:id,role:AX.Role.column,header:"heading group",column_index:1) }
+        if id == "heading name" || id == "heading group" { return AX.Element(id:id,parent:"header wrapper",role:AX.Role.button,name:id,actions:[AX.Action.activate]) }
+        if id == "body wrapper" { return AX.Element(id:id,parent:"table") }
+        if let key = self.data.row_ids.find(id) {
+            var selected = false; for value in self.data.selected { if value == id { selected = true } }
+            return AX.Element(id:id,parent:"body wrapper",role:AX.Role.row,name:"Person $(key)",row_index:self.data.index(key),index:self.data.index(key),
+                selected:selected,enabled:self.data.enabled,focusable:true,child_count:2,actions:[AX.Action.select,AX.Action.deselect,AX.Action.focus])
+        }
+        if let cell = self.data.cell_ids.find(id) {
+            return AX.Element(id:id,parent:"opaque row / $(cell.key)",role:AX.Role.cell,row_index:self.data.index(cell.key),column_index:cell.column,
+                name:"Column $(cell.column)",value:"Value $(cell.key):$(cell.column)",index:cell.column)
+        }
+        return null
+    }
+    func child(id:str, index:int) str? {
+        if let key = self.data.row_ids.find(id) {
+            if index < 0 || index >= 2 { return null }
+            self.data.cells++
+            let cell = "opaque cell $(key) * $(index)"; self.data.cell_ids.set(cell,Cell(key:key,column:index)); return cell
+        }
+        panic("AT-SPI must use indexed table rows, not visual wrappers")
+    }
+    func perform(id:str, request:AX.Request) bool {
+        self.data.calls++
+        if !self.data.enabled || !self.data.row_ids.contains(id) { return false }
+        if request.action == AX.Action.focus { self.data.focused = id; return true }
+        var result:str[] = []; var found = false
+        for value in self.data.selected { if value != id { result.append(value) } else { found = true } }
+        if request.action == AX.Action.select { result.append(id) }
+        elif request.action != AX.Action.deselect { return false }
+        self.data.selected = result; self.data.pending.append(AX.Change("table",AX.ChangeKind.selection)); return true
+    }
+    func changes() AX.Change[] { let result = self.data.pending; self.data.pending = []; return result }
+}
+
+test "AT-SPI cell states and cached notifications agree with row selection without scanning rows" {
+    var source = Source(); var model = Model.Model(source,":1.42","Tables")
+    let path = model.reference("table").members[1].string_value; let table = Model.interface_name("Table")
+    let cell = model.request(path,table,"GetAccessibleAt",[Value.signed(49999),Value.signed(1)]).values[0].members[1].string_value
+    var states = model.request(cell,Model.interface_name("Accessible"),"GetState").values[0]
+    assert(((states.members[0].integer_value as uint) & (1 as uint << 23)) == 0 as uint)
+    var initial = model.synchronize()
+    assert(model.request(path,table,"AddRowSelection",[Value.signed(49999)]).values[0].boolean_value() == true)
+    var selected = model.synchronize(); var changed = 0
+    for event in selected {
+        if event.path == cell && event.name == "StateChanged" && event.values[0].string_value == "selected" && event.values[1].integer_value == 1 { changed++ }
+    }
+    assert(changed == 1)
+    states = model.request(cell,Model.interface_name("Accessible"),"GetState").values[0]
+    assert(((states.members[0].integer_value as uint) & (1 as uint << 23)) != 0 as uint)
+    assert(model.request(path,table,"RemoveRowSelection",[Value.signed(49999)]).values[0].boolean_value() == true)
+    var cleared = model.synchronize(); changed = 0
+    for event in cleared {
+        if event.path == cell && event.name == "StateChanged" && event.values[0].string_value == "selected" && event.values[1].integer_value == 0 { changed++ }
+    }
+    assert(changed == 1 && source.data.rows == 3 && source.data.cells == 1)
+}
+
+test "AT-SPI focus discovers a virtual table row through its first logical cell" {
+    var source = Source(); var model = Model.Model(source,":1.42","Tables")
+    var rows = Rows(source.data); source.data.focused = rows.row(49999)
+    var events = model.synchronize(); var path = ""
+    for event in events {
+        if event.name == "StateChanged" && event.values[0].string_value == "focused" && event.values[1].integer_value == 1 { path = event.path }
+    }
+    assert(path != "" && source.data.rows == 2 && source.data.cells == 1)
+    let accessible = Model.interface_name("Accessible")
+    var states = model.request(path,accessible,"GetState").values[0]
+    assert(((states.members[0].integer_value as uint) & (1 as uint << 12)) != 0 as uint)
+    assert(model.request(path,Model.interface_name("Text"),"GetText",[Value.signed(0),Value.signed(-1)]).values[0].string_value == "Value 49999:0")
+    source.data.focused = null; events = model.synchronize(); var lost = false
+    for event in events { if event.path == path && event.name == "StateChanged" && event.values[0].string_value == "focused" && event.values[1].integer_value == 0 { lost = true } }
+    assert(lost)
+    assert(model.request(path,Model.interface_name("Component"),"GrabFocus").values[0].boolean_value() == true)
+    assert(source.data.focused == "opaque row / 49999")
+}
+
+test "AT-SPI table indices and headers address only requested cells in fifty thousand rows" {
+    var source = Source(); var model = Model.Model(source,":1.42","Tables")
+    let path = model.reference("table").members[1].string_value
+    let table = Model.interface_name("Table"); let accessible = Model.interface_name("Accessible")
+    var last = model.request(path,table,"GetAccessibleAt",[Value.signed(49999),Value.signed(1)])
+    let cell = last.values[0].members[1].string_value
+    assert(source.data.rows == 1 && source.data.cells == 1 && model.peer_count() == 2)
+    assert(model.request(path,table,"GetIndexAt",[Value.signed(49999),Value.signed(1)]).values[0].integer_value == 100001)
+    assert(model.request(path,accessible,"GetChildAtIndex",[Value.signed(100001)]).values[0].members[1].string_value == cell)
+    assert(model.request(cell,accessible,"GetIndexInParent").values[0].integer_value == 100001)
+    assert(model.request(cell,"org.freedesktop.DBus.Properties","Get",[Value.text(accessible),Value.text("Parent")]).values[0].content!.members[1].string_value == path)
+    assert(model.request(path,table,"GetRowAtIndex",[Value.signed(100001)]).values[0].integer_value == 49999)
+    assert(model.request(path,table,"GetColumnAtIndex",[Value.signed(100001)]).values[0].integer_value == 1)
+    let header = model.request(path,table,"GetColumnHeader",[Value.signed(1)]).values[0].members[1].string_value
+    assert(model.request(path,accessible,"GetChildAtIndex",[Value.signed(1)]).values[0].members[1].string_value == header)
+    assert(model.request(header,accessible,"GetRole").values[0].integer_value == 57)
+    assert(model.request(path,table,"GetRowAtIndex",[Value.signed(1)]).values[0].integer_value == -1)
+    assert(model.request(path,accessible,"GetChildren").error != null)
+    source.data.reverse = true
+    assert(model.request(cell,accessible,"GetIndexInParent").values[0].integer_value == 3)
+    assert(model.request(path,accessible,"GetChildAtIndex",[Value.signed(3)]).values[0].members[1].string_value == cell)
+    assert(source.data.reads < 40 && source.data.cells == 3)
+}
+
+test "AT-SPI row and cell selection stays indexed and follows model order" {
+    var source = Source(); var model = Model.Model(source,":1.42","Tables")
+    let path = model.reference("table").members[1].string_value
+    let table = Model.interface_name("Table"); let selection = Model.interface_name("Selection")
+    assert(model.request(path,table,"AddRowSelection",[Value.signed(49999)]).values[0].boolean_value() == true)
+    let mutations = source.data.calls
+    assert(model.request(path,table,"AddRowSelection",[Value.signed(49999)]).values[0].boolean_value() == true && source.data.calls == mutations)
+    assert(model.request(path,"org.freedesktop.DBus.Properties","Get",[Value.text(selection),Value.text("NSelectedChildren")]).values[0].content!.integer_value == 2)
+    assert(model.request(path,table,"GetSelectedRows").values[0].members[0].integer_value == 49999)
+    let chosen = model.request(path,selection,"GetSelectedChild",[Value.signed(1)]).values[0].members[1].string_value
+    let expected = model.request(path,table,"GetAccessibleAt",[Value.signed(49999),Value.signed(1)]).values[0].members[1].string_value
+    assert(chosen == expected && source.data.cells == 2)
+    source.data.reverse = true
+    assert(model.request(path,table,"GetSelectedRows").values[0].members[0].integer_value == 0)
+    assert(model.request(path,selection,"IsChildSelected",[Value.signed(3)]).values[0].boolean_value() == true)
+    assert(model.request(path,selection,"DeselectSelectedChild",[Value.signed(1)]).values[0].boolean_value() == true && source.data.selected.is_empty())
+    assert(model.request(path,selection,"SelectAll").values[0].boolean_value() == false)
+    source.data.enabled = false; let calls = source.data.calls
+    assert(model.request(path,table,"AddRowSelection",[Value.signed(0)]).values[0].boolean_value() == false && source.data.calls == calls)
+}
+
+struct TreeRows:AX.Rows {
+    func count() int { return 2 }
+    func row(index:int) str? { if index == 0 { return "branch" } if index == 1 { return "leaf" } return null }
+    func selected() str[] { return ["branch","leaf"] }
+}
+struct Tree:AX.Source {
+    func root() str? { return "tree" }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? {
+        if id == "tree" { return AX.Element(id:id,role:AX.Role.tree,child_count:1) }
+        if id == "branch" { return AX.Element(id:id,parent:"tree",role:AX.Role.tree_item,child_count:1,selected:true,expanded:true) }
+        if id == "leaf" { return AX.Element(id:id,parent:"branch",role:AX.Role.tree_item,selected:true) }
+        return null
+    }
+    func rows(id:str) AX.Rows? { return TreeRows() }
+    func child(id:str, index:int) str? { if index == 0 { if id == "tree" { return "branch" } if id == "branch" { return "leaf" } } return null }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] { return [] }
+}
+test "AT-SPI tree selection reports immediate selected children rather than flattened descendants" {
+    var model = Model.Model(Tree(),":1.42","Tree")
+    let root = model.reference("tree").members[1].string_value
+    let branch = model.reference("branch").members[1].string_value
+    let selection = Model.interface_name("Selection")
+    assert(model.request(root,"org.freedesktop.DBus.Properties","Get",[Value.text(selection),Value.text("NSelectedChildren")]).values[0].content!.integer_value == 1)
+    assert(model.request(root,selection,"GetSelectedChild",[Value.signed(0)]).values[0].members[1].string_value == branch)
+    assert(model.request(branch,selection,"GetSelectedChild",[Value.signed(0)]).values[0].members[1].string_value == model.reference("leaf").members[1].string_value)
+}
+
+class MovingData { var owner:str = "first table"; var pending:bool = false; var rows:int = 0; var cells:int = 0 }
+class MovingRows:AX.Rows {
+    private var data:MovingData
+    init(data:MovingData) { self.data = data }
+    func count() int { return 1 }
+    func row(index:int) str? { self.data.rows++; if index == 0 { return "moving row" } return null }
+    func selected() str[] { return [] }
+}
+class MovingSource:AX.Source {
+    var data:MovingData = MovingData()
+    func root() str? { return "moving root" }
+    func focused() str? { return null }
+    func rows(id:str) AX.Rows? { if id == self.data.owner { return MovingRows(self.data) } return null }
+    func read(id:str) AX.Element? {
+        if id == "moving root" { return AX.Element(id:id,child_count:2) }
+        if id == "first table" || id == "second table" {
+            var count = 0; if id == self.data.owner { count = 1 }
+            return AX.Element(id:id,parent:"moving root",role:AX.Role.table,row_count:count,column_count:1)
+        }
+        if id == "moving row" { return AX.Element(id:id,parent:self.data.owner,role:AX.Role.row,row_index:0,child_count:1) }
+        if id == "moving cell" { return AX.Element(id:id,parent:"moving row",role:AX.Role.cell,row_index:0,column_index:0) }
+        return null
+    }
+    func child(id:str, index:int) str? {
+        if id == "moving row" && index == 0 { self.data.cells++; return "moving cell" }
+        if id == "moving root" && index == 0 { return "first table" }
+        if id == "moving root" && index == 1 { return "second table" }
+        return null
+    }
+    func perform(id:str, request:AX.Request) bool { return false }
+    func changes() AX.Change[] {
+        if !self.data.pending { return [] }
+        self.data.pending = false
+        return [AX.Change("first table",AX.ChangeKind.structure),AX.Change("second table",AX.ChangeKind.structure)]
+    }
+}
+test "AT-SPI retained cell follows table reparenting lazily without materializing rows" {
+    var source = MovingSource(); var model = Model.Model(source,":1.42","Moving")
+    let first = model.reference("first table").members[1].string_value
+    let second = model.reference("second table").members[1].string_value
+    let cell = model.request(first,Model.interface_name("Table"),"GetAccessibleAt",[Value.signed(0),Value.signed(0)]).values[0].members[1].string_value
+    let properties = "org.freedesktop.DBus.Properties"; let accessible = Model.interface_name("Accessible")
+    assert(model.request(cell,properties,"Get",[Value.text(accessible),Value.text("Parent")]).values[0].content!.members[1].string_value == first)
+    var initial = model.synchronize()
+    source.data.owner = "second table"; source.data.pending = true
+    var events = model.synchronize()
+    var items = model.request(Events.cache_path(),Model.interface_name("Cache"),"GetItems").values[0].members
+    var cached = false
+    for item in items { if item.members[0].members[1].string_value == cell { cached = true; assert(item.members[2].members[1].string_value == second) } }
+    assert(cached)
+    assert(model.request(cell,properties,"Get",[Value.text(accessible),Value.text("Parent")]).values[0].content!.members[1].string_value == second)
+    assert(model.reference("moving cell").members[1].string_value == cell)
+    assert(source.data.rows == 1 && source.data.cells == 1)
+}

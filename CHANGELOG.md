@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Experimental Linux AT-SPI bridge: optional D-Bus loading, UI-thread queries, Unicode text, indexed collections and notifications. Cross-builds and headless tests do not replace native Linux/Orca qualification, which remains open.
+
 - The macOS bridge accepts native decimal values and positions by explicitly rounding to UI precision. Non-finite or overflowing numbers are rejected before callbacks; control policy remains in Source.
 
 - Accessibility sources can query an element at coordinates and describe multiple-selection support, with compatible defaults for existing producers.

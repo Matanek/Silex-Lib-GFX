@@ -4,8 +4,8 @@
 Canvas or GFX.UI. A host can inspect a source supplied by an existing interface,
 or implement `Source` for its own controls. The first macOS adapter presents
 elements to AppKit; the initial button/text-field path has been checked with
-the inspector and VoiceOver. Qualification of other controls continues. Linux and Windows
-adapters are not yet provided.
+the inspector and VoiceOver. Qualification of other controls continues. A Linux AT-SPI adapter is experimental and still requires qualification on
+Linux. The Windows UI Automation bridge remains in preparation.
 
 ## Read and act on the same interface
 
@@ -219,3 +219,42 @@ The macOS bridge rounds native values and positions to the source's floating
 precision. It rejects non-finite or overflowing numbers before calling the
 source. Range validation and clamping remain defined by `Source.perform`,
 consistently with the control's other inputs.
+
+## Experimental Linux bridge
+
+`Window.set_accessibility_source` also connects the source to the AT-SPI bus
+when available. The adapter loads `libdbus-1.so.3` on demand and obtains the
+address from `org.a11y.Bus` on the session bus. A system without this service
+or library keeps the ordinary interface. GTK and GLib do not become application
+dependencies.
+
+Queries and actions stay on the UI thread. The I/O thread only handles
+transport and wakes the host. Registry embedding is asynchronous; detachment
+stops this thread before closing the connection. A system tool may retain an
+old path: it becomes unavailable and never identifies a new control reusing
+the same source ID.
+
+The bridge exposes application, window, roles, names, relations, states,
+actions, values and coordinates. Tables provide headers followed by indexed
+cells without realizing offscreen rows. Selection queries use `Rows.selected()`;
+selecting every row and selecting columns are not simulated by thousands of
+individual actions. Cache and notifications remain limited to exposed objects;
+virtual collections advertise that they manage their descendants.
+
+AT-SPI counts text positions in Unicode scalars, while `Source` counts
+graphemes. The bridge converts these units for reading, caret, selection,
+editing, clipboard and geometry supplied by `TextGeometry`. Mutations preserve
+whole graphemes. Word navigation follows the editor's Unicode classes;
+sentences use paragraphs without claiming grammatical segmentation. Text
+attributes describe plain text. Complex bounded ranges and scrolling to a
+text subrange are unsupported.
+
+On X11, screen coordinates use the window position. On Wayland, an unavailable
+global position is reported as unavailable; relative coordinates remain usable.
+The adapter does not invent a screen position from the local origin.
+
+Model tests, native codec tests and cross-builds do not constitute execution on
+Linux. Bus operation, Orca, desktop interactions and coordinate conventions at
+different scale factors still require qualification on the target systems.
+This experimental status does not change ordinary-use acceptance of macOS
+controls.

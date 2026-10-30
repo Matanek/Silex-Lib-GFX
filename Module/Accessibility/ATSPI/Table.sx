@@ -1,0 +1,123 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+
+package func supports(element:AX.Element) bool {
+    return element.role == AX.Role.table && element.row_count != null && element.column_count != null
+}
+package func headers(model:Model.Model, element:AX.Element) int {
+    if model.columns(element.id) != null { return element.column_count ?? 0 }
+    return 0
+}
+package func count(model:Model.Model, element:AX.Element) int {
+    return headers(model,element)+(element.row_count ?? 0)*(element.column_count ?? 0)
+}
+package func header(model:Model.Model, element:AX.Element, column:int) str? {
+    if column < 0 || column >= (element.column_count ?? 0) { return null }
+    if var columns = model.columns(element.id) {
+        if let id = columns.column(column) {
+            if let description = model.source_element(id) {
+                if let header = description.header { model.table_part(header,element.id,column); return header }
+            }
+        }
+    }
+    return null
+}
+package func cell(model:Model.Model, element:AX.Element, row:int, column:int) str? {
+    if row < 0 || row >= (element.row_count ?? 0) || column < 0 || column >= (element.column_count ?? 0) { return null }
+    if var rows = model.rows(element.id) {
+        if let id = rows.row(row) {
+            if let result = model.source_child(id,column) { model.table_part(result,element.id,-1,id); return result }
+        }
+    }
+    return null
+}
+package func child(model:Model.Model, element:AX.Element, index:int) str? {
+    if index < 0 || index >= count(model,element) { return null }
+    let first = headers(model,element)
+    if index < first { return header(model,element,index) }
+    let columns = element.column_count ?? 0
+    if columns == 0 { return null }
+    return cell(model,element,(index-first)/columns,(index-first)%columns)
+}
+package func selected_rows(model:Model.Model, element:AX.Element) str[] {
+    if var rows = model.rows(element.id) { return rows.selected() }
+    return []
+}
+func row_selected(model:Model.Model, element:AX.Element, row:int) bool {
+    if var rows = model.rows(element.id) {
+        if let id = rows.row(row) { if let description = model.source_element(id) { return description.selected == true } }
+    }
+    return false
+}
+package func select_row(model:Model.Model, element:AX.Element, row:int, selected:bool) bool {
+    if !element.enabled || row < 0 || row >= (element.row_count ?? 0) { return false }
+    if var rows = model.rows(element.id) {
+        if let id = rows.row(row) {
+            if let description = model.source_element(id) {
+                if !description.enabled { return false }
+                if description.selected == selected { return true }
+                var action = AX.Action.select; if !selected { action = AX.Action.deselect }
+                return model.perform(description,AX.Request(action))
+            }
+        }
+    }
+    return false
+}
+package func property(model:Model.Model, element:AX.Element, name:str) Value? {
+    if name == "version" { return Value.unsigned(1 as uint32) }
+    if name == "NRows" { return Value.signed(element.row_count ?? 0) }
+    if name == "NColumns" { return Value.signed(element.column_count ?? 0) }
+    if name == "Caption" || name == "Summary" { return model.reference(null) }
+    if name == "NSelectedRows" { return Value.signed(selected_rows(model,element).count()) }
+    if name == "NSelectedColumns" { return Value.signed(0) }
+    return null
+}
+package func reply(model:Model.Model, element:AX.Element, method:str, values:Value[]) Reply {
+    let signature = Model.arguments(values)
+    if method == "GetAccessibleAt" || method == "GetIndexAt" || method == "GetRowExtentAt" || method == "GetColumnExtentAt" || method == "IsSelected" {
+        if signature != "ii" { return Model.invalid_arguments() }
+        let row = values[0].integer_value; let column = values[1].integer_value
+        let valid = row >= 0 && row < (element.row_count ?? 0) && column >= 0 && column < (element.column_count ?? 0)
+        if method == "GetAccessibleAt" { return Reply([model.reference(cell(model,element,row,column))]) }
+        if method == "IsSelected" { return Reply([Value.boolean(valid && row_selected(model,element,row))]) }
+        var result = 0
+        if method == "GetIndexAt" { result = -1; if valid { result = headers(model,element)+row*(element.column_count ?? 0)+column } }
+        elif valid { result = 1 }
+        return Reply([Value.signed(result)])
+    }
+    if method == "GetSelectedRows" || method == "GetSelectedColumns" {
+        if signature != "" { return Model.invalid_arguments() }
+        var result:Value[] = []
+        if method == "GetSelectedRows" {
+            for id in selected_rows(model,element) { if let row = model.source_element(id) { result.append(Value.signed(row.row_index ?? row.index)) } }
+        }
+        return Reply([Value.array("i",result)])
+    }
+    if signature != "i" { return Model.invalid_arguments() }
+    let index = values[0].integer_value
+    let columns = element.column_count ?? 0; let first = headers(model,element)
+    if method == "GetRowAtIndex" || method == "GetColumnAtIndex" || method == "GetRowColumnExtentsAtIndex" {
+        let valid = columns > 0 && index >= first && index < count(model,element)
+        var row = -1; var column = -1
+        if valid { row = (index-first)/columns; column = (index-first)%columns }
+        if method == "GetRowAtIndex" { return Reply([Value.signed(row)]) }
+        if method == "GetColumnAtIndex" { return Reply([Value.signed(column)]) }
+        return Reply([Value.boolean(valid),Value.signed(row),Value.signed(column),Value.signed(1),Value.signed(1),Value.boolean(valid && row_selected(model,element,row))])
+    }
+    if method == "GetColumnHeader" { return Reply([model.reference(header(model,element,index))]) }
+    if method == "GetRowHeader" { return Reply([model.reference(null)]) }
+    if method == "GetColumnDescription" {
+        if let id = header(model,element,index) { if let description = model.source_element(id) { return Reply([Value.text(description.name)]) } }
+        return Reply([Value.text("")])
+    }
+    if method == "GetRowDescription" {
+        if var rows = model.rows(element.id) { if let id = rows.row(index) { if let row = model.source_element(id) { return Reply([Value.text(row.name)]) } } }
+        return Reply([Value.text("")])
+    }
+    if method == "IsRowSelected" { return Reply([Value.boolean(index >= 0 && index < (element.row_count ?? 0) && row_selected(model,element,index))]) }
+    if method == "IsColumnSelected" || method == "AddColumnSelection" || method == "RemoveColumnSelection" { return Reply([Value.boolean(false)]) }
+    if method == "AddRowSelection" || method == "RemoveRowSelection" { return Reply([Value.boolean(select_row(model,element,index,method == "AddRowSelection"))]) }
+    return Model.unknown_method()
+}

@@ -1,0 +1,91 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.ATSPI.Model
+use GFX.Accessibility.ATSPI.Table
+use GFX.Accessibility.BusValue.Value
+use GFX.Accessibility.BusValue.Reply
+
+package func supports(element:AX.Element) bool {
+    return element.role == AX.Role.list || element.role == AX.Role.tree || element.role == AX.Role.tree_item ||
+        element.role == AX.Role.table
+}
+func selected(model:Model.Model, element:AX.Element) str[] {
+    if Table.supports(element) { return Table.selected_rows(model,element) }
+    var result:str[] = []
+    if var rows = model.rows(element.id) {
+        for id in rows.selected() { if let child = model.source_element(id) { if child.parent == element.id && child.selected == true { result.append(id) } } }
+    } else {
+        // A producer without a row view has no indexed selected-item query.
+        // Keep optional selection on small groups bounded.
+        if model.child_count(element) > 4096 { return result }
+        var index = 0
+        while index < model.child_count(element) {
+            if let id = model.child(element,index) { if let child = model.source_element(id) { if child.selected == true { result.append(id) } } }
+            index++
+        }
+    }
+    return result
+}
+package func property(model:Model.Model, element:AX.Element, name:str) Value? {
+    if name == "version" { return Value.unsigned(1 as uint32) }
+    if name == "NSelectedChildren" {
+        var count = selected(model,element).count()
+        if Table.supports(element) { count *= element.column_count ?? 0 }
+        return Value.signed(count)
+    }
+    return null
+}
+func choose(model:Model.Model, element:AX.Element, id:str?, selected:bool) bool {
+    if !element.enabled || id == null { return false }
+    if let child = model.source_element(id!) {
+        var action = AX.Action.select; if !selected { action = AX.Action.deselect }
+        if child.selected == selected { return true }
+        if selected && (child.role == AX.Role.radio || child.role == AX.Role.tab) { action = AX.Action.activate }
+        return model.perform(child,AX.Request(action))
+    }
+    return false
+}
+package func reply(model:Model.Model, element:AX.Element, method:str, values:Value[]) Reply {
+    let signature = Model.arguments(values)
+    if method == "SelectAll" {
+        if signature != "" { return Model.invalid_arguments() }
+        // Source has no bulk selection action. Do not emulate it with 50k
+        // individual mutations; AT-SPI explicitly permits refusal.
+        return Reply([Value.boolean(false)])
+    }
+    if method == "ClearSelection" {
+        if signature != "" { return Model.invalid_arguments() }
+        var success = element.enabled
+        for id in selected(model,element) { if !choose(model,element,id,false) { success = false } }
+        return Reply([Value.boolean(success)])
+    }
+    if signature != "i" { return Model.invalid_arguments() }
+    let index = values[0].integer_value
+    if method == "GetSelectedChild" || method == "DeselectSelectedChild" {
+        let items = selected(model,element); var id:str? = null
+        if Table.supports(element) {
+            let columns = element.column_count ?? 0
+            if columns > 0 && index >= 0 && index/columns < items.count() {
+                if method == "DeselectSelectedChild" { id = items[index/columns] }
+                else { id = model.source_child(items[index/columns],index%columns); if let cell = id { model.table_part(cell,element.id,-1,items[index/columns]) } }
+            }
+        } elif index >= 0 && index < items.count() { id = items[index] }
+        if method == "GetSelectedChild" { return Reply([model.reference(id)]) }
+        return Reply([Value.boolean(choose(model,element,id,false))])
+    }
+    if method == "SelectChild" || method == "DeselectChild" || method == "IsChildSelected" {
+        if Table.supports(element) {
+            let columns = element.column_count ?? 0; let first = Table.headers(model,element)
+            if columns <= 0 || index < first || index >= model.child_count(element) { return Reply([Value.boolean(false)]) }
+            let row = (index-first)/columns
+            if method == "IsChildSelected" { return Table.reply(model,element,"IsRowSelected",[Value.signed(row)]) }
+            return Reply([Value.boolean(Table.select_row(model,element,row,method == "SelectChild"))])
+        }
+        let id = model.child(element,index)
+        if method == "IsChildSelected" {
+            var answer = false; if let value = id { if let child = model.source_element(value) { answer = child.selected == true } }
+            return Reply([Value.boolean(answer)])
+        }
+        return Reply([Value.boolean(choose(model,element,id,method == "SelectChild"))])
+    }
+    return Model.unknown_method()
+}
