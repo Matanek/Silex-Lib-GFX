@@ -162,6 +162,10 @@ public protocol Source {
     func rows(id:str) Rows? { return null }
     func columns(id:str) Columns? { return null }
     func text_geometry(id:str) TextGeometry? { return null }
+    // Reveal grapheme text without changing focus, caret or selection. Align
+    // its leading/trailing line to the viewport when its extent allows it.
+    // Return true for an accepted request, including an already visible range.
+    func reveal_text(id:str,span:TextRange,align_to_start:bool) bool { return false }
     func perform(id:str, request:Request) bool
     func changes() Change[]
     // A semantic query, including disabled/static elements, in the same

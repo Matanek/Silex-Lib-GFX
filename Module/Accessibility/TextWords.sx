@@ -5,8 +5,6 @@ use STD.Text.Grapheme
 use STD.Text.UTF8
 
 // Same Unicode word/space classification as UI keyboard word navigation.
-// AT-SPI permits application-defined sentence boundaries; this plain-text
-// provider uses paragraphs for sentences, without claiming UAX #29 sentences.
 package class Words {
     private let starts:int[]
     private let ends:int[]
@@ -30,6 +28,17 @@ package class Words {
         if starts[starts.count()-1] != scalar { starts.append(scalar) }
         if ends[ends.count()-1] != scalar { ends.append(scalar) }
         self.starts = starts; self.ends = ends
+    }
+    func advance(offset:int,count:int) (int,int) {
+        let total = self.starts[self.starts.count()-1]
+        if offset < 0 || offset > total || count == 0 { return (offset,0) }
+        var low = 0; var high = self.starts.count()
+        while low < high { let middle = low+(high-low)/2; if self.starts[middle] <= offset { low = middle+1 } else { high = middle } }
+        var anchor = low-1
+        if count < 0 && self.starts[anchor] != offset { anchor++ }
+        var target = anchor+count
+        if target < 0 { target = 0 } if target >= self.starts.count() { target = self.starts.count()-1 }
+        return (self.starts[target],target-anchor)
     }
     func at(offset:int, end_boundary:bool) AX.TextRange? {
         if end_boundary { return interval(self.ends,offset) }

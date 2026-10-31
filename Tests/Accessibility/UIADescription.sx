@@ -1,0 +1,51 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.Description as Native
+
+test "UIA identifies native controls and preserves capabilities while disabled" {
+    assert(Native.control_type(AX.Role.checkbox)==50002 as int32)
+    assert(Native.control_type(AX.Role.text_area)==50004 as int32)
+    assert(Native.control_type(AX.Role.table)==50028 as int32)
+    assert(Native.control_type(AX.Role.tree_item)==50024 as int32)
+    assert(Native.control_type(AX.Role.column_header)==50035 as int32)
+    let slider=AX.Element(id:"s",role:AX.Role.slider,enabled:false,number:12.0,minimum:10.0,maximum:20.0,actions:[AX.Action.set_value])
+    assert(Native.supports(slider,10003 as int32) && Native.read_only(slider))
+    assert(!Native.supports(slider,10000 as int32) && !Native.supports(slider,10014 as int32))
+    assert(Native.supports(AX.Element(id:"button",role:AX.Role.button,enabled:false),10000 as int32))
+}
+test "UIA distinguishes checkboxes radios selection text and indexed tables" {
+    let checkbox=AX.Element(id:"check",role:AX.Role.checkbox,checked:true,actions:[AX.Action.activate])
+    assert(Native.supports(checkbox,10015 as int32) && !Native.supports(checkbox,10000 as int32))
+    let radio=AX.Element(id:"radio",role:AX.Role.radio,checked:true,actions:[AX.Action.activate])
+    assert(Native.supports(radio,10010 as int32) && !Native.supports(radio,10015 as int32))
+    assert(Native.supports(AX.Element(id:"text",role:AX.Role.text_area,value:"été"),10014 as int32))
+    assert(Native.supports(AX.Element(id:"table",role:AX.Role.table,row_count:50000,column_count:2),10006 as int32))
+    assert(!Native.supports(AX.Element(id:"table",role:AX.Role.table),10006 as int32))
+    assert(!Native.supports(checkbox,12345 as int32))
+}
+test "UIA highlighted menus retain Invoke without becoming selection items" {
+    let item = AX.Element(id:"open",role:AX.Role.menu_item,selected:true,actions:[AX.Action.activate])
+    assert(Native.supports(item,10000 as int32))
+    assert(!Native.supports(item,10010 as int32))
+    let dialog = AX.Element(id:"dialog",role:AX.Role.dialog,actions:[AX.Action.dismiss])
+    assert(Native.supports(dialog,10009 as int32))
+    assert(!Native.supports(AX.Element(id:"group"),10009 as int32))
+}
+
+test "UIA property availability agrees with pattern capabilities" {
+    let slider = AX.Element(id:"slider",role:AX.Role.slider,number:12.0,minimum:10.0,maximum:20.0)
+    assert(Native.supports(slider,Native.property_pattern(30033 as int32)))
+    assert(!Native.supports(slider,Native.property_pattern(30043 as int32)))
+    let radio = AX.Element(id:"radio",role:AX.Role.radio,checked:true)
+    assert(Native.selected(radio) && Native.supports(radio,Native.property_pattern(30036 as int32)))
+    assert(!Native.supports(radio,Native.property_pattern(30041 as int32)))
+    assert(Native.selection_required(AX.Element(id:"tabs",role:AX.Role.tab_group)))
+    assert(!Native.selection_required(AX.Element(id:"list",role:AX.Role.list)))
+    assert(Native.property_pattern(30034 as int32) == -1 as int32)
+}
+
+test "UIA table cells expose values independently of mounted child controls" {
+    let cell = AX.Element(id:"cell",role:AX.Role.cell,row_index:49999,column_index:1,value:"42")
+    assert(Native.supports(cell,10002 as int32) && Native.supports(cell,10007 as int32) && Native.read_only(cell))
+    let editor = AX.Element(id:"editor",role:AX.Role.cell,row_index:0,column_index:1,value:"Ada",editable:true,actions:[AX.Action.set_value])
+    assert(Native.supports(editor,10002 as int32) && !Native.read_only(editor))
+}

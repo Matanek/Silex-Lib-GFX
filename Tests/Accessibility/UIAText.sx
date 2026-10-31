@@ -1,0 +1,52 @@
+use GFX.Accessibility.UTF16
+use STD.Text.Encoding
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.TextData.Data
+use GFX.Accessibility.UIA.TextRange.Range
+
+struct Geometry:AX.TextGeometry {
+    func bounds(selection:AX.TextRange) AX.Bounds? { return AX.Bounds(x:selection.start as float,y:0.0,width:selection.length as float,height:12.0) }
+    func range_at(x:float,y:float) AX.TextRange? { return AX.TextRange(x as int,0) }
+    func line_for_index(index:int) int? { if index <= 5 { return 0 } return 1 }
+    func range_for_line(line:int) AX.TextRange? { if line == 0 { return AX.TextRange(0,6) } if line == 1 { return AX.TextRange(6,5) } return null }
+    func visible_range() AX.TextRange? { return AX.TextRange(0,11) }
+}
+
+test "UIA text ranges keep grapheme endpoints and bound UTF-16 output" {
+    var data = Data("Aé🐈中Z")
+    var span = Range(0,5)
+    assert(span.text(data) == "Aé🐈中Z")
+    assert(span.text(data,3) == "Aé")
+    assert(span.text(data,4) == "Aé🐈")
+    var caret = Range(4,4)
+    assert(caret.move_units(data,0 as int32,-2) == -2 && caret.start == 2 && caret.end == 2)
+    assert(caret.move_endpoint(data,1 as int32,0 as int32,2) == 2 && caret.end == 4)
+    assert(caret.move_endpoint(data,0 as int32,0 as int32,5) == 3 && caret.start == 5 && caret.end == 5)
+}
+test "UIA Unicode search maps case folding back to original ranges" {
+    var data = Data("Straße puis STRASSE")
+    let span = Range(0,data.count())
+    let first = span.find(data,"STRASSE",false,true)!
+    assert(first.start == 0 && first.end == 6)
+    let last = span.find(data,"strasse",true,true)!
+    assert(last.start == 12 && last.end == 19)
+    assert(span.find(data,"absent",false,true) == null)
+}
+test "UIA line geometry bounds and movement use the live layout" {
+    var data = Data("hello world")
+    var span = Range(1,9)
+    let rectangles = span.bounds(data,Geometry())
+    assert(rectangles.count() == 2 && rectangles[0].x == 1.0 && rectangles[1].x == 6.0)
+    assert(span.expand(data,3 as int32,Geometry()) && span.start == 0 && span.end == 6)
+    assert(span.move_units(data,3 as int32,1,Geometry()) == 1 && span.start == 6 && span.end == 11)
+}
+
+test "native UTF16 preserves BOM characters embedded zeros and noncharacters" {
+    let text = "\u{feff}Aé🐈中\0Z\u{fffe}"
+    let bytes = Encoding.encode(text,Encoding.Kind.utf16_little_endian())
+    assert(UTF16.decode(@bytes[0:bytes.count()]) == text)
+    let high:uint8[] = [0,0xd8]; let low:uint8[] = [0,0xdc]
+    let odd:uint8[] = [0]; let broken:uint8[] = [0,0xd8,65,0]
+    assert(UTF16.decode(@high[0:high.count()]) == null && UTF16.decode(@low[0:low.count()]) == null)
+    assert(UTF16.decode(@odd[0:odd.count()]) == null && UTF16.decode(@broken[0:broken.count()]) == null)
+}

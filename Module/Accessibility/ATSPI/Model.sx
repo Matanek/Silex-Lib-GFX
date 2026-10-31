@@ -7,7 +7,7 @@ use STD.Math
 use GFX.Accessibility.Numbers
 use GFX.Accessibility.ATSPI.Text
 use GFX.Accessibility.ATSPI.EditableText
-use GFX.Accessibility.ATSPI.TextSegments.Words
+use GFX.Accessibility.TextWords.Words
 use GFX.Accessibility.ATSPI.Table
 use GFX.Accessibility.ATSPI.TablePeers
 use GFX.Accessibility.ATSPI.Selection

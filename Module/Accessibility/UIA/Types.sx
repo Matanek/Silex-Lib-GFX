@@ -1,0 +1,7 @@
+// These are C records only at the private compiler boundary. Ordinary Silex
+// value semantics remain unchanged. All supported targets are little endian.
+package struct Point { let x:float64; let y:float64 }
+// VARIANT: VARTYPE + three reserved WORDs occupy tag's low-to-high 16-bit
+// lanes; the payload union is 16 bytes on both Windows 64-bit architectures.
+package struct Variant { let tag:uint; let value:uint; let extra:uint = 0 as uint }
+package struct Rectangle { let x:float64; let y:float64; let width:float64; let height:float64 }

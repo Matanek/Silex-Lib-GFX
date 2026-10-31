@@ -1,0 +1,267 @@
+use Interop.C
+use Interop.Boundary
+use STD.Text.Encoding
+use GFX.Accessibility.UIA.Registry
+use GFX.Accessibility.UTF16
+
+// The COM context and headers are raw system storage. Foreign callbacks use
+// only these scalar helpers; Source and Silex object identities stay on HWND's
+// owning thread. The critical section is never held across SendMessageW.
+package func allocate(bytes:uint) uint { return heap_allocate(1 as uint,bytes) }
+package func free(address:uint) { if address != 0 as uint { heap_free(address) } }
+package func unavailable() int32 { return -2147220991 as int32 }
+package func disabled() int32 { return -2147220992 as int32 }
+package func unsupported() int32 { return -2147220988 as int32 }
+package func invalid_argument() int32 { return -2147024809 as int32 }
+package func no_interface() int32 { return -2147467262 as int32 }
+package func pointer_error() int32 { return -2147467261 as int32 }
+package func out_of_memory() int32 { return -2147024882 as int32 }
+package func lock(context:uint) { enter_critical(context+32 as uint) }
+package func unlock(context:uint) { leave_critical(context+32 as uint) }
+package func thread() uint32 { return current_thread() }
+package func context(window:uint,owner:uint,message:uint32) uint {
+    let storage = allocate(2048 as uint)
+    if storage == 0 as uint { return 0 as uint }
+    if initialize_critical(storage+32 as uint,0 as uint32,0 as uint32) == 0 as int32 { free(storage); return 0 as uint }
+    C.store<int32>(storage,0 as uint,1 as int32)
+    C.store<uint>(storage,8 as uint,window)
+    C.store<uint>(storage,16 as uint,owner)
+    C.store<uint32>(storage,24 as uint,thread())
+    C.store<uint32>(storage,28 as uint,message)
+    var encoded = Encoding.encode("UIAutomationCore.dll",Encoding.Kind.utf16_little_endian())
+    encoded.append(0 as uint8); encoded.append(0 as uint8)
+    let wide = C.string(@encoded[0:encoded.count()])
+    let library = load_library(C.pointer(wide),0 as uint,0x800 as uint32)
+    if library == 0 as uint { delete_critical(storage+32 as uint); free(storage); return 0 as uint }
+    // UIA can call Release from its own DLL stack. Pin the system module
+    // for the process rather than unloading code underneath that caller.
+    var pinned:uint = 0 as uint
+    if pin_library(1 as uint32,C.pointer(wide),C.mutable_pointer(pinned)) == 0 as int32 {
+        free_library(library); delete_critical(storage+32 as uint); free(storage); return 0 as uint
+    }
+    C.store<uint>(storage,72 as uint,library)
+    let names = ["UiaReturnRawElementProvider","UiaHostProviderFromHwnd","UiaRaiseAutomationEvent","UiaRaiseAutomationPropertyChangedEvent","UiaRaiseStructureChangedEvent","UiaClientsAreListening","UiaDisconnectProvider","UiaGetReservedNotSupportedValue","UiaGetReservedMixedAttributeValue"]
+    var index = 0
+    for name in names {
+        C.store<uint>(storage,(80+index*8) as uint,procedure(library,C.terminated_pointer(name)))
+        index++
+    }
+    if C.load<uint>(storage,80 as uint) == 0 as uint || C.load<uint>(storage,88 as uint) == 0 as uint {
+        free_library(library); delete_critical(storage+32 as uint); free(storage); return 0 as uint
+    }
+    if create_guid(storage+336 as uint) < 0 as int32 {
+        free_library(library); delete_critical(storage+32 as uint); free(storage); return 0 as uint
+    }
+    return storage
+}
+package func retain_context(context:uint) {
+    lock(context); C.store<int32>(context,0 as uint,C.load<int32>(context,0 as uint)+1 as int32); unlock(context)
+}
+package func release_context(context:uint) {
+    lock(context); let references = C.load<int32>(context,0 as uint)-1 as int32
+    C.store<int32>(context,0 as uint,references); unlock(context)
+    if references == 0 as int32 {
+        let library = C.load<uint>(context,72 as uint)
+        Registry.destroy(context+304 as uint,C.function_address(free_storage))
+        Registry.destroy(context+352 as uint,C.function_address(free_storage))
+        delete_critical(context+32 as uint); free(context); free_library(library)
+    }
+}
+package func active(context:uint) bool {
+    lock(context); let value = C.load<uint32>(context,4 as uint) != 0 as uint32; unlock(context); return value
+}
+package func activate(context:uint) { lock(context); C.store<uint32>(context,4 as uint,1 as uint32); unlock(context) }
+package func invalidate(context:uint) {
+    lock(context); C.store<uint32>(context,4 as uint,0 as uint32)
+    C.store<uint>(context,8 as uint,0 as uint); C.store<uint>(context,16 as uint,0 as uint); unlock(context)
+}
+package func send(context:uint,packet:uint) int32 {
+    C.store<int32>(packet,64 as uint,unavailable())
+    lock(context)
+    var window = C.load<uint>(context,8 as uint)
+    if C.load<uint32>(context,4 as uint) == 0 as uint32 { window = 0 as uint }
+    let message = C.load<uint32>(context,28 as uint)
+    var registered = false
+    if window != 0 as uint { registered = Registry.add(context+352 as uint,packet,C.function_address(allocate_storage),C.function_address(free_storage)) }
+    unlock(context)
+    if window == 0 as uint { return unavailable() }
+    if !registered { return out_of_memory() }
+    send_message(window,message,context,packet)
+    lock(context); Registry.remove(context+352 as uint,packet); unlock(context)
+    return C.load<int32>(packet,64 as uint)
+}
+package func message_id() uint32 {
+    var encoded = Encoding.encode("Silex.GFX.Accessibility.UIA.Request.v1",Encoding.Kind.utf16_little_endian())
+    encoded.append(0 as uint8); encoded.append(0 as uint8)
+    let wide = C.string(@encoded[0:encoded.count()]); return register_message(C.pointer(wide))
+}
+package func install(window:uint,callback:uint,context:uint) bool { return set_subclass(window,callback,context,context) != 0 as int32 }
+package func uninstall(window:uint,callback:uint,context:uint) { remove_subclass(window,callback,context) }
+package func next(window:uint,message:uint32,wparam:uint,lparam:int) int { return default_subclass(window,message,wparam,lparam) }
+package func initialize_com() int32 { return co_initialize(0 as uint,2 as uint32) }
+package func uninitialize_com() { co_uninitialize() }
+package func bstr(value:str) uint {
+    let bytes = Encoding.encode(value,Encoding.Kind.utf16_little_endian())
+    if bytes.count() == 0 { return allocate_string(0 as uint,0 as uint32) }
+    let wide = C.string(@bytes[0:bytes.count()])
+    return allocate_string(C.address_bits(C.pointer(wide)),(bytes.count()/2) as uint32)
+}
+package func read_wide(address:uint) str? {
+    if address == 0 as uint { return null }
+    var bytes:uint8[] = []; var index:uint = 0 as uint
+    while true {
+        let value = C.load<uint16>(address,index)
+        if value == 0 as uint16 {
+            return UTF16.decode(@bytes[0:bytes.count()])
+        }
+        bytes.append((value & 255 as uint16) as uint8); bytes.append((value >> 8 as uint16) as uint8)
+        index += 2 as uint
+    }
+    return null
+}
+package func read_bstr(address:uint) str? {
+    // BSTR has an explicit UTF-16 length and may contain embedded zero units.
+    if address == 0 as uint { return "" }
+    let count = string_length(address) as uint
+    var bytes:uint8[] = []; var index:uint = 0 as uint
+    while index < count {
+        let value = C.load<uint16>(address,index*2 as uint)
+        bytes.append((value & 255 as uint16) as uint8)
+        bytes.append((value >> 8 as uint16) as uint8)
+        index++
+    }
+    return UTF16.decode(@bytes[0:bytes.count()])
+}
+package func free_bstr(address:uint) { if address != 0 as uint { free_string(address) } }
+package func array(kind:uint16,count:int) uint {
+    if count < 0 || count > 2147483647 { return 0 as uint }
+    return create_array(kind,0 as int32,count as uint32)
+}
+package func put(array:uint,index:int,address:uint) bool { var at:int32 = index as int32; return put_array(array,C.address_bits(C.mutable_pointer(at)),address) >= 0 as int32 }
+package func destroy_array(array:uint) { if array != 0 as uint { free_array(array) } }
+package func screen_origin(window:uint) (int,int) {
+    var point:uint = 0 as uint; let address = C.address_bits(C.mutable_pointer(point))
+    if client_to_screen(window,address) == 0 as int32 { return (0,0) }
+    return (C.load<int32>(address,0 as uint) as int,C.load<int32>(address,4 as uint) as int)
+}
+
+package func is_packet(context:uint,packet:uint) bool {
+    lock(context); let valid = Registry.contains(context+352 as uint,packet); unlock(context); return valid
+}
+package func register_object(context:uint,object:uint) bool {
+    // Caller holds the context lock, including the initial object reference.
+    return Registry.add(context+304 as uint,object,C.function_address(allocate_storage),C.function_address(free_storage))
+}
+package func forget_object(context:uint,object:uint) { Registry.remove(context+304 as uint,object) }
+package func owns_object(context:uint,object:uint) bool {
+    lock(context); let valid = Registry.contains(context+304 as uint,object); unlock(context); return valid
+}
+func allocate_storage(count:uint,size:uint) uint { return heap_allocate(count,size) }
+func free_storage(address:uint) { heap_free(address) }
+package func identity(object:uint) uint {
+    if object == 0 as uint { return 0 as uint }
+    let table = C.load<uint>(object,0 as uint); if table == 0 as uint { return 0 as uint }
+    let query = C.load<uint>(table,0 as uint); if query == 0 as uint { return 0 as uint }
+    var guid:uint[2] = [0 as uint,0x46000000000000c0 as uint]; var result:uint = 0 as uint
+    if C.call<func(uint,uint,uint) int32>(query,object,C.address_bits(C.mutable_pointer(guid)),C.address_bits(C.mutable_pointer(result))) < 0 as int32 { return 0 as uint }
+    return result
+}
+package func release_unknown(object:uint) {
+    if object != 0 as uint { let table = C.load<uint>(object,0 as uint); C.call<func(uint) uint32>(C.load<uint>(table,16 as uint),object) }
+}
+package func client_height(window:uint) int {
+    var rectangle:uint[2] = [0 as uint,0 as uint]; let address = C.address_bits(C.mutable_pointer(rectangle))
+    if client_rect(window,address) == 0 as int32 { return 0 }
+    return C.load<int32>(address,12 as uint) as int-C.load<int32>(address,4 as uint) as int
+}
+package func title(window:uint) str {
+    let count = window_text_length(window); if count <= 0 as int32 { return "" }
+    let buffer = allocate(((count as uint)+1 as uint)*2 as uint)
+    if buffer == 0 as uint { return "" }
+    window_text(window,buffer,count+1 as int32); let result = read_wide(buffer) ?? ""; free(buffer); return result
+}
+
+let heap_allocate = C.function<func(uint,uint) uint>(library:Boundary.WindowsAccessibility,name:"calloc")
+let heap_free = C.function<func(uint) void>(library:Boundary.WindowsAccessibility,name:"free")
+let initialize_critical = C.function<func(uint,uint32,uint32) int32>(library:Boundary.WindowsAccessibility,name:"InitializeCriticalSectionEx")
+let enter_critical = C.function<func(uint) void>(library:Boundary.WindowsAccessibility,name:"EnterCriticalSection")
+let leave_critical = C.function<func(uint) void>(library:Boundary.WindowsAccessibility,name:"LeaveCriticalSection")
+let delete_critical = C.function<func(uint) void>(library:Boundary.WindowsAccessibility,name:"DeleteCriticalSection")
+let current_thread = C.function<func() uint32>(library:Boundary.WindowsAccessibility,name:"GetCurrentThreadId")
+let load_library = C.function<func(C.Pointer<uint8>,uint,uint32) uint>(library:Boundary.WindowsAccessibility,name:"LoadLibraryExW")
+let free_library = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"FreeLibrary")
+let procedure = C.function<func(uint,C.Pointer<uint8>) uint>(library:Boundary.WindowsAccessibility,name:"GetProcAddress")
+let send_message = C.function<func(uint,uint32,uint,uint) int>(library:Boundary.WindowsAccessibility,name:"SendMessageW")
+let register_message = C.function<func(C.Pointer<uint8>) uint32>(library:Boundary.WindowsAccessibility,name:"RegisterWindowMessageW")
+let set_subclass = C.function<func(uint,uint,uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"SetWindowSubclass")
+let remove_subclass = C.function<func(uint,uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"RemoveWindowSubclass")
+let default_subclass = C.function<func(uint,uint32,uint,int) int>(library:Boundary.WindowsAccessibility,name:"DefSubclassProc")
+let co_initialize = C.function<func(uint,uint32) int32>(library:Boundary.WindowsAccessibility,name:"CoInitializeEx")
+let co_uninitialize = C.function<func() void>(library:Boundary.WindowsAccessibility,name:"CoUninitialize")
+let allocate_string = C.function<func(uint,uint32) uint>(library:Boundary.WindowsAccessibility,name:"SysAllocStringLen")
+let string_length = C.function<func(uint) uint32>(library:Boundary.WindowsAccessibility,name:"SysStringLen")
+let free_string = C.function<func(uint) void>(library:Boundary.WindowsAccessibility,name:"SysFreeString")
+let create_array = C.function<func(uint16,int32,uint32) uint>(library:Boundary.WindowsAccessibility,name:"SafeArrayCreateVector")
+let put_array = C.function<func(uint,uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"SafeArrayPutElement")
+let free_array = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"SafeArrayDestroy")
+let client_to_screen = C.function<func(uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"ClientToScreen")
+
+let create_guid = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"CoCreateGuid")
+let client_rect = C.function<func(uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"GetClientRect")
+let window_text_length = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"GetWindowTextLengthW")
+let window_text = C.function<func(uint,uint,int32) int32>(library:Boundary.WindowsAccessibility,name:"GetWindowTextW")
+
+let pin_library = C.function<func(uint32,C.Pointer<uint8>,C.MutablePointer<uint>) int32>(library:Boundary.WindowsAccessibility,name:"GetModuleHandleExW")
+package func clear_variant(value:uint) { clear_value(value) }
+let clear_value = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"VariantClear")
+package func clients(context:uint) bool {
+    let method = C.load<uint>(context,120 as uint)
+    if method == 0 as uint { return false }
+    return C.call<func() int32>(method) != 0 as int32
+}
+package func disconnect(context:uint,provider:uint) {
+    let method = C.load<uint>(context,128 as uint)
+    if method != 0 as uint { C.call<func(uint) int32>(method,provider) }
+}
+package func event(context:uint,provider:uint,event:int32) {
+    let method = C.load<uint>(context,96 as uint)
+    if method != 0 as uint { C.call<func(uint,int32) int32>(method,provider,event) }
+}
+package func structure(context:uint,provider:uint) {
+    let method = C.load<uint>(context,112 as uint)
+    if method != 0 as uint { C.call<func(uint,int32,uint,int32) int32>(method,provider,2 as int32,0 as uint,0 as int32) }
+}
+package func not_supported(context:uint,output:uint) int32 {
+    let method = C.load<uint>(context,136 as uint)
+    if method == 0 as uint { return unsupported() }
+    var value:uint = 0 as uint
+    let result = C.call<func(uint) int32>(method,C.address_bits(C.mutable_pointer(value)))
+    if result >= 0 as int32 { C.store<uint16>(output,0 as uint,13 as uint16); C.store<uint>(output,8 as uint,value) }
+    return result
+}
+package func nan(output:uint) { C.store<uint>(output,0 as uint,0x7ff8000000000000 as uint) }
+
+package func window_thread(window:uint) uint32 { return owning_thread(window,0 as uint) }
+package func visible(window:uint) bool { return is_visible(window) != 0 as int32 && is_iconic(window) == 0 as int32 }
+package func enabled(window:uint) bool { return is_enabled(window) != 0 as int32 }
+package func focused(window:uint) bool {
+    let focus = current_focus()
+    return focus == window || (focus != 0 as uint && is_child(window,focus) != 0 as int32)
+}
+package func window_bounds(window:uint) (int,int,int,int) {
+    var words:uint[2] = [0 as uint,0 as uint]
+    let address = C.address_bits(C.mutable_pointer(words))
+    if get_window_rect(window,address) == 0 as int32 { return (0,0,0,0) }
+    let x = C.load<int32>(address,0 as uint) as int
+    let y = C.load<int32>(address,4 as uint) as int
+    return (x,y,C.load<int32>(address,8 as uint) as int-x,C.load<int32>(address,12 as uint) as int-y)
+}
+package func invalid_operation() int32 { return -2146233079 as int32 }
+let owning_thread = C.function<func(uint,uint) uint32>(library:Boundary.WindowsAccessibility,name:"GetWindowThreadProcessId")
+let is_visible = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"IsWindowVisible")
+let is_enabled = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"IsWindowEnabled")
+let current_focus = C.function<func() uint>(library:Boundary.WindowsAccessibility,name:"GetFocus")
+let is_child = C.function<func(uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"IsChild")
+let get_window_rect = C.function<func(uint,uint) int32>(library:Boundary.WindowsAccessibility,name:"GetWindowRect")
+
+let is_iconic = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"IsIconic")

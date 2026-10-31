@@ -1,0 +1,96 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.Presentation.Presentation
+use GFX.Accessibility.Windows.Native
+use GFX.Accessibility.Windows.Request
+use GFX.Accessibility.UIA.Types
+use Interop.C
+use Interop.Boundary
+
+// Windows-only CPU fixture. No HWND, SDL video, renderer or UIA client is
+// created. The system DLL exercises COM references and SAFEARRAY callbacks.
+func verify() {
+    // Invalid HWND construction also composes every Host callback without
+    // initializing video or constructing a native window.
+    var detached = Presentation(AX.EmptySource(),0 as uint,0 as uint,0.0,false)
+    assert(detached.root_handle() == 0 as uint && detached.peer_count() == 0)
+    detached.remove(); detached.remove()
+    let initialized = Native.initialize_com()
+    assert(initialized == 0 as int32 || initialized == 1 as int32 || initialized == -2147417850 as int32)
+    let owned = initialized == 0 as int32 || initialized == 1 as int32
+    let context = Native.context(0 as uint,0 as uint,Native.message_id())
+    assert(context != 0 as uint)
+    Request.initialize_tables(context); Native.activate(context)
+    let object = Request.create(context,1 as uint)
+    assert(object != 0 as uint && Native.owns_object(context,object))
+    let identity = Native.identity(object)
+    assert(identity == object && C.load<uint32>(object,32 as uint) == 2 as uint32)
+    Native.release_unknown(identity)
+    assert(C.load<uint32>(object,32 as uint) == 1 as uint32)
+
+    let table = C.load<uint>(object,0 as uint)
+    var options:int32 = 0 as int32
+    let status = C.call<func(uint,uint) int32>(C.load<uint>(table,24 as uint),object,C.address_bits(C.mutable_pointer(options)))
+    assert(status == 0 as int32 && options == 34 as int32)
+    var unknown:uint[2] = [42 as uint,84 as uint]; var output:uint = 123 as uint
+    assert(C.call<func(uint,uint,uint) int32>(C.load<uint>(table,0 as uint),object,C.address_bits(C.mutable_pointer(unknown)),C.address_bits(C.mutable_pointer(output))) == Native.no_interface())
+    assert(output == 0 as uint)
+
+    let array = Native.array(13 as uint16,1)
+    assert(array != 0 as uint && Native.put(array,0,object))
+    assert(C.load<uint32>(object,32 as uint) == 2 as uint32)
+    Native.destroy_array(array)
+    assert(C.load<uint32>(object,32 as uint) == 1 as uint32)
+
+    // IUnknown/options are raw thread-safe operations and must not enter Source.
+    let thread = create_thread(0 as uint,0 as uint,C.function_address(worker),object,0 as uint32,0 as uint)
+    assert(thread != 0 as uint && wait_thread(thread,5000 as uint32) == 0 as uint32)
+    assert(close_handle(thread) != 0 as int32)
+    assert(C.load<uint32>(object,32 as uint) == 1 as uint32)
+    let text = "\u{feff}Aé🐈中\0Z\u{fffe}"; let bstr = Native.bstr(text)
+    assert(bstr != 0 as uint && Native.read_bstr(bstr) == text)
+    assert(Native.read_wide(bstr) == "\u{feff}Aé🐈中")
+    Native.free_bstr(bstr)
+
+    let span = Request.create(context,2 as uint,true,1,3)
+    assert(span != 0 as uint)
+    let range_table = C.load<uint>(span,0 as uint)
+    var result:uint = 99 as uint
+    let value = Types.Variant(tag:11 as uint,value:65535 as uint)
+    assert(C.call<func(uint,int32,Types.Variant,int32,uint) int32>(C.load<uint>(range_table,56 as uint),span,40015 as int32,value,0 as int32,C.address_bits(C.mutable_pointer(result))) == Native.unavailable())
+    assert(result == 0 as uint)
+    // Compare rejects providers and ranges from another text peer without
+    // forwarding their interfaces to HWND or leaking the temporary QI ref.
+    var same:int32 = 123 as int32
+    let compare = C.load<uint>(range_table,32 as uint)
+    assert(C.call<func(uint,uint,uint) int32>(compare,span,object,C.address_bits(C.mutable_pointer(same))) == 0 as int32)
+    assert(same == 0 as int32 && C.load<uint32>(object,32 as uint) == 1 as uint32)
+    let unrelated = Request.create(context,3 as uint,true)
+    assert(unrelated != 0 as uint)
+    assert(C.call<func(uint,uint,uint) int32>(compare,span,unrelated,C.address_bits(C.mutable_pointer(same))) == 0 as int32)
+    assert(same == 0 as int32 && C.load<uint32>(unrelated,32 as uint) == 1 as uint32)
+    assert(Request.release(unrelated) == 0 as uint32)
+    Native.invalidate(context)
+    same = 123 as int32
+    assert(C.call<func(uint,uint,uint) int32>(compare,span,object,C.address_bits(C.mutable_pointer(same))) == Native.unavailable())
+    assert(same == 0 as int32)
+    assert(Request.release(span) == 0 as uint32)
+    assert(Request.release(object) == 0 as uint32)
+    Native.release_context(context)
+    if owned { Native.uninitialize_com() }
+}
+
+test "Windows UIA raw identities arrays strings and detached requests" { verify() }
+func main() { verify(); print("Windows UIA CPU protocol: passed") }
+
+func worker(object:uint) uint32 {
+    var index = 0
+    while index < 1000 {
+        let identity = Native.identity(object)
+        assert(identity == object)
+        Native.release_unknown(identity); index++
+    }
+    return 0 as uint32
+}
+let create_thread = C.function<func(uint,uint,uint,uint,uint32,uint) uint>(library:Boundary.WindowsAccessibility,name:"CreateThread")
+let wait_thread = C.function<func(uint,uint32) uint32>(library:Boundary.WindowsAccessibility,name:"WaitForSingleObject")
+let close_handle = C.function<func(uint) int32>(library:Boundary.WindowsAccessibility,name:"CloseHandle")

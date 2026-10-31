@@ -1,0 +1,70 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.TextData.Data
+
+// Endpoints count whole graphemes, like Source selections. UTF-16 limits are
+// applied only when producing BSTR text; no endpoint splits a grapheme.
+package struct Range {
+    var start:int
+    var end:int
+    init(start:int,end:int) { self.start = start; self.end = end }
+    func clamp(data:Data) {
+        self.start = data.clamp(self.start); self.end = data.clamp(self.end)
+        if self.end < self.start { self.end = self.start }
+    }
+    func expand(data:Data,unit:int32,geometry:AX.TextGeometry? = null) bool {
+        self.clamp(data)
+        if let span = data.at(self.start,unit,geometry) { self.start = span.start; self.end = span.start+span.length; return true }
+        return false
+    }
+    func move_endpoint(data:Data,endpoint:int32,unit:int32,count:int,geometry:AX.TextGeometry? = null) int {
+        self.clamp(data); var index = self.start; if endpoint == 1 as int32 { index = self.end }
+        let (next,moved) = data.advance(index,unit,count,geometry)
+        if endpoint == 0 as int32 { self.start = next; if self.end < next { self.end = next } }
+        else { self.end = next; if self.start > next { self.start = next } }
+        return moved
+    }
+    func move_units(data:Data,unit:int32,count:int,geometry:AX.TextGeometry? = null) int {
+        self.clamp(data); if count == 0 { return 0 }
+        if self.start == self.end { let moved = self.move_endpoint(data,0 as int32,unit,count,geometry); self.end = self.start; return moved }
+        if !self.expand(data,unit,geometry) { return 0 }
+        let (position,moved) = data.advance(self.start,unit,count,geometry)
+        var next = position; var actual = moved
+        if next == data.count() && actual > 0 {
+            let (previous,ignored) = data.advance(next,unit,-1,geometry); next = previous; actual--
+        }
+        if let span = data.at(next,unit,geometry) { self.start = span.start; self.end = span.start+span.length }
+        return actual
+    }
+    func text(data:Data,maximum:int = -1) str { return data.text(self.start,self.end,maximum) }
+    func find(data:Data,query:str,backward:bool,ignore_case:bool) Range? {
+        var span = self; span.clamp(data)
+        if let found = data.find(span.start,span.end,query,backward,ignore_case) { return Range(found.start,found.start+found.length) }
+        return null
+    }
+    func bounds(data:Data,geometry:AX.TextGeometry?) AX.Bounds[] {
+        var result:AX.Bounds[] = []; var span = self; span.clamp(data)
+        if var layout = geometry {
+            var first = span.start; var last = span.end
+            if let visible = layout.visible_range() {
+                if first < visible.start { first = visible.start }
+                if last > visible.start+visible.length { last = visible.start+visible.length }
+            }
+            if first > last || (first == last && span.start != span.end) { return [] }
+            var final_index = last; if last > first { final_index-- }
+            let first_line = layout.line_for_index(first); let last_line = layout.line_for_index(final_index)
+            if first_line != null && last_line != null {
+                var line = first_line!
+                while line <= last_line! {
+                    if let line_span = layout.range_for_line(line) {
+                        var start = first; var end = last
+                        if start < line_span.start { start = line_span.start }
+                        if end > line_span.start+line_span.length { end = line_span.start+line_span.length }
+                        if end >= start { if let rectangle = layout.bounds(AX.TextRange(start,end-start)) { result.append(rectangle) } }
+                    }
+                    line++
+                }
+            } else { if let rectangle = layout.bounds(AX.TextRange(first,last-first)) { result.append(rectangle) } }
+        }
+        return result
+    }
+}

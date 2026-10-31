@@ -1,0 +1,78 @@
+use Interop.C
+
+// Raw identities only. The caller holds its native context lock. No Silex
+// object, Source ID or managed container is accessed from a foreign thread.
+// The 24-byte header stores table pointer, capacity and occupied count.
+package func contains(context:uint,identity:uint) bool {
+    if identity <= 1 as uint { return false }
+    let table = C.load<uint>(context,0 as uint); let capacity = C.load<uint>(context,8 as uint)
+    if table == 0 as uint || capacity == 0 as uint { return false }
+    var index = hash(identity) & (capacity-1 as uint); var visited:uint = 0 as uint
+    while visited < capacity {
+        let value = C.load<uint>(table,index*8 as uint)
+        if value == 0 as uint { return false }
+        if value == identity { return true }
+        index = (index+1 as uint) & (capacity-1 as uint); visited++
+    }
+    return false
+}
+package func add(context:uint,identity:uint,allocate:uint,free:uint) bool {
+    if identity <= 1 as uint { return false }
+    if contains(context,identity) { return true }
+    var capacity = C.load<uint>(context,8 as uint); let used = C.load<uint>(context,16 as uint)
+    if capacity == 0 as uint || used >= capacity-capacity/4 as uint {
+        var next:uint = 32 as uint
+        if capacity != 0 as uint {
+            if capacity > 0x0fff_ffff_ffff_ffff as uint { return false }
+            next = capacity*2 as uint
+        }
+        let storage = C.call<func(uint,uint) uint>(allocate,next,8 as uint)
+        if storage == 0 as uint { return false }
+        let previous = C.load<uint>(context,0 as uint); var index:uint = 0 as uint; var count:uint = 0 as uint
+        while index < capacity {
+            let value = C.load<uint>(previous,index*8 as uint)
+            if value > 1 as uint { insert(storage,next,value); count++ }
+            index++
+        }
+        C.store<uint>(context,0 as uint,storage); C.store<uint>(context,8 as uint,next); C.store<uint>(context,16 as uint,count)
+        if previous != 0 as uint { C.call<func(uint) void>(free,previous) }
+        capacity = next
+    }
+    let table = C.load<uint>(context,0 as uint)
+    let occupied = insert(table,capacity,identity)
+    if !occupied { C.store<uint>(context,16 as uint,C.load<uint>(context,16 as uint)+1 as uint) }
+    return true
+}
+package func remove(context:uint,identity:uint) {
+    let table = C.load<uint>(context,0 as uint); let capacity = C.load<uint>(context,8 as uint)
+    if table == 0 as uint || capacity == 0 as uint || identity <= 1 as uint { return }
+    var index = hash(identity) & (capacity-1 as uint); var visited:uint = 0 as uint
+    while visited < capacity {
+        let value = C.load<uint>(table,index*8 as uint)
+        if value == 0 as uint { return }
+        if value == identity { C.store<uint>(table,index*8 as uint,1 as uint); return }
+        index = (index+1 as uint) & (capacity-1 as uint); visited++
+    }
+}
+package func destroy(context:uint,free:uint) {
+    let table = C.load<uint>(context,0 as uint)
+    C.store<uint>(context,0 as uint,0 as uint); C.store<uint>(context,8 as uint,0 as uint); C.store<uint>(context,16 as uint,0 as uint)
+    if table != 0 as uint { C.call<func(uint) void>(free,table) }
+}
+func hash(value:uint) uint { return (value >> 4 as uint) ^ (value >> 17 as uint) ^ (value >> 32 as uint) }
+// Return true when reusing a tombstone, which does not add an occupied slot.
+func insert(table:uint,capacity:uint,identity:uint) bool {
+    var index = hash(identity) & (capacity-1 as uint); var tombstone:uint? = null
+    var visited:uint = 0 as uint
+    while visited < capacity {
+        let value = C.load<uint>(table,index*8 as uint)
+        if value == 1 as uint && tombstone == null { tombstone = index }
+        if value == 0 as uint {
+            if let slot = tombstone { C.store<uint>(table,slot*8 as uint,identity); return true }
+            C.store<uint>(table,index*8 as uint,identity); return false
+        }
+        index = (index+1 as uint) & (capacity-1 as uint); visited++
+    }
+    if let slot = tombstone { C.store<uint>(table,slot*8 as uint,identity); return true }
+    return false
+}

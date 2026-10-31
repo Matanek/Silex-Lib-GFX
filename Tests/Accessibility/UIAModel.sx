@@ -1,0 +1,184 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.Model
+use STD.Collections.Dictionary
+
+class Data {
+    var row_queries:int = 0
+    var cell_queries:int = 0
+    var reads:int = 0
+    var known:Dictionary<str,int> = Dictionary<str,int>()
+    var pending:AX.Change[] = []
+    var enabled:bool = true
+    var requests:int = 0
+    var sparse_headers:bool = false
+    var mounted:bool = true
+    var reveals:int = 0
+    var reveal_range:AX.TextRange? = null
+    var reveal_start:bool = false
+}
+class Columns:AX.Columns {
+    func count() int { return 2 }
+    func column(index:int) str? { if index == 1 { return "middle column" } return null }
+}
+class Rows:AX.Rows {
+    private var data:Data
+    init(data:Data) { self.data = data }
+    func count() int { return 50000 }
+    func row(index:int) str? {
+        self.data.row_queries++
+        if index < 0 || index >= 50000 { return null }
+        let id = "opaque row / $(index)"; self.data.known.set(id,index); return id
+    }
+    func selected() str[] { return ["opaque row / 49999"] }
+}
+class Source:AX.Source {
+    var data:Data = Data()
+    func root() str? { if self.data.mounted { return "1" } return null }
+    func focused() str? { if self.data.mounted { return "1" } return null }
+    func read(id:str) AX.Element? {
+        self.data.reads++
+        if !self.data.mounted { return null }
+        if id == "1" { return AX.Element(id:id,role:AX.Role.table,row_count:50000,column_count:2,child_count:0,enabled:self.data.enabled) }
+        if let index = self.data.known.find(id) {
+            return AX.Element(id:id,parent:"visual wrapper",role:AX.Role.row,row_index:index,index:index,child_count:2,selected:index == 49999,enabled:self.data.enabled,actions:[AX.Action.select])
+        }
+        if id == "cell" { return AX.Element(id:id,parent:"opaque row / 49999",role:AX.Role.cell,row_index:49999,column_index:1) }
+        if self.data.sparse_headers {
+            if id == "middle column" { return AX.Element(id:id,role:AX.Role.column,header:"middle header",index:1) }
+            if id == "middle header" { return AX.Element(id:id,parent:"visual wrapper",role:AX.Role.column_header,index:1) }
+        }
+        return null
+    }
+    func rows(id:str) AX.Rows? { if id == "1" { return Rows(self.data) } return null }
+    func columns(id:str) AX.Columns? { if id == "1" && self.data.sparse_headers { return Columns() } return null }
+    func child(id:str,index:int) str? {
+        self.data.cell_queries++
+        if id == "opaque row / 49999" && index == 1 { return "cell" }
+        return null
+    }
+    func perform(id:str,request:AX.Request) bool { self.data.requests++; return true }
+    func reveal_text(id:str,span:AX.TextRange,align_to_start:bool) bool {
+        self.data.reveals++; self.data.reveal_range = span; self.data.reveal_start = align_to_start
+        return id == "text"
+    }
+    func changes() AX.Change[] { let result = self.data.pending; self.data.pending = []; return result }
+}
+
+test "UIA synthetic window identity never collides with opaque Source IDs" {
+    var source = Source(); var model = Model(source)
+    let window = model.window(); let root = model.root()
+    assert(window != root && model.source_id(window) == null && model.source_id(root) == "1")
+    assert(model.parent(root) == window && model.parent(window) == 0 as uint)
+    assert(model.navigate(window,3 as int32) == root && model.focused() == root)
+    model.remove(); assert(model.window() == 0 as uint && model.element(root) == null)
+}
+test "UIA indexed table queries realize one requested row and cell" {
+    var source = Source(); var model = Model(source); let table = model.root()
+    assert(model.child_count(table) == 50000 && source.data.row_queries == 0)
+    let cell = model.cell(table,49999,1)
+    assert(cell != 0 as uint && source.data.row_queries == 1 && source.data.cell_queries == 1)
+    let row = model.parent(cell)
+    assert(model.parent(row) == table)
+    assert(model.element(cell)!.column_index == 1)
+    let selected = model.selected(table)
+    assert(selected.count() == 1 && selected[0] == row && source.data.row_queries == 1)
+    assert(model.cell(table,50000,0) == 0 as uint && source.data.row_queries == 1)
+}
+test "UIA removed references cannot revive when a Source ID is reused" {
+    var source = Source(); var model = Model(source)
+    let old = model.root(); source.data.pending = [AX.Change("1",AX.ChangeKind.removed)]
+    model.synchronize(); let reads = source.data.reads
+    assert(model.element(old) == null && source.data.reads == reads)
+    assert(model.root() != old)
+    let row = model.child(model.root(),0)
+    source.data.enabled = false
+    assert(!model.perform(row,AX.Request(AX.Action.select)) && source.data.requests == 0)
+    source.data.enabled = true
+    assert(model.perform(row,AX.Request(AX.Action.select)) && source.data.requests == 1 && model.dirty)
+}
+test "UIA sparse column headers retain source indices and compact fragment order" {
+    var source = Source(); source.data.sparse_headers = true
+    var model = Model(source); let table = model.root()
+    assert(model.child_count(table) == 50001 && source.data.row_queries == 0)
+    let headers = model.headers(table)
+    assert(headers.count() == 1 && model.column_header(table,0) == 0 as uint)
+    let header = model.column_header(table,1)
+    assert(headers[0] == header && model.child(table,0) == header)
+    assert(model.parent(header) == table && model.header_index(header) == 0)
+    let row = model.navigate(header,1 as int32)
+    assert(model.element(row)!.row_index == 0 && source.data.row_queries == 1)
+    source.data.sparse_headers = false
+    source.data.pending = [AX.Change("middle header",AX.ChangeKind.removed)]
+    model.synchronize()
+    assert(model.element(header) == null && model.headers(table).count() == 0)
+    assert(model.child_count(table) == 50000 && source.data.row_queries == 1)
+}
+test "UIA replacing the root retires only realized peers" {
+    var source = Source(); var model = Model(source)
+    let root = model.root(); let row = model.row(root,49999)
+    assert(model.peer_count() == 2 && source.data.row_queries == 1)
+    source.data.mounted = false; model.synchronize()
+    assert(model.root_changed && model.retired.count() == 2)
+    assert(model.element(root) == null && model.element(row) == null)
+    assert(model.child_count(model.window()) == 0 && source.data.row_queries == 1)
+    source.data.mounted = true; model.synchronize()
+    assert(model.root() != root && model.element(row) == null)
+}
+
+
+class HeaderState { var moved:bool = false; var pending:AX.Change[] = [] }
+struct HeaderColumns:AX.Columns {
+    var state:HeaderState
+    let right:bool
+    func count() int { return 1 }
+    func column(index:int) str? { if index == 0 && self.state.moved == self.right { return "column" } return null }
+}
+struct HeaderRows:AX.Rows {
+    let table:str
+    func count() int { return 1 }
+    func row(index:int) str? { if index == 0 { return "$(self.table)-row" } return null }
+}
+class HeaderSource:AX.Source {
+    var state:HeaderState = HeaderState()
+    func root() str? { return "root" }
+    func focused() str? { return null }
+    func read(id:str) AX.Element? {
+        if id == "root" { return AX.Element(id:id,child_count:2) }
+        if id == "left" || id == "right" { return AX.Element(id:id,parent:"root",role:AX.Role.table,row_count:1,column_count:1) }
+        if id == "header" || id == "column" {
+            var parent = "left"; if self.state.moved { parent = "right" }
+            if id == "header" { return AX.Element(id:id,parent:parent,role:AX.Role.column_header,index:0) }
+            return AX.Element(id:id,parent:parent,role:AX.Role.column,header:"header")
+        }
+        if id == "left-row" { return AX.Element(id:id,parent:"left",role:AX.Role.row,row_index:0) }
+        if id == "right-row" { return AX.Element(id:id,parent:"right",role:AX.Role.row,row_index:0) }
+        return null
+    }
+    func child(id:str,index:int) str? { if id == "root" { if index == 0 { return "left" } if index == 1 { return "right" } } return null }
+    func rows(id:str) AX.Rows? { if id == "left" || id == "right" { return HeaderRows(table:id) } return null }
+    func columns(id:str) AX.Columns? { if id == "left" || id == "right" { return HeaderColumns(state:self.state,right:id == "right") } return null }
+    func changes() AX.Change[] { let result = self.state.pending; self.state.pending = []; return result }
+    func perform(id:str,request:AX.Request) bool { return false }
+}
+test "UIA retained headers navigate in their current table after reparenting" {
+    var source = HeaderSource(); var model = Model(source)
+    let left = model.peer("left"); let right = model.peer("right")
+    let header = model.column_header(left,0)
+    assert(header != 0 as uint && model.parent(header) == left && model.header_index(header) == 0)
+    assert(model.headers(right).is_empty())
+    source.state.moved = true
+    source.state.pending = [AX.Change("header",AX.ChangeKind.relations)]
+    model.synchronize()
+    assert(model.parent(header) == right && model.header_index(header) == 0)
+    assert(model.source_id(model.navigate(header,1 as int32)) == "right-row")
+    assert(model.headers(left).is_empty() && model.headers(right)[0] == header)
+}
+
+test "UIA reveals a text span without converting it into a selection action" {
+    var source = Source(); var model = Model(source); let peer = model.peer("text")
+    assert(model.reveal_text(peer,AX.TextRange(2,3),true))
+    assert(model.dirty && source.data.reveals == 1 && source.data.requests == 0)
+    assert(source.data.reveal_range!.start == 2 && source.data.reveal_range!.length == 3 && source.data.reveal_start)
+    model.remove()
+    assert(!model.reveal_text(peer,AX.TextRange(0,1),false) && source.data.reveals == 1)
+}

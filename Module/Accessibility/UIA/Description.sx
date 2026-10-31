@@ -1,0 +1,86 @@
+use GFX.Accessibility as AX
+
+// UIAutomationClient.h identifiers. Capability queries remain independent of
+// enabled state: a disabled slider still exposes RangeValue and IsReadOnly.
+package func control_type(role:AX.Role) int32 {
+    if role == AX.Role.text { return 50020 as int32 }
+    if role == AX.Role.button { return 50000 as int32 }
+    if role == AX.Role.checkbox { return 50002 as int32 }
+    if role == AX.Role.radio { return 50013 as int32 }
+    if role == AX.Role.radio_group { return 50026 as int32 }
+    if role == AX.Role.text_field { return 50004 as int32 }
+    if role == AX.Role.text_area { return 50004 as int32 }
+    if role == AX.Role.slider { return 50015 as int32 }
+    if role == AX.Role.scrollbar { return 50014 as int32 }
+    if role == AX.Role.scroll_view { return 50033 as int32 }
+    if role == AX.Role.list { return 50008 as int32 }
+    if role == AX.Role.list_item { return 50007 as int32 }
+    if role == AX.Role.tree { return 50023 as int32 }
+    if role == AX.Role.tree_item { return 50024 as int32 }
+    if role == AX.Role.table { return 50028 as int32 }
+    if role == AX.Role.row { return 50029 as int32 }
+    if role == AX.Role.column_header { return 50035 as int32 }
+    if role == AX.Role.column { return 50026 as int32 }
+    if role == AX.Role.cell { return 50029 as int32 }
+    if role == AX.Role.tab_group { return 50018 as int32 }
+    if role == AX.Role.tab { return 50019 as int32 }
+    if role == AX.Role.menu { return 50009 as int32 }
+    if role == AX.Role.menu_item { return 50011 as int32 }
+    if role == AX.Role.combo_box { return 50003 as int32 }
+    if role == AX.Role.dialog { return 50032 as int32 }
+    if role == AX.Role.tooltip { return 50022 as int32 }
+    if role == AX.Role.image { return 50006 as int32 }
+    if role == AX.Role.progress { return 50012 as int32 }
+    if role == AX.Role.separator { return 50038 as int32 }
+    return 50026 as int32
+}
+package func has(element:AX.Element, action:AX.Action) bool {
+    for candidate in element.actions { if candidate == action { return true } }
+    return false
+}
+package func text(element:AX.Element) bool {
+    return element.role == AX.Role.text_field || element.role == AX.Role.text_area || element.role == AX.Role.text
+}
+package func selection(element:AX.Element) bool {
+    return element.role == AX.Role.radio_group || element.role == AX.Role.list || element.role == AX.Role.tree || element.role == AX.Role.table || element.role == AX.Role.tab_group || element.role == AX.Role.combo_box
+}
+package func supports(element:AX.Element, pattern:int32) bool {
+    if pattern == 10000 {
+        let activatable = has(element,AX.Action.activate) || (!element.enabled && (element.role == AX.Role.button || element.role == AX.Role.menu_item))
+        return activatable && element.checked == null && element.role != AX.Role.radio
+    }
+    if pattern == 10001 { return selection(element) }
+    if pattern == 10002 { return element.value != null && (element.role == AX.Role.text_field || element.role == AX.Role.text_area || element.role == AX.Role.combo_box || element.role == AX.Role.cell) }
+    if pattern == 10003 { return element.number != null && element.minimum != null && element.maximum != null }
+    if pattern == 10005 { return element.expanded != null }
+    if pattern == 10006 || pattern == 10012 { return element.role == AX.Role.table && element.row_count != null && element.column_count != null }
+    if pattern == 10007 || pattern == 10013 { return element.role == AX.Role.cell && element.row_index != null && element.column_index != null }
+    if pattern == 10009 { return element.role == AX.Role.dialog && has(element,AX.Action.dismiss) }
+    if pattern == 10010 { return element.role == AX.Role.radio || (element.selected != null && (element.role == AX.Role.row || element.role == AX.Role.cell || element.role == AX.Role.list_item || element.role == AX.Role.tree_item || element.role == AX.Role.tab)) }
+    if pattern == 10014 { return text(element) }
+    if pattern == 10015 { return element.checked != null && element.role != AX.Role.radio }
+    if pattern == 10017 { return has(element,AX.Action.reveal) }
+    return false
+}
+package func read_only(element:AX.Element) bool { return !element.enabled || !has(element,AX.Action.set_value) }
+
+// Availability properties use the same capability decision as GetPatternProvider.
+package func property_pattern(property:int32) int32 {
+    if property == 30028 as int32 { return 10005 as int32 }
+    if property == 30029 as int32 { return 10007 as int32 }
+    if property == 30030 as int32 { return 10006 as int32 }
+    if property == 30031 as int32 { return 10000 as int32 }
+    if property == 30033 as int32 { return 10003 as int32 }
+    if property == 30035 as int32 { return 10017 as int32 }
+    if property == 30036 as int32 { return 10010 as int32 }
+    if property == 30037 as int32 { return 10001 as int32 }
+    if property == 30038 as int32 { return 10012 as int32 }
+    if property == 30039 as int32 { return 10013 as int32 }
+    if property == 30040 as int32 { return 10014 as int32 }
+    if property == 30041 as int32 { return 10015 as int32 }
+    if property == 30043 as int32 { return 10002 as int32 }
+    if property == 30044 as int32 { return 10009 as int32 }
+    return -1 as int32
+}
+package func selected(element:AX.Element) bool { return element.selected == true || (element.role == AX.Role.radio && element.checked == true) }
+package func selection_required(element:AX.Element) bool { return element.role == AX.Role.radio_group || element.role == AX.Role.tab_group }

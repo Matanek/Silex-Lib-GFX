@@ -1,0 +1,20 @@
+use STD.Text.UTF8
+
+// Native UTF-16 strings contain code units, not a file BOM. Preserve leading
+// U+FEFF/U+FFFE and embedded zero units; reject malformed surrogate pairs.
+package func decode(bytes:@uint8[..]) str? {
+    if bytes.count()%2 != 0 { return null }
+    var scalars:uint32[] = []; var index = 0
+    while index < bytes.count() {
+        let first = bytes[index] as uint32 + (bytes[index+1] as uint32 << 8 as uint32)
+        index += 2
+        if first >= 0xd800 as uint32 && first <= 0xdbff as uint32 {
+            if index >= bytes.count() { return null }
+            let second = bytes[index] as uint32 + (bytes[index+1] as uint32 << 8 as uint32)
+            if second < 0xdc00 as uint32 || second > 0xdfff as uint32 { return null }
+            scalars.append(0x10000 as uint32+((first-0xd800 as uint32) << 10 as uint32)+(second-0xdc00 as uint32)); index += 2
+        } elif first >= 0xdc00 as uint32 && first <= 0xdfff as uint32 { return null }
+        else { scalars.append(first) }
+    }
+    return UTF8.from_scalars(@scalars[0:scalars.count()])
+}

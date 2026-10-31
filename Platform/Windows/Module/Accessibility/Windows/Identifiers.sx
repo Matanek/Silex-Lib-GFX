@@ -1,0 +1,59 @@
+// GUIDs and interface identities from uiautomationcore.h. The native COM
+// interfaces each start with IUnknown; no .NET interface inheritance is used.
+package func index(first:uint,last:uint) int {
+    if first == 0 && last == 0x46000000000000c0 { return 0 }
+    // IRawElementProviderSimple
+    if first == 0x433286fdd6dd68d1 && last == 0x4cd2a2debe9a6686 { return 1 }
+    // IRawElementProviderFragment
+    if first == 0x439c8359f7063da8 && last == 0x877d9a29c5bb9792 { return 2 }
+    // IRawElementProviderFragmentRoot
+    if first == 0x40a9ab8f620ce2a5 && last == 0x589b59753cdecb86 { return 3 }
+    // IInvokeProvider
+    if first == 0x47a2e18e54fcb24b && last == 0xa29975e7cbecd3b4 { return 4 }
+    // IValueProvider
+    if first == 0x42016fb3c7935180 && last == 0x4af6db3af77d74b1 { return 5 }
+    // IRangeValueProvider
+    if first == 0x469133e636dc7aef && last == 0x333d4b27e72be1af { return 6 }
+    // IToggleProvider
+    if first == 0x433cc4f456d00bd0 && last == 0x92087ea5521a36a8 { return 7 }
+    // ISelectionItemProvider
+    if first == 0x452db2d42acad808 && last == 0xb267d11aff9107a4 { return 8 }
+    // ISelectionProvider
+    if first == 0x48d43bdffb8b03af && last == 0x68e13b79651a36bd { return 9 }
+    // IExpandCollapseProvider
+    if first == 0x4a98cab0d847d3a5 && last == 0x24ad595cb4ec328c { return 10 }
+    // IScrollItemProvider
+    if first == 0x4b264bf12360c714 && last == 0xeb276131219b65ba { return 11 }
+    // IGridProvider
+    if first == 0x464b0907b17d6187 && last == 0xb172157af10e68a1 { return 12 }
+    // IGridItemProvider
+    if first == 0x4d64fb81d02541f1 && last == 0xd1dba6f820f532ae { return 13 }
+    // ITableProvider
+    if first == 0x490a97b39c860395 && last == 0x66f12ac28c852ab5 { return 14 }
+    // ITableItemProvider
+    if first == 0x4d78771fb9734fa6 && last == 0xcd4993991725909c { return 15 }
+    // ITextProvider
+    if first == 0x436763f33589c92c && last == 0xf27cb753a6adbb99 { return 16 }
+    // ITextRangeProvider
+    if first == 0x46f8c3555347ad7b && last == 0x632f58339090f5af { return 18 }
+    // IWindowProvider
+    if first == 0x4d77db06987df77b && last == 0xb990bbc3a9868a8f { return 17 }
+    return -1
+}
+package func pattern_interface(pattern:int32) int {
+    if pattern == 10009 as int32 { return 16 }
+    if pattern == 10000 as int32 { return 3 }
+    if pattern == 10002 as int32 { return 4 }
+    if pattern == 10003 as int32 { return 5 }
+    if pattern == 10015 as int32 { return 6 }
+    if pattern == 10010 as int32 { return 7 }
+    if pattern == 10001 as int32 { return 8 }
+    if pattern == 10005 as int32 { return 9 }
+    if pattern == 10017 as int32 { return 10 }
+    if pattern == 10006 as int32 { return 11 }
+    if pattern == 10007 as int32 { return 12 }
+    if pattern == 10012 as int32 { return 13 }
+    if pattern == 10013 as int32 { return 14 }
+    if pattern == 10014 as int32 { return 15 }
+    return -1
+}

@@ -1,0 +1,246 @@
+use GFX.Accessibility.Windows.Native
+use GFX.Accessibility.Windows.Identifiers
+use GFX.Accessibility.UIA.Types
+use Interop.C
+
+// Object header: vtable/base/context/token/refcount/kind/start/end. All
+// published interfaces contain their canonical IUnknown identity at +8.
+package func base(facet:uint) uint { if facet == 0 as uint { return 0 as uint } return C.load<uint>(facet,8 as uint) }
+package func facet(object:uint,index:int) uint {
+    if index == 0 { return object }
+    return object+(64+(index-1)*16) as uint
+}
+package func create(context:uint,token:uint,is_range:bool = false,start:int = 0,end:int = 0) uint {
+    var size:uint = 320 as uint; var table = 0
+    if is_range { size = 64 as uint; table = 17 }
+    let object = Native.allocate(size); if object == 0 as uint { return 0 as uint }
+    C.store<uint>(object,0 as uint,C.load<uint>(context,(160+table*8) as uint))
+    C.store<uint>(object,8 as uint,object); C.store<uint>(object,16 as uint,context); C.store<uint>(object,24 as uint,token)
+    C.store<uint32>(object,32 as uint,1 as uint32)
+    if is_range { C.store<uint32>(object,36 as uint,1 as uint32) }
+    C.store<int>(object,40 as uint,start); C.store<int>(object,48 as uint,end)
+    if !is_range {
+        var index = 1
+        while index < 17 {
+            let entry = facet(object,index)
+            C.store<uint>(entry,0 as uint,C.load<uint>(context,(160+index*8) as uint)); C.store<uint>(entry,8 as uint,object)
+            index++
+        }
+    }
+    Native.lock(context)
+    if !Native.register_object(context,object) { Native.unlock(context); Native.free(object); return 0 as uint }
+    C.store<int32>(context,0 as uint,C.load<int32>(context,0 as uint)+1 as int32)
+    Native.unlock(context); return object
+}
+package func retain(this:uint) uint32 {
+    let object = base(this); let context = C.load<uint>(object,16 as uint)
+    Native.lock(context); var references = C.load<uint32>(object,32 as uint)
+    if references != 0xffff_ffff as uint32 { references++ ; C.store<uint32>(object,32 as uint,references) }
+    Native.unlock(context); return references
+}
+package func release(this:uint) uint32 {
+    let object = base(this); let context = C.load<uint>(object,16 as uint)
+    Native.lock(context); let previous = C.load<uint32>(object,32 as uint)
+    if previous == 0xffff_ffff as uint32 { Native.unlock(context); return previous }
+    let references = previous-1 as uint32; C.store<uint32>(object,32 as uint,references)
+    if references == 0 as uint32 { Native.forget_object(context,object) }
+    Native.unlock(context)
+    if references == 0 as uint32 { Native.free(object); Native.release_context(context) }
+    return references
+}
+func query(this:uint,guid:uint,output:uint) int32 {
+    if output == 0 as uint || guid == 0 as uint { return Native.pointer_error() }
+    C.store<uint>(output,0 as uint,0 as uint)
+    let object = base(this); if object == 0 as uint { return Native.pointer_error() }
+    let known = Identifiers.index(C.load<uint>(guid,0 as uint),C.load<uint>(guid,8 as uint))
+    let span = C.load<uint32>(object,36 as uint) == 1 as uint32
+    var index = 0
+    if known != 0 {
+        if span { if known != 18 { return Native.no_interface() } }
+        else {
+            if known < 1 || known > 17 { return Native.no_interface() }
+            index = known-1
+            if index == 2 && C.load<uint>(object,24 as uint) != 1 as uint { return Native.no_interface() }
+            // The HWND provider supplies its own native Window pattern.
+            if index == 16 && C.load<uint>(object,24 as uint) == 1 as uint { return Native.no_interface() }
+        }
+    }
+    let result = facet(object,index); retain(result); C.store<uint>(output,0 as uint,result); return 0 as int32
+}
+func make(this:uint,operation:int32,output:uint = 0 as uint,detail:int32 = 0 as int32,first:int = 0,second:uint = 0 as uint,third:int = 0,number:float64 = 0.0 as float64) uint {
+    let object = base(this); if object == 0 as uint { return 0 as uint }
+    let packet = Native.allocate(128 as uint); if packet == 0 as uint { return 0 as uint }
+    C.store<uint>(packet,0 as uint,C.load<uint>(object,16 as uint)); C.store<uint>(packet,8 as uint,object)
+    C.store<int32>(packet,16 as uint,operation); C.store<int32>(packet,20 as uint,detail)
+    C.store<int>(packet,24 as uint,first); C.store<uint>(packet,32 as uint,second); C.store<int>(packet,40 as uint,third)
+    C.store<float64>(packet,48 as uint,number); C.store<uint>(packet,56 as uint,output)
+    C.store<int32>(packet,64 as uint,Native.unavailable()); return packet
+}
+func finish(packet:uint) int32 {
+    if packet == 0 as uint { return Native.out_of_memory() }
+    let context = C.load<uint>(packet,0 as uint); let result = Native.send(context,packet); Native.free(packet); return result
+}
+func pointer(this:uint,operation:int32,output:uint,detail:int32 = 0 as int32,first:int = 0,second:uint = 0 as uint,third:int = 0) int32 {
+    if output == 0 as uint { return Native.pointer_error() }
+    C.store<uint>(output,0 as uint,0 as uint)
+    return finish(make(this,operation,output,detail,first,second,third))
+}
+func integer(this:uint,operation:int32,output:uint,detail:int32 = 0 as int32,first:int = 0,second:uint = 0 as uint,third:int = 0) int32 {
+    if output == 0 as uint { return Native.pointer_error() }
+    C.store<int32>(output,0 as uint,0 as int32)
+    return finish(make(this,operation,output,detail,first,second,third))
+}
+func double(this:uint,operation:int32,output:uint) int32 {
+    if output == 0 as uint { return Native.pointer_error() }
+    C.store<float64>(output,0 as uint,0.0 as float64); return finish(make(this,operation,output))
+}
+func variant(this:uint,operation:int32,detail:int32,output:uint) int32 {
+    if output == 0 as uint { return Native.pointer_error() }
+    C.store<uint>(output,0 as uint,0 as uint); C.store<uint>(output,8 as uint,0 as uint); C.store<uint>(output,16 as uint,0 as uint)
+    return finish(make(this,operation,output,detail))
+}
+func point(this:uint,operation:int32,x:float64,y:float64,output:uint) int32 {
+    if output == 0 as uint { return Native.pointer_error() }
+    C.store<uint>(output,0 as uint,0 as uint)
+    let packet = make(this,operation,output,number:x); if packet == 0 as uint { return Native.out_of_memory() }
+    C.store<float64>(packet,72 as uint,y); return finish(packet)
+}
+
+// Resolve a foreign COM interface in the apartment of the incoming call. Never
+// forward an arbitrary apartment-bound pointer to HWND's thread. Only one of
+// our registered raw span identities is passed through, retained until return.
+func other_range(this:uint,operation:int32,other:uint,output:uint = 0 as uint,endpoint:int32 = 0 as int32,target:int = 0) int32 {
+    if operation != 112 as int32 {
+        if output == 0 as uint { return Native.pointer_error() }
+        C.store<int32>(output,0 as uint,0 as int32)
+    }
+    let object = base(this)
+    if object == 0 as uint { return Native.pointer_error() }
+    let context = C.load<uint>(object,16 as uint)
+    if !Native.active(context) { return Native.unavailable() }
+    let identity = Native.identity(other)
+    if identity == 0 as uint { if operation == 101 as int32 { return 0 as int32 } return Native.invalid_argument() }
+    var valid = Native.owns_object(context,identity)
+    if valid {
+        valid = C.load<uint>(identity,16 as uint) == context && C.load<uint32>(identity,36 as uint) == 1 as uint32 && C.load<uint>(identity,24 as uint) == C.load<uint>(object,24 as uint)
+    }
+    var result = Native.invalid_argument()
+    if !Native.active(context) { result = Native.unavailable() }
+    elif valid { result = finish(make(this,operation,output,endpoint,second:identity,third:target)) }
+    elif operation == 101 as int32 { result = 0 as int32 }
+    Native.release_unknown(identity); return result
+}
+
+// Each row follows the native SDK vtable order, independently of other interfaces.
+func options(this:uint,output:uint) int32 { if output == 0 as uint { return Native.pointer_error() } C.store<int32>(output,0 as uint,34 as int32); return 0 as int32 }
+func pattern(this:uint,pattern:int32,output:uint) int32 { return pointer(this,2 as int32,output,detail:pattern) }
+func property(this:uint,property:int32,output:uint) int32 { return variant(this,1 as int32,property,output) }
+func host(this:uint,output:uint) int32 { return pointer(this,4 as int32,output) }
+func rectangle(this:uint,output:uint) int32 { if output == 0 as uint { return Native.pointer_error() } C.store<uint>(output,0 as uint,0 as uint); C.store<uint>(output,8 as uint,0 as uint); C.store<uint>(output,16 as uint,0 as uint); C.store<uint>(output,24 as uint,0 as uint); return finish(make(this,12 as int32,output)) }
+func navigate(this:uint,direction:int32,output:uint) int32 { return pointer(this,10 as int32,output,detail:direction) }
+func runtime_id(this:uint,output:uint) int32 { return pointer(this,11 as int32,output) }
+func embedded_roots(this:uint,output:uint) int32 { return pointer(this,13 as int32,output) }
+func set_focus(this:uint) int32 { return finish(make(this,14 as int32)) }
+func fragment_root(this:uint,output:uint) int32 { return pointer(this,15 as int32,output) }
+func element_at(this:uint,x:float64,y:float64,output:uint) int32 { return point(this,16 as int32,x,y,output) }
+func focused(this:uint,output:uint) int32 { return pointer(this,17 as int32,output) }
+func invoke(this:uint) int32 { return finish(make(this,20 as int32)) }
+func set_string(this:uint,value:uint) int32 { return finish(make(this,21 as int32,second:value)) }
+func get_string(this:uint,output:uint) int32 { return pointer(this,22 as int32,output) }
+func read_only(this:uint,output:uint) int32 { return integer(this,23 as int32,output) }
+func set_number(this:uint,value:float64) int32 { return finish(make(this,24 as int32,number:value)) }
+func get_number(this:uint,output:uint) int32 { return double(this,25 as int32,output) }
+func maximum(this:uint,output:uint) int32 { return double(this,26 as int32,output) }
+func minimum(this:uint,output:uint) int32 { return double(this,27 as int32,output) }
+func large_change(this:uint,output:uint) int32 { return double(this,28 as int32,output) }
+func small_change(this:uint,output:uint) int32 { return double(this,29 as int32,output) }
+func toggle(this:uint) int32 { return finish(make(this,30 as int32)) }
+func toggle_state(this:uint,output:uint) int32 { return integer(this,31 as int32,output) }
+func select(this:uint) int32 { return finish(make(this,32 as int32)) }
+func add_selection(this:uint) int32 { return finish(make(this,33 as int32)) }
+func remove_selection(this:uint) int32 { return finish(make(this,34 as int32)) }
+func is_selected(this:uint,output:uint) int32 { return integer(this,35 as int32,output) }
+func selection_container(this:uint,output:uint) int32 { return pointer(this,36 as int32,output) }
+func get_selection(this:uint,output:uint) int32 { return pointer(this,37 as int32,output) }
+func multiple_selection(this:uint,output:uint) int32 { return integer(this,38 as int32,output) }
+func selection_required(this:uint,output:uint) int32 { return integer(this,39 as int32,output) }
+func expand(this:uint) int32 { return finish(make(this,40 as int32)) }
+func collapse(this:uint) int32 { return finish(make(this,41 as int32)) }
+func expanded_state(this:uint,output:uint) int32 { return integer(this,42 as int32,output) }
+func reveal(this:uint) int32 { return finish(make(this,43 as int32)) }
+func grid_item(this:uint,row:int32,column:int32,output:uint) int32 { return pointer(this,44 as int32,output,first:row as int,third:column as int) }
+func rows(this:uint,output:uint) int32 { return integer(this,45 as int32,output) }
+func columns(this:uint,output:uint) int32 { return integer(this,46 as int32,output) }
+func row(this:uint,output:uint) int32 { return integer(this,47 as int32,output) }
+func column(this:uint,output:uint) int32 { return integer(this,48 as int32,output) }
+func row_span(this:uint,output:uint) int32 { return integer(this,49 as int32,output) }
+func column_span(this:uint,output:uint) int32 { return integer(this,50 as int32,output) }
+func containing_grid(this:uint,output:uint) int32 { return pointer(this,51 as int32,output) }
+func row_headers(this:uint,output:uint) int32 { return pointer(this,52 as int32,output) }
+func column_headers(this:uint,output:uint) int32 { return pointer(this,53 as int32,output) }
+func major_axis(this:uint,output:uint) int32 { return integer(this,54 as int32,output) }
+func cell_row_headers(this:uint,output:uint) int32 { return pointer(this,55 as int32,output) }
+func cell_column_headers(this:uint,output:uint) int32 { return pointer(this,56 as int32,output) }
+func text_selection(this:uint,output:uint) int32 { return pointer(this,57 as int32,output) }
+func visible_ranges(this:uint,output:uint) int32 { return pointer(this,58 as int32,output) }
+func range_from_child(this:uint,child:uint,output:uint) int32 { return pointer(this,59 as int32,output,second:child) }
+func range_from_point(this:uint,value:Types.Point,output:uint) int32 { return point(this,60 as int32,value.x,value.y,output) }
+func document_range(this:uint,output:uint) int32 { return pointer(this,61 as int32,output) }
+func text_selection_mode(this:uint,output:uint) int32 { return integer(this,62 as int32,output) }
+func window_state(this:uint,state:int32) int32 { return finish(make(this,70 as int32,detail:state)) }
+func window_close(this:uint) int32 { return finish(make(this,71 as int32)) }
+func window_idle(this:uint,milliseconds:int32,output:uint) int32 { return integer(this,72 as int32,output,first:milliseconds as int) }
+func can_maximize(this:uint,output:uint) int32 { return integer(this,73 as int32,output) }
+func can_minimize(this:uint,output:uint) int32 { return integer(this,74 as int32,output) }
+func is_modal(this:uint,output:uint) int32 { return integer(this,75 as int32,output) }
+func visual_state(this:uint,output:uint) int32 { return integer(this,76 as int32,output) }
+func interaction_state(this:uint,output:uint) int32 { return integer(this,77 as int32,output) }
+func is_topmost(this:uint,output:uint) int32 { return integer(this,78 as int32,output) }
+func find_attribute(this:uint,attribute:int32,value:Types.Variant,backward:int32,output:uint) int32 { if output == 0 as uint { return Native.pointer_error() } C.store<uint>(output,0 as uint,0 as uint); let packet = make(this,104 as int32,output,detail:attribute,first:backward as int); if packet == 0 as uint { return Native.out_of_memory() } C.store<uint>(packet,80 as uint,value.tag); C.store<uint>(packet,88 as uint,value.value); C.store<uint>(packet,96 as uint,value.extra); return finish(packet) }
+func clone(this:uint,output:uint) int32 { return pointer(this,100 as int32,output) }
+func compare(this:uint,other:uint,output:uint) int32 { return other_range(this,101 as int32,other,output) }
+func compare_endpoints(this:uint,endpoint:int32,other:uint,target:int32,output:uint) int32 { return other_range(this,102 as int32,other,output,endpoint,target as int) }
+func enclose(this:uint,unit:int32) int32 { return finish(make(this,103 as int32,detail:unit)) }
+func find_text(this:uint,text:uint,backward:int32,ignore_case:int32,output:uint) int32 { return pointer(this,105 as int32,output,detail:backward,first:ignore_case as int,second:text) }
+func attribute(this:uint,attribute:int32,output:uint) int32 { return variant(this,106 as int32,attribute,output) }
+func text_bounds(this:uint,output:uint) int32 { return pointer(this,107 as int32,output) }
+func enclosing_element(this:uint,output:uint) int32 { return pointer(this,108 as int32,output) }
+func get_text(this:uint,maximum:int32,output:uint) int32 { return pointer(this,109 as int32,output,first:maximum as int) }
+func move_range(this:uint,unit:int32,count:int32,output:uint) int32 { return integer(this,110 as int32,output,detail:unit,first:count as int) }
+func move_endpoint(this:uint,endpoint:int32,unit:int32,count:int32,output:uint) int32 { return integer(this,111 as int32,output,detail:endpoint,first:count as int,third:unit as int) }
+func move_to_range(this:uint,endpoint:int32,other:uint,target:int32) int32 { return other_range(this,112 as int32,other,endpoint:endpoint,target:target as int) }
+func select_text(this:uint) int32 { return finish(make(this,113 as int32)) }
+func add_text_selection(this:uint) int32 { return finish(make(this,114 as int32)) }
+func remove_text_selection(this:uint) int32 { return finish(make(this,115 as int32)) }
+func scroll_text(this:uint,align_top:int32) int32 { return finish(make(this,116 as int32,detail:align_top)) }
+func text_children(this:uint,output:uint) int32 { return pointer(this,117 as int32,output) }
+
+package func initialize_tables(context:uint) {
+    let tables:uint[][] = [
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(options), C.function_address(pattern), C.function_address(property), C.function_address(host)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(navigate), C.function_address(runtime_id), C.function_address(rectangle), C.function_address(embedded_roots), C.function_address(set_focus), C.function_address(fragment_root)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(element_at), C.function_address(focused)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(invoke)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(set_string), C.function_address(get_string), C.function_address(read_only)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(set_number), C.function_address(get_number), C.function_address(read_only), C.function_address(maximum), C.function_address(minimum), C.function_address(large_change), C.function_address(small_change)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(toggle), C.function_address(toggle_state)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(select), C.function_address(add_selection), C.function_address(remove_selection), C.function_address(is_selected), C.function_address(selection_container)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(get_selection), C.function_address(multiple_selection), C.function_address(selection_required)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(expand), C.function_address(collapse), C.function_address(expanded_state)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(reveal)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(grid_item), C.function_address(rows), C.function_address(columns)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(row), C.function_address(column), C.function_address(row_span), C.function_address(column_span), C.function_address(containing_grid)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(row_headers), C.function_address(column_headers), C.function_address(major_axis)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(cell_row_headers), C.function_address(cell_column_headers)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(text_selection), C.function_address(visible_ranges), C.function_address(range_from_child), C.function_address(range_from_point), C.function_address(document_range), C.function_address(text_selection_mode)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(window_state), C.function_address(window_close), C.function_address(window_idle), C.function_address(can_maximize), C.function_address(can_minimize), C.function_address(is_modal), C.function_address(visual_state), C.function_address(interaction_state), C.function_address(is_topmost)],
+        [C.function_address(query), C.function_address(retain), C.function_address(release), C.function_address(clone), C.function_address(compare), C.function_address(compare_endpoints), C.function_address(enclose), C.function_address(find_attribute), C.function_address(find_text), C.function_address(attribute), C.function_address(text_bounds), C.function_address(enclosing_element), C.function_address(get_text), C.function_address(move_range), C.function_address(move_endpoint), C.function_address(move_to_range), C.function_address(select_text), C.function_address(add_text_selection), C.function_address(remove_text_selection), C.function_address(scroll_text), C.function_address(text_children)]
+    ]
+    var offset:uint = 384 as uint; var index = 0
+    for table in tables {
+        assert(offset+(table.count()*8) as uint <= 2048 as uint)
+        C.store<uint>(context,(160+index*8) as uint,context+offset)
+        for method in table { C.store<uint>(context,offset,method); offset += 8 as uint }
+        index++
+    }
+}

@@ -1,13 +1,808 @@
-use GFX.Accessibility
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.Model
+use GFX.Accessibility.UIA.Description
+use GFX.Accessibility.UIA.Types
+use GFX.Accessibility.UIA.TextRange.Range
+use GFX.Accessibility.Windows.Native
+use GFX.Accessibility.Windows.Request as COM
+use GFX.Accessibility.Windows.Identifiers
+use GFX.Accessibility.Windows.Wake
+use STD.Collections.Dictionary
 use STD.Math
+use Interop.C
 
-// The Windows bridge is tracked separately; this does not claim UIA support.
+// All managed state belongs to HWND's thread. COM objects contain only native
+// context/token/span storage; foreign requests are sent to that window.
 package nocopy class Host {
-    init(source:Accessibility.Source, view:uint, window:uint, height:float, flipped:bool, origin:Math.Vec2) {}
-    func synchronize(height:float, origin:Math.Vec2?) bool { return false }
-    func remove() {}
-    func root_handle() uint { return 0 as uint }
-    func peer_count() int { return 0 }
+    private var model:Model
+    private var context:uint = 0 as uint
+    private let window:uint
+    private var height:float
+    private var origin:Math.Vec2
+    private var providers:Dictionary<uint,uint> = Dictionary<uint,uint>()
+    private var snapshots:Dictionary<uint,AX.Element> = Dictionary<uint,AX.Element>()
+    private var com_owned:bool = false
+    private var wake_event:uint32 = 0 as uint32
+    private var wake_pending:bool = false
+    private var flushing:bool = false
+
+    init(source:AX.Source,view:uint,window:uint,height:float,flipped:bool,origin:Math.Vec2) {
+        self.model = Model(source); self.window = window; self.height = height; self.origin = origin
+        self.attach()
+    }
+    private func attach() {
+        let window = self.window
+        if window == 0 as uint || Native.window_thread(window) != Native.thread() { return }
+        let initialized = Native.initialize_com()
+        self.com_owned = initialized == 0 as int32 || initialized == 1 as int32
+        // RPC_E_CHANGED_MODE means the application already chose another
+        // apartment. Source is still marshalled to HWND, including MTA calls.
+        if !self.com_owned && initialized != -2147417850 as int32 { return }
+        let message = Native.message_id()
+        if message == 0 as uint32 { self.remove(); return }
+        let context = Native.context(window,C.object_address(self),message)
+        if context == 0 as uint { self.remove(); return }
+        self.context = context; COM.initialize_tables(context)
+        if !Native.install(window,C.function_address(window_callback),context) { self.remove(); return }
+        self.wake_event = Wake.register(); Native.activate(context)
+    }
+    func remove() {
+        let context = self.context; self.context = 0 as uint
+        let com_owned = self.com_owned; self.com_owned = false
+        if context != 0 as uint {
+            Native.invalidate(context)
+            Native.uninstall(self.window,C.function_address(window_callback),context)
+            self.model.remove()
+            for token in self.providers.get_keys() {
+                if let object = self.providers.find(token) { Native.disconnect(context,object); COM.release(object) }
+            }
+            self.providers.clear(); self.snapshots.clear(); Native.release_context(context)
+        }
+        if com_owned { Native.uninitialize_com() }
+    }
+    drop { self.remove() }
+    func root_handle() uint { if self.context == 0 as uint { return 0 as uint } return self.provider(self.model.window()) }
+    func peer_count() int { return self.providers.count() }
+    private func read(token:uint) AX.Element? {
+        if self.context == 0 as uint { return null }
+        if token == self.model.window() { return AX.Element(id:"window",enabled:Native.enabled(self.window),focusable:true) }
+        return self.model.element(token)
+    }
+    private func provider(token:uint) uint {
+        if token == 0 as uint || self.context == 0 as uint { return 0 as uint }
+        if let object = self.providers.find(token) { return object }
+        if let element = self.read(token) {
+            let object = COM.create(self.context,token)
+            if object != 0 as uint { self.providers.set(token,object); self.snapshots.set(token,element) }
+            return object
+        }
+        return 0 as uint
+    }
+    private func write_provider(output:uint,token:uint,facet:int = 0) int32 {
+        if token == 0 as uint { return 0 as int32 }
+        let object = self.provider(token); if object == 0 as uint { return Native.unavailable() }
+        let value = COM.facet(object,facet); COM.retain(value); C.store<uint>(output,0 as uint,value); return 0 as int32
+    }
+    private func provider_array(tokens:uint[]) uint {
+        let array = Native.array(13 as uint16,tokens.count())
+        if array == 0 as uint { return 0 as uint }
+        var index = 0
+        for token in tokens {
+            let object = self.provider(token)
+            if object == 0 as uint || !Native.put(array,index,object) { Native.destroy_array(array); return 0 as uint }
+            index++
+        }
+        return array
+    }
+    private func scale() float64 {
+        if self.height <= 0.0 { return 1.0 as float64 }
+        let height = Native.client_height(self.window)
+        if height <= 0 { return 1.0 as float64 }
+        return height as float64/self.height as float64
+    }
+    private func rectangle(token:uint,bounds:AX.Bounds) Types.Rectangle {
+        if token == self.model.window() {
+            let (x,y,width,height) = Native.window_bounds(self.window)
+            return Types.Rectangle(x:x as float64,y:y as float64,width:width as float64,height:height as float64)
+        }
+        let (x,y) = Native.screen_origin(self.window); let scale = self.scale()
+        return Types.Rectangle(x:x as float64+(bounds.x as float64+self.origin.x as float64)*scale,y:y as float64+(bounds.y as float64+self.origin.y as float64)*scale,width:bounds.width as float64*scale,height:bounds.height as float64*scale)
+    }
+    private func local_point(x:float64,y:float64) Math.Vec2? {
+        let (left,top) = Native.screen_origin(self.window); let scale = self.scale()
+        let local_x = round_float<float32>((x-left as float64)/scale-self.origin.x as float64)
+        let local_y = round_float<float32>((y-top as float64)/scale-self.origin.y as float64)
+        if !Math.is_finite(local_x) || !Math.is_finite(local_y) { return null }
+        return Math.Vec2(local_x,local_y)
+    }
+    private func perform(token:uint,request:AX.Request) int32 {
+        if let element = self.read(token) {
+            if !element.enabled || !Native.enabled(self.window) { return Native.disabled() }
+            if !Description.has(element,request.action) { return Native.unsupported() }
+            if self.model.perform(token,request) {
+                if !self.wake_pending { self.wake_pending = Wake.push(self.wake_event) }
+                return 0 as int32
+            }
+        }
+        return Native.unsupported()
+    }
+    private func runtime_id(output:uint,object:uint,token:uint) int32 {
+        if token == self.model.window() { return 0 as int32 }
+        let array = Native.array(3 as uint16,7)
+        if array == 0 as uint { return Native.out_of_memory() }
+        var append:int32 = 3 as int32
+        if !Native.put(array,0,C.address_bits(C.mutable_pointer(append))) { Native.destroy_array(array); return Native.out_of_memory() }
+        var index = 0
+        while index < 6 {
+            var value:int32 = 0 as int32
+            if index < 4 { value = C.load<int32>(self.context,(336+index*4) as uint) }
+            else { value = C.load<int32>(object,(24+(index-4)*4) as uint) }
+            if !Native.put(array,index+1,C.address_bits(C.mutable_pointer(value))) { Native.destroy_array(array); return Native.out_of_memory() }
+            index++
+        }
+        C.store<uint>(output,0 as uint,array); return 0 as int32
+    }
+    private func property(token:uint,element:AX.Element,property:int32,output:uint) int32 {
+        let root = token == self.model.window()
+        if property == 30003 as int32 { var kind = Description.control_type(element.role); if root { kind = 50032 as int32 } variant_integer(output,kind); return 0 as int32 }
+        if property == 30005 as int32 { var name = element.name; if root { name = Native.title(self.window) } return variant_text(output,name) }
+        if property == 30008 as int32 { let focused = Native.focused(self.window) && self.model.focused() == token; variant_boolean(output,focused); return 0 as int32 }
+        if property == 30009 as int32 { variant_boolean(output,element.focusable); return 0 as int32 }
+        if property == 30010 as int32 { variant_boolean(output,element.enabled && Native.enabled(self.window)); return 0 as int32 }
+        if property == 30011 as int32 { return variant_text(output,element.id) }
+        if property == 30012 as int32 || property == 30024 as int32 { return variant_text(output,"Silex") }
+        if property == 30013 as int32 { return variant_text(output,element.description) }
+        if property == 30016 as int32 || property == 30017 as int32 { variant_boolean(output,true); return 0 as int32 }
+        if property == 30018 as int32 {
+            if let id = element.labelled_by {
+                let object = self.provider(self.model.peer(id))
+                if object != 0 as uint { COM.retain(object); C.store<uint16>(output,0 as uint,13 as uint16); C.store<uint>(output,8 as uint,object) }
+            }
+            return 0 as int32
+        }
+        if property == 30019 as int32 { variant_boolean(output,false); return 0 as int32 }
+        if property == 30020 as int32 { var handle:int32 = 0 as int32; if root { handle = C.load<int32>(self.context,8 as uint) } variant_integer(output,handle); return 0 as int32 }
+        if property == 30022 as int32 { variant_boolean(output,element.offscreen || !Native.visible(self.window)); return 0 as int32 }
+        if property == 30023 as int32 {
+            var orientation:int32 = 0 as int32
+            if element.role == AX.Role.slider || element.role == AX.Role.scrollbar { orientation = 2 as int32; if element.horizontal { orientation = 1 as int32 } }
+            variant_integer(output,orientation); return 0 as int32
+        }
+        if property == 30006 as int32 { return variant_text(output,element.shortcut ?? "") }
+        if property == 30103 as int32 { variant_boolean(output,!element.invalid); return 0 as int32 }
+        if property >= 30027 as int32 && property <= 30044 as int32 {
+            let pattern = Description.property_pattern(property)
+            var supported = !root && Description.supports(element,pattern)
+            if (pattern == 10006 as int32 || pattern == 10012 as int32) && !self.model.has_rows(token) { supported = false }
+            // Root Window information comes from the system HWND provider.
+            if root && property == 30044 as int32 { return 0 as int32 }
+            variant_boolean(output,supported); return 0 as int32
+        }
+        if property == 30045 as int32 && Description.supports(element,10002 as int32) { return variant_text(output,element.value ?? "") }
+        if (property == 30046 as int32 && Description.supports(element,10002 as int32)) || (property == 30048 as int32 && Description.supports(element,10003 as int32)) {
+            variant_boolean(output,Description.read_only(element)); return 0 as int32
+        }
+        if Description.supports(element,10003 as int32) {
+            if property == 30047 as int32 { variant_double(output,(element.number ?? 0.0) as float64); return 0 as int32 }
+            if property == 30049 as int32 { variant_double(output,(element.minimum ?? 0.0) as float64); return 0 as int32 }
+            if property == 30050 as int32 { variant_double(output,(element.maximum ?? 0.0) as float64); return 0 as int32 }
+            if property == 30051 as int32 || property == 30052 as int32 { C.store<uint16>(output,0 as uint,5 as uint16); Native.nan(output+8 as uint); return 0 as int32 }
+        }
+        if Description.supports(element,10001 as int32) {
+            if property == 30059 as int32 { return variant_array(output,self.provider_array(self.model.selected(token))) }
+            if property == 30060 as int32 { variant_boolean(output,element.multiple_selection); return 0 as int32 }
+            if property == 30061 as int32 { variant_boolean(output,Description.selection_required(element)); return 0 as int32 }
+        }
+        if Description.supports(element,10010 as int32) {
+            if property == 30079 as int32 { variant_boolean(output,self.selected(element)); return 0 as int32 }
+            if property == 30080 as int32 { return self.variant_provider(output,self.selection_container(token)) }
+        }
+        if property == 30070 as int32 && Description.supports(element,10005 as int32) { var state:int32 = 0 as int32; if element.expanded == true { state = 1 as int32 } variant_integer(output,state); return 0 as int32 }
+        if property == 30086 as int32 && Description.supports(element,10015 as int32) { var state:int32 = 0 as int32; if element.checked == true { state = 1 as int32 } variant_integer(output,state); return 0 as int32 }
+        if Description.supports(element,10006 as int32) && self.model.has_rows(token) {
+            if property == 30062 as int32 { return variant_count(output,element.row_count ?? 0) }
+            if property == 30063 as int32 { return variant_count(output,element.column_count ?? 0) }
+            if property == 30081 as int32 { return variant_array(output,self.provider_array([])) }
+            if property == 30082 as int32 { return variant_array(output,self.provider_array(self.model.headers(token))) }
+            if property == 30083 as int32 { variant_integer(output,0 as int32); return 0 as int32 }
+        }
+        if Description.supports(element,10007 as int32) {
+            if property == 30064 as int32 { return variant_count(output,element.row_index ?? 0) }
+            if property == 30065 as int32 { return variant_count(output,element.column_index ?? 0) }
+            if property == 30066 as int32 || property == 30067 as int32 { variant_integer(output,1 as int32); return 0 as int32 }
+            if property == 30068 as int32 { return self.variant_provider(output,self.model.table(token)) }
+            if property == 30084 as int32 { return variant_array(output,self.provider_array([])) }
+            if property == 30085 as int32 {
+                var headers:uint[] = []
+                let header = self.model.column_header(self.model.table(token),element.column_index ?? -1)
+                if header != 0 as uint { headers.append(header) }
+                return variant_array(output,self.provider_array(headers))
+            }
+        }
+        if property == 30001 as int32 {
+            let rectangle = self.rectangle(token,element.bounds)
+            let array = double_array([rectangle.x,rectangle.y,rectangle.width,rectangle.height])
+            if array == 0 as uint { return Native.out_of_memory() }
+            C.store<uint16>(output,0 as uint,0x2005 as uint16); C.store<uint>(output,8 as uint,array)
+        }
+        return 0 as int32
+    }
+    private func variant_provider(output:uint,token:uint) int32 {
+        if token == 0 as uint { C.store<uint16>(output,0 as uint,13 as uint16); return 0 as int32 }
+        let object = self.provider(token)
+        if object == 0 as uint { return Native.unavailable() }
+        COM.retain(object); C.store<uint16>(output,0 as uint,13 as uint16); C.store<uint>(output,8 as uint,object); return 0 as int32
+    }
+    private func selection_container(token:uint) uint {
+        var parent = self.model.parent(token); var seen = Dictionary<uint,bool>()
+        while parent != 0 as uint {
+            if seen.contains(parent) { return 0 as uint } seen.set(parent,true)
+            if let element = self.model.element(parent) { if Description.selection(element) { return parent } }
+            parent = self.model.parent(parent)
+        }
+        return 0 as uint
+    }
+    private func selected(element:AX.Element) bool { return Description.selected(element) }
+    private func select_item(token:uint,element:AX.Element,operation:int32) int32 {
+        if !element.enabled || !Native.enabled(self.window) { return Native.disabled() }
+        let container = self.selection_container(token)
+        if operation == 34 as int32 {
+            if !self.selected(element) { return 0 as int32 }
+            if element.role == AX.Role.radio || element.role == AX.Role.tab { return Native.invalid_operation() }
+            return self.perform(token,AX.Request(AX.Action.deselect))
+        }
+        if operation == 33 as int32 {
+            if self.selected(element) { return 0 as int32 }
+            if let owner = self.model.element(container) {
+                if !owner.multiple_selection && !self.model.selected(container).is_empty() { return Native.invalid_operation() }
+            }
+        } elif element.role != AX.Role.radio && element.role != AX.Role.tab {
+            // Radio/tab activation already replaces the exclusive selection.
+            // Other multi-selection containers need an explicit clear for Select.
+            for other in self.model.selected(container) {
+                if other != token {
+                    let result = self.perform(other,AX.Request(AX.Action.deselect)); if result < 0 as int32 { return result }
+                }
+            }
+        }
+        if self.selected(element) { return 0 as int32 }
+        if Description.has(element,AX.Action.select) { return self.perform(token,AX.Request(AX.Action.select)) }
+        if element.role == AX.Role.radio || element.role == AX.Role.tab { return self.perform(token,AX.Request(AX.Action.activate)) }
+        return Native.unsupported()
+    }
+
+    // Called only by the validated HWND callback on its owner thread.
+    func native_message(message:uint32,wparam:uint,lparam:int) int {
+        let context = self.context
+        if context == 0 as uint { return Native.next(self.window,message,wparam,lparam) }
+        if message == 0x82 as uint32 { self.remove(); return Native.next(self.window,message,wparam,lparam) }
+        if message == 0x3d as uint32 && lparam == -25 {
+            let provider = self.root_handle()
+            if provider == 0 as uint { return 0 }
+            COM.retain(provider)
+            let result = C.call<func(uint,uint,int,uint) int>(C.load<uint>(context,80 as uint),self.window,wparam,lparam,provider)
+            COM.release(provider); return result
+        }
+        if message == C.load<uint32>(context,28 as uint) && wparam == context && lparam > 0 {
+            let packet = lparam as uint
+            if Native.is_packet(context,packet) && C.load<uint>(packet,0 as uint) == context {
+                let object = C.load<uint>(packet,8 as uint)
+                if Native.owns_object(context,object) {
+                    COM.retain(object)
+                    let status = self.dispatch(packet,object)
+                    COM.release(object)
+                    C.store<int32>(packet,64 as uint,status)
+                    return 0
+                }
+            }
+        }
+        return Native.next(self.window,message,wparam,lparam)
+    }
+    private func dispatch(packet:uint,object:uint) int32 {
+        // Consume invalidations before a query reads cached text or identities.
+        // This runs only for UIA requests, never for the mouse/paint path.
+        self.flush()
+        if self.context == 0 as uint { return Native.unavailable() }
+        let token = C.load<uint>(object,24 as uint)
+        if C.load<uint32>(object,36 as uint) == 1 as uint32 { return self.text_operation(packet,object,token) }
+        let element = self.read(token); if element == null { return Native.unavailable() }
+        let current = element!; let operation = C.load<int32>(packet,16 as uint)
+        let detail = C.load<int32>(packet,20 as uint); let output = C.load<uint>(packet,56 as uint)
+        if operation == 1 as int32 { return self.property(token,current,detail,output) }
+        if operation == 2 as int32 {
+            if token == self.model.window() || !Description.supports(current,detail) { return 0 as int32 }
+            if (detail == 10006 as int32 || detail == 10012 as int32) && !self.model.has_rows(token) { return 0 as int32 }
+            let facet = Identifiers.pattern_interface(detail)
+            if facet < 0 { return 0 as int32 }
+            COM.retain(object); C.store<uint>(output,0 as uint,COM.facet(object,facet)); return 0 as int32
+        }
+        if operation == 4 as int32 {
+            if token != self.model.window() { return 0 as int32 }
+            return C.call<func(uint,uint) int32>(C.load<uint>(self.context,88 as uint),self.window,output)
+        }
+        if operation == 10 as int32 { return self.write_provider(output,self.model.navigate(token,detail),1) }
+        if operation == 11 as int32 { return self.runtime_id(output,object,token) }
+        if operation == 12 as int32 {
+            let rectangle = self.rectangle(token,current.bounds)
+            C.store<float64>(output,0 as uint,rectangle.x); C.store<float64>(output,8 as uint,rectangle.y)
+            C.store<float64>(output,16 as uint,rectangle.width); C.store<float64>(output,24 as uint,rectangle.height)
+            return 0 as int32
+        }
+        if operation == 13 as int32 { return 0 as int32 }
+        if operation == 14 as int32 { if token == self.model.window() { return 0 as int32 } return self.perform(token,AX.Request(AX.Action.focus)) }
+        if operation == 15 as int32 { return self.write_provider(output,self.model.window(),2) }
+        if operation == 16 as int32 {
+            if token != self.model.window() { return Native.unsupported() }
+            if let point = self.local_point(C.load<float64>(packet,48 as uint),C.load<float64>(packet,72 as uint)) {
+                return self.write_provider(output,self.model.at(point.x,point.y),1)
+            }
+            return Native.invalid_argument()
+        }
+        if operation == 17 as int32 {
+            if token != self.model.window() { return Native.unsupported() }
+            if Native.focused(self.window) { return self.write_provider(output,self.model.focused(),1) }
+            return 0 as int32
+        }
+        if operation >= 57 as int32 && operation <= 62 as int32 { return self.text_provider(packet,token,current) }
+        return self.control(packet,token,current)
+    }
+    private func control(packet:uint,token:uint,element:AX.Element) int32 {
+        let operation = C.load<int32>(packet,16 as uint); let output = C.load<uint>(packet,56 as uint)
+        if operation == 20 as int32 {
+            if !Description.supports(element,10000 as int32) { return Native.unsupported() }
+            return self.perform(token,AX.Request(AX.Action.activate))
+        }
+        if operation >= 21 as int32 && operation <= 23 as int32 {
+            if !Description.supports(element,10002 as int32) && !(operation == 23 as int32 && Description.supports(element,10003 as int32)) { return Native.unsupported() }
+            if operation == 23 as int32 { write_boolean(output,Description.read_only(element)); return 0 as int32 }
+            if operation == 22 as int32 {
+                let value = Native.bstr(element.value ?? "")
+                if value == 0 as uint && element.value != "" { return Native.out_of_memory() }
+                C.store<uint>(output,0 as uint,value); return 0 as int32
+            }
+            if !element.enabled { return Native.disabled() }
+            if Description.read_only(element) { return Native.invalid_operation() }
+            if let value = Native.read_wide(C.load<uint>(packet,32 as uint)) {
+                if element.value == value { return 0 as int32 }
+                return self.perform(token,AX.Request(AX.Action.set_value,text:value))
+            }
+            return Native.invalid_argument()
+        }
+        if operation >= 24 as int32 && operation <= 29 as int32 {
+            if !Description.supports(element,10003 as int32) { return Native.unsupported() }
+            if operation == 24 as int32 {
+                if !element.enabled { return Native.disabled() }
+                if Description.read_only(element) { return Native.invalid_operation() }
+                let input = C.load<float64>(packet,48 as uint)
+                let rounded = round_float<float32>(input)
+                if !Math.is_finite(rounded) || input < (element.minimum ?? 0.0) as float64 || input > (element.maximum ?? 0.0) as float64 { return Native.invalid_argument() }
+                if element.number == rounded { return 0 as int32 }
+                return self.perform(token,AX.Request(AX.Action.set_value,number:rounded))
+            }
+            if operation == 25 as int32 { C.store<float64>(output,0 as uint,(element.number ?? 0.0) as float64) }
+            elif operation == 26 as int32 { C.store<float64>(output,0 as uint,(element.maximum ?? 0.0) as float64) }
+            elif operation == 27 as int32 { C.store<float64>(output,0 as uint,(element.minimum ?? 0.0) as float64) }
+            else { Native.nan(output) }
+            return 0 as int32
+        }
+        if operation == 30 as int32 || operation == 31 as int32 {
+            if !Description.supports(element,10015 as int32) { return Native.unsupported() }
+            if operation == 30 as int32 { return self.perform(token,AX.Request(AX.Action.activate)) }
+            write_boolean(output,element.checked == true); return 0 as int32
+        }
+        if operation >= 32 as int32 && operation <= 36 as int32 {
+            if !Description.supports(element,10010 as int32) { return Native.unsupported() }
+            if operation == 35 as int32 { write_boolean(output,self.selected(element)); return 0 as int32 }
+            if operation == 36 as int32 { return self.write_provider(output,self.selection_container(token)) }
+            return self.select_item(token,element,operation)
+        }
+        if operation >= 37 as int32 && operation <= 39 as int32 {
+            if !Description.supports(element,10001 as int32) { return Native.unsupported() }
+            if operation == 38 as int32 { write_boolean(output,element.multiple_selection); return 0 as int32 }
+            if operation == 39 as int32 { write_boolean(output,Description.selection_required(element)); return 0 as int32 }
+            let array = self.provider_array(self.model.selected(token))
+            if array == 0 as uint { return Native.out_of_memory() }
+            C.store<uint>(output,0 as uint,array); return 0 as int32
+        }
+        if operation >= 40 as int32 && operation <= 42 as int32 {
+            if !Description.supports(element,10005 as int32) { return Native.unsupported() }
+            if operation == 42 as int32 { write_boolean(output,element.expanded == true); return 0 as int32 }
+            let expanded = operation == 40 as int32
+            if element.expanded == expanded { return 0 as int32 }
+            if expanded { return self.perform(token,AX.Request(AX.Action.expand)) }
+            return self.perform(token,AX.Request(AX.Action.collapse))
+        }
+        if operation == 43 as int32 { return self.perform(token,AX.Request(AX.Action.reveal)) }
+        if operation >= 44 as int32 && operation <= 56 as int32 { return self.collection(packet,token,element) }
+        if operation >= 70 as int32 && operation <= 78 as int32 {
+            if !Description.supports(element,10009 as int32) { return Native.unsupported() }
+            if operation == 70 as int32 { if C.load<int32>(packet,20 as uint) == 0 as int32 { return 0 as int32 } return Native.unsupported() }
+            if operation == 71 as int32 { return self.perform(token,AX.Request(AX.Action.dismiss)) }
+            if operation == 72 as int32 {
+                if C.load<int>(packet,24 as uint) < 0 { return Native.invalid_argument() }
+                write_boolean(output,!self.model.dirty); return 0 as int32
+            }
+            if operation == 77 as int32 { C.store<int32>(output,0 as uint,2 as int32) }
+            // Logical dialogs have no native maximize/minimize/topmost state.
+            return 0 as int32
+        }
+        return Native.unsupported()
+    }
+    private func collection(packet:uint,token:uint,element:AX.Element) int32 {
+        let operation = C.load<int32>(packet,16 as uint); let output = C.load<uint>(packet,56 as uint)
+        if operation >= 44 as int32 && operation <= 46 as int32 {
+            if !Description.supports(element,10006 as int32) || !self.model.has_rows(token) { return Native.unsupported() }
+            if operation == 45 as int32 { return write_count(output,element.row_count ?? 0) }
+            if operation == 46 as int32 { return write_count(output,element.column_count ?? 0) }
+            let row = C.load<int>(packet,24 as uint); let column = C.load<int>(packet,40 as uint)
+            if row < 0 || column < 0 || row >= (element.row_count ?? 0) || column >= (element.column_count ?? 0) { return Native.invalid_argument() }
+            let cell = self.model.cell(token,row,column)
+            if cell == 0 as uint { return Native.unavailable() }
+            return self.write_provider(output,cell)
+        }
+        if operation >= 47 as int32 && operation <= 51 as int32 {
+            if !Description.supports(element,10007 as int32) { return Native.unsupported() }
+            if operation == 47 as int32 { return write_count(output,element.row_index ?? 0) }
+            if operation == 48 as int32 { return write_count(output,element.column_index ?? 0) }
+            if operation == 51 as int32 { return self.write_provider(output,self.model.table(token)) }
+            return write_count(output,1)
+        }
+        var tokens:uint[] = []
+        if operation <= 54 as int32 {
+            if !Description.supports(element,10012 as int32) || !self.model.has_rows(token) { return Native.unsupported() }
+            if operation == 54 as int32 { return 0 as int32 }
+            if operation == 53 as int32 { tokens = self.model.headers(token) }
+        } else {
+            if !Description.supports(element,10013 as int32) { return Native.unsupported() }
+            if operation == 56 as int32 {
+                let header = self.model.column_header(self.model.table(token),element.column_index ?? -1)
+                if header != 0 as uint { tokens.append(header) }
+            }
+        }
+        let array = self.provider_array(tokens)
+        if array == 0 as uint { return Native.out_of_memory() }
+        C.store<uint>(output,0 as uint,array); return 0 as int32
+    }
+    private func new_range(token:uint,start:int,end:int) uint {
+        if var data = self.model.document(token) {
+            var span = Range(start,end); span.clamp(data)
+            return COM.create(self.context,token,true,span.start,span.end)
+        }
+        return 0 as uint
+    }
+    private func write_range(output:uint,token:uint,start:int,end:int) int32 {
+        let span = self.new_range(token,start,end)
+        if span == 0 as uint { return Native.out_of_memory() }
+        C.store<uint>(output,0 as uint,span); return 0 as int32
+    }
+    private func range_array(token:uint,ranges:Range[]) uint {
+        let array = Native.array(13 as uint16,ranges.count())
+        if array == 0 as uint { return 0 as uint }
+        var index = 0
+        for span in ranges {
+            let object = self.new_range(token,span.start,span.end)
+            if object == 0 as uint { Native.destroy_array(array); return 0 as uint }
+            let accepted = Native.put(array,index,object); COM.release(object)
+            if !accepted { Native.destroy_array(array); return 0 as uint }
+            index++
+        }
+        return array
+    }
+    private func text_provider(packet:uint,token:uint,element:AX.Element) int32 {
+        if !Description.supports(element,10014 as int32) { return Native.unsupported() }
+        var data = self.model.document(token); if data == null { return Native.unavailable() }
+        let operation = C.load<int32>(packet,16 as uint); let output = C.load<uint>(packet,56 as uint)
+        if operation == 61 as int32 { return self.write_range(output,token,0,data!.count()) }
+        let selectable = Description.has(element,AX.Action.set_text_selection)
+        if operation == 62 as int32 { write_boolean(output,selectable); return 0 as int32 }
+        if operation == 59 as int32 { return Native.invalid_argument() }
+        if operation == 60 as int32 {
+            if let point = self.local_point(C.load<float64>(packet,48 as uint),C.load<float64>(packet,72 as uint)) {
+                if var geometry = self.model.geometry(token) {
+                    if let span = geometry.range_at(point.x,point.y) { return self.write_range(output,token,span.start,span.start) }
+                }
+                return Native.unsupported()
+            }
+            return Native.invalid_argument()
+        }
+        var ranges:Range[] = []
+        if operation == 57 as int32 {
+            if selectable && element.selection_anchor != null && element.selection_cursor != null {
+                let first = element.selection_anchor!; let last = element.selection_cursor!
+                if first <= last { ranges.append(Range(first,last)) } else { ranges.append(Range(last,first)) }
+            }
+        } elif !element.offscreen && Native.visible(self.window) {
+            if var geometry = self.model.geometry(token) {
+                if let visible = geometry.visible_range() { ranges.append(Range(visible.start,visible.start+visible.length)) }
+            } else { ranges.append(Range(0,data!.count())) }
+        }
+        let array = self.range_array(token,ranges)
+        if array == 0 as uint { return Native.out_of_memory() }
+        C.store<uint>(output,0 as uint,array); return 0 as int32
+    }
+    private func other_range(other:uint,token:uint) Range? {
+        // The callback has already resolved and retained this identity in its
+        // own COM apartment. HWND must not invoke an arbitrary foreign proxy.
+        let context = self.context
+        if context == 0 as uint || !Native.owns_object(context,other) { return null }
+        if C.load<uint>(other,16 as uint) == context && C.load<uint32>(other,36 as uint) == 1 as uint32 && C.load<uint>(other,24 as uint) == token {
+            return Range(C.load<int>(other,40 as uint),C.load<int>(other,48 as uint))
+        }
+        return null
+    }
+    private func text_operation(packet:uint,object:uint,token:uint) int32 {
+        var data = self.model.document(token); let description = self.model.element(token)
+        if data == null || description == null { return Native.unavailable() }
+        var document = data!; let element = description!
+        var span = Range(C.load<int>(object,40 as uint),C.load<int>(object,48 as uint)); span.clamp(document)
+        let operation = C.load<int32>(packet,16 as uint); let detail = C.load<int32>(packet,20 as uint)
+        let first = C.load<int>(packet,24 as uint); let other = C.load<uint>(packet,32 as uint)
+        let third = C.load<int>(packet,40 as uint); let output = C.load<uint>(packet,56 as uint)
+        if operation == 100 as int32 { return self.write_range(output,token,span.start,span.end) }
+        if operation == 101 as int32 || operation == 102 as int32 || operation == 112 as int32 {
+            let incoming = self.other_range(other,token)
+            if self.context == 0 as uint { return Native.unavailable() }
+            if incoming == null { if operation == 101 as int32 { return 0 as int32 } return Native.invalid_argument() }
+            var target = incoming!; target.clamp(document)
+            if operation == 101 as int32 { write_boolean(output,span.start == target.start && span.end == target.end); return 0 as int32 }
+            if (detail != 0 as int32 && detail != 1 as int32) || (third != 0 && third != 1) { return Native.invalid_argument() }
+            var position = target.start; if third == 1 { position = target.end }
+            if operation == 102 as int32 {
+                var current = span.start; if detail == 1 as int32 { current = span.end }
+                var order:int32 = 0 as int32; if current < position { order = -1 as int32 } elif current > position { order = 1 as int32 }
+                C.store<int32>(output,0 as uint,order); return 0 as int32
+            }
+            if detail == 0 as int32 { span.start = position; if span.end < position { span.end = position } }
+            else { span.end = position; if span.start > position { span.start = position } }
+        } elif operation == 103 as int32 {
+            if detail < 0 as int32 || detail > 6 as int32 || !span.expand(document,detail,self.model.geometry(token)) { return Native.invalid_argument() }
+        } elif operation == 105 as int32 {
+            if let query = Native.read_bstr(other) {
+                if query == "" { return Native.invalid_argument() }
+                if let found = span.find(document,query,detail != 0 as int32,first != 0) { return self.write_range(output,token,found.start,found.end) }
+                return 0 as int32
+            }
+            return Native.invalid_argument()
+        } elif operation == 104 as int32 || operation == 106 as int32 {
+            if detail != 40015 as int32 { if operation == 104 as int32 { return Native.unsupported() } return Native.not_supported(self.context,output) }
+            let read_only = Description.read_only(element)
+            if operation == 106 as int32 { variant_boolean(output,read_only); return 0 as int32 }
+            if (C.load<uint>(packet,80 as uint) & 65535 as uint) != 11 as uint { return Native.invalid_argument() }
+            let requested = C.load<uint16>(packet,88 as uint) != 0 as uint16
+            if requested == read_only { return self.write_range(output,token,span.start,span.end) }
+            return 0 as int32
+        } elif operation == 107 as int32 {
+            var values:float64[] = []
+            for bounds in span.bounds(document,self.model.geometry(token)) {
+                let rectangle = self.rectangle(token,bounds)
+                values.append(rectangle.x); values.append(rectangle.y); values.append(rectangle.width); values.append(rectangle.height)
+            }
+            let array = double_array(values); if array == 0 as uint { return Native.out_of_memory() }
+            C.store<uint>(output,0 as uint,array); return 0 as int32
+        } elif operation == 108 as int32 { return self.write_provider(output,token) }
+        elif operation == 109 as int32 {
+            if first < -1 { return Native.invalid_argument() }
+            let text = span.text(document,first); let value = Native.bstr(text)
+            if value == 0 as uint && text != "" { return Native.out_of_memory() }
+            C.store<uint>(output,0 as uint,value); return 0 as int32
+        } elif operation == 110 as int32 {
+            if detail < 0 as int32 || detail > 6 as int32 { return Native.invalid_argument() }
+            let moved = span.move_units(document,detail,first,self.model.geometry(token))
+            let result = write_count(output,moved); if result < 0 as int32 { return result }
+        } elif operation == 111 as int32 {
+            if (detail != 0 as int32 && detail != 1 as int32) || third < 0 || third > 6 { return Native.invalid_argument() }
+            let moved = span.move_endpoint(document,detail,third as int32,first,self.model.geometry(token))
+            let result = write_count(output,moved); if result < 0 as int32 { return result }
+        } elif operation == 113 as int32 || operation == 114 as int32 || operation == 115 as int32 {
+            if !Description.has(element,AX.Action.set_text_selection) { return Native.unsupported() }
+            let selected = (element.selection_anchor == span.start && element.selection_cursor == span.end) || (element.selection_anchor == span.end && element.selection_cursor == span.start)
+            // An insertion-capable control moves its caret for an empty span,
+            // including AddToSelection/RemoveFromSelection (UIA contract).
+            let caret = span.start == span.end && element.editable
+            if !caret && (operation == 115 as int32 || (operation == 114 as int32 && !selected)) { return Native.invalid_operation() }
+            if selected { return 0 as int32 }
+            return self.perform(token,AX.Request(AX.Action.set_text_selection,anchor:span.start,cursor:span.end))
+        } elif operation == 116 as int32 {
+            if self.model.reveal_text(token,AX.TextRange(span.start,span.end-span.start),detail != 0 as int32) {
+                if !self.wake_pending { self.wake_pending = Wake.push(self.wake_event) }
+                let context = self.context
+                if context != 0 as uint { let provider = self.provider(token); if provider != 0 as uint { self.event(context,provider,20008 as int32) } }
+                return 0 as int32
+            }
+            return Native.unsupported()
+        } elif operation == 117 as int32 {
+            let array = Native.array(13 as uint16,0)
+            if array == 0 as uint { return Native.out_of_memory() }
+            C.store<uint>(output,0 as uint,array); return 0 as int32
+        } else { return Native.unsupported() }
+        C.store<int>(object,40 as uint,span.start); C.store<int>(object,48 as uint,span.end)
+        return 0 as int32
+    }
+    private func event(context:uint,object:uint,kind:int32) {
+        if self.context != context { return }
+        COM.retain(object); Native.event(context,object,kind); COM.release(object)
+    }
+    private func structure(context:uint,object:uint) {
+        if self.context != context { return }
+        COM.retain(object); Native.structure(context,object); COM.release(object)
+    }
+    private func property_changed(context:uint,object:uint,token:uint,property:int32,previous:AX.Element,current:AX.Element) {
+        if self.context != context { return }
+        let method = C.load<uint>(context,104 as uint)
+        if method == 0 as uint { return }
+        let storage = Native.allocate(48 as uint); if storage == 0 as uint { return }
+        let before = self.property(token,previous,property,storage)
+        let after = self.property(token,current,property,storage+24 as uint)
+        if before >= 0 as int32 && after >= 0 as int32 && self.context == context {
+            let old_value = Types.Variant(tag:C.load<uint>(storage,0 as uint),value:C.load<uint>(storage,8 as uint),extra:C.load<uint>(storage,16 as uint))
+            let new_value = Types.Variant(tag:C.load<uint>(storage,24 as uint),value:C.load<uint>(storage,32 as uint),extra:C.load<uint>(storage,40 as uint))
+            COM.retain(object)
+            C.call<func(uint,int32,Types.Variant,Types.Variant) int32>(method,object,property,old_value,new_value)
+            COM.release(object)
+        }
+        Native.clear_variant(storage); Native.clear_variant(storage+24 as uint); Native.free(storage)
+    }
+    private func selection_changed(context:uint,object:uint,token:uint,previous:AX.Element,current:AX.Element) {
+        if self.context != context { return }
+        self.property_changed(context,object,token,30079 as int32,previous,current)
+        if self.selected(previous) == self.selected(current) || self.context != context { return }
+        if !self.selected(current) { self.event(context,object,20011 as int32); return }
+        let container = self.selection_container(token)
+        if let element = self.model.element(container) {
+            if element.multiple_selection { self.event(context,object,20010 as int32); return }
+        }
+        self.event(context,object,20012 as int32)
+    }
+    private func flush() {
+        let context = self.context
+        if context == 0 as uint || self.flushing { return }
+        self.flushing = true; Native.retain_context(context)
+        let changes = self.model.synchronize()
+        var listening = false
+        if !changes.is_empty() || self.model.focus_changed || self.model.root_changed { listening = Native.clients(context) }
+        if self.context == context && listening && self.model.root_changed {
+            let root = self.root_handle(); if root != 0 as uint { self.structure(context,root) }
+        }
+        // One Source change can carry several kinds for the same peer. Keep
+        // its pre-batch snapshot while publishing current state before reentry.
+        var before = Dictionary<uint,AX.Element>()
+        if self.context == context && listening {
+            for change in self.model.events {
+                if change.kind != AX.ChangeKind.removed && self.providers.contains(change.token) && !before.contains(change.token) {
+                    if let current = self.model.element(change.token) {
+                        before.set(change.token,self.snapshots.find(change.token) ?? current)
+                        self.snapshots.set(change.token,current)
+                    }
+                }
+            }
+        }
+        for change in self.model.events {
+            if self.context != context { break }
+            if let object = self.providers.find(change.token) {
+                if change.kind == AX.ChangeKind.removed { continue }
+                if !listening { self.snapshots.remove(change.token); continue }
+                if let current = self.model.element(change.token) {
+                    let old = before.find(change.token) ?? current
+                    // Publish the snapshot before any SDK call can reenter.
+                    self.snapshots.set(change.token,current)
+                    // Keep the whole notification batch alive if an SDK call
+                    // reenters remove() and releases the cache reference.
+                    COM.retain(object)
+                    if change.kind == AX.ChangeKind.structure || change.kind == AX.ChangeKind.relations { self.structure(context,object) }
+                    elif change.kind == AX.ChangeKind.name {
+                        if old.name != current.name { self.property_changed(context,object,change.token,30005 as int32,old,current) }
+                        if old.description != current.description { self.property_changed(context,object,change.token,30013 as int32,old,current) }
+                        if old.shortcut != current.shortcut { self.property_changed(context,object,change.token,30006 as int32,old,current) }
+                    }
+                    elif change.kind == AX.ChangeKind.value {
+                        if old.value != current.value && current.value != null { self.property_changed(context,object,change.token,30045 as int32,old,current) }
+                        if old.number != current.number && current.number != null { self.property_changed(context,object,change.token,30047 as int32,old,current) }
+                        if old.minimum != current.minimum { self.property_changed(context,object,change.token,30049 as int32,old,current) }
+                        if old.maximum != current.maximum { self.property_changed(context,object,change.token,30050 as int32,old,current) }
+                        if old.value != current.value && Description.text(current) { self.event(context,object,20015 as int32) }
+                    } elif change.kind == AX.ChangeKind.state {
+                        if old.enabled != current.enabled { self.property_changed(context,object,change.token,30010 as int32,old,current) }
+                        if old.checked != current.checked {
+                            if current.role == AX.Role.radio { self.selection_changed(context,object,change.token,old,current) }
+                            else { self.property_changed(context,object,change.token,30086 as int32,old,current) }
+                        }
+                        if Description.read_only(old) != Description.read_only(current) {
+                            if Description.supports(current,10002 as int32) { self.property_changed(context,object,change.token,30046 as int32,old,current) }
+                            if Description.supports(current,10003 as int32) { self.property_changed(context,object,change.token,30048 as int32,old,current) }
+                        }
+                        if old.focusable != current.focusable { self.property_changed(context,object,change.token,30009 as int32,old,current) }
+                        if old.multiple_selection != current.multiple_selection { self.property_changed(context,object,change.token,30060 as int32,old,current) }
+                        if old.invalid != current.invalid { self.property_changed(context,object,change.token,30103 as int32,old,current) }
+                        if old.horizontal != current.horizontal { self.property_changed(context,object,change.token,30023 as int32,old,current) }
+                        if old.expanded != current.expanded { self.property_changed(context,object,change.token,30070 as int32,old,current) }
+                        if old.offscreen != current.offscreen { self.property_changed(context,object,change.token,30022 as int32,old,current) }
+                    } elif change.kind == AX.ChangeKind.selection {
+                        if Description.text(current) { self.event(context,object,20014 as int32) }
+                        elif Description.selection(current) { self.event(context,object,20013 as int32) }
+                        else { self.selection_changed(context,object,change.token,old,current) }
+                    } elif change.kind == AX.ChangeKind.bounds { self.property_changed(context,object,change.token,30001 as int32,old,current) }
+                    COM.release(object)
+                }
+            }
+        }
+        if self.context == context {
+            if listening && !self.model.retired.is_empty() {
+                let root = self.root_handle(); if root != 0 as uint { self.structure(context,root) }
+            }
+            for token in self.model.retired {
+                if let object = self.providers.find(token) {
+                    self.providers.remove(token); self.snapshots.remove(token)
+                    Native.disconnect(context,object); COM.release(object)
+                }
+            }
+        }
+        if self.context == context && listening && self.model.focus_changed && Native.focused(self.window) {
+            let focused = self.provider(self.model.focused())
+            if focused != 0 as uint { self.event(context,focused,20005 as int32) }
+        }
+        self.flushing = false; Native.release_context(context)
+    }
+    func synchronize(height:float,origin:Math.Vec2?) bool {
+        if self.context == 0 as uint { return false }
+        self.height = height; self.origin = origin ?? self.origin
+        let dirty = self.model.dirty; self.model.dirty = false; self.wake_pending = false
+        self.flush(); return dirty || self.model.dirty
+    }
 }
-func view(window:uint, runtime_window:uint = 0 as uint) uint { return runtime_window }
+
+// The common mouse/paint path stays scalar and never reconstructs the owner.
+func window_callback(window:uint,message:uint32,wparam:uint,lparam:int,subclass:uint,context:uint) int {
+    if message != 0x3d as uint32 && message != 0x82 as uint32 && !(message >= 0xc000 as uint32 && wparam == context) {
+        return Native.next(window,message,wparam,lparam)
+    }
+    return route_callback(window,message,wparam,lparam,context)
+}
+func route_callback(window:uint,message:uint32,wparam:uint,lparam:int,context:uint) int {
+    Native.retain_context(context)
+    Native.lock(context)
+    var owner = C.load<uint>(context,16 as uint)
+    if C.load<uint32>(context,4 as uint) == 0 as uint32 || C.load<uint32>(context,24 as uint) != Native.thread() { owner = 0 as uint }
+    Native.unlock(context)
+    var result = 0
+    if owner != 0 as uint { var host = C.object_from_address<Host>(owner); result = host.native_message(message,wparam,lparam) }
+    else { result = Native.next(window,message,wparam,lparam) }
+    Native.release_context(context); return result
+}
+func write_boolean(output:uint,value:bool) { var bits:int32 = 0 as int32; if value { bits = 1 as int32 } C.store<int32>(output,0 as uint,bits) }
+func write_count(output:uint,value:int) int32 {
+    if value < -2147483648 || value > 2147483647 { return Native.unsupported() }
+    C.store<int32>(output,0 as uint,value as int32); return 0 as int32
+}
+func variant_integer(output:uint,value:int32) { C.store<uint16>(output,0 as uint,3 as uint16); C.store<int32>(output,8 as uint,value) }
+func variant_double(output:uint,value:float64) { C.store<uint16>(output,0 as uint,5 as uint16); C.store<float64>(output,8 as uint,value) }
+func variant_count(output:uint,value:int) int32 {
+    if value < 0 || value > 2147483647 { return Native.unsupported() }
+    variant_integer(output,value as int32); return 0 as int32
+}
+func variant_array(output:uint,array:uint) int32 {
+    if array == 0 as uint { return Native.out_of_memory() }
+    C.store<uint16>(output,0 as uint,0x200d as uint16); C.store<uint>(output,8 as uint,array); return 0 as int32
+}
+func variant_boolean(output:uint,value:bool) {
+    C.store<uint16>(output,0 as uint,11 as uint16)
+    var bits:uint16 = 0 as uint16; if value { bits = 65535 as uint16 }
+    C.store<uint16>(output,8 as uint,bits)
+}
+func variant_text(output:uint,value:str) int32 {
+    let text = Native.bstr(value)
+    if text == 0 as uint && value != "" { return Native.out_of_memory() }
+    C.store<uint16>(output,0 as uint,8 as uint16); C.store<uint>(output,8 as uint,text); return 0 as int32
+}
+func double_array(values:float64[]) uint {
+    let array = Native.array(5 as uint16,values.count())
+    if array == 0 as uint { return 0 as uint }
+    var index = 0
+    for number in values {
+        var value = number
+        if !Native.put(array,index,C.address_bits(C.mutable_pointer(value))) { Native.destroy_array(array); return 0 as uint }
+        index++
+    }
+    return array
+}
+func view(window:uint,runtime_window:uint = 0 as uint) uint { return window }
 func flipped(view:uint) bool { return false }

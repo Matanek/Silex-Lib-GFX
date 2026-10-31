@@ -6,7 +6,8 @@ ou implémenter `Source` pour ses propres contrôles. Le premier adaptateur macO
 présente les éléments à AppKit ; le premier parcours bouton/champ a été vérifié
 avec l’inspecteur et VoiceOver. La qualification des autres contrôles continue.
 Un adaptateur Linux AT-SPI est proposé à titre expérimental ; sa qualification
-sur Linux reste à faire. Le pont Windows UI Automation reste en préparation.
+sur Linux reste à faire. Un adaptateur Windows UI Automation est également proposé à titre expérimental,
+avec qualification native encore ouverte.
 
 ## Lire et actionner la même interface
 
@@ -189,6 +190,14 @@ pas un champ retiré ou caché par une nouvelle portée modale. AppKit traduit l
 indices UTF-16 et les coordonnées écran à la frontière ; les lectures de
 plages, lignes et positions n’éditent pas la sélection applicative.
 
+`Source.reveal_text(id,span,align_to_start)` demande de rendre visible une
+plage de texte sans déplacer le focus, le caret ou la sélection. `span` est un
+`TextRange` en graphèmes. `true` aligne sa première ligne en haut du viewport,
+`false` sa dernière ligne en bas, dans la limite du défilement disponible.
+La méthode retourne `true` pour une demande acceptée, même si la plage était
+déjà visible ; son implémentation par défaut retourne `false`. Les sources UI
+la fournissent pour les champs simples et multilignes, y compris désactivés.
+
 ## Autres contrôles macOS
 
 Le pont distingue onglets, barres de défilement, séparateurs, infobulles et
@@ -273,3 +282,37 @@ pas une exécution sur Linux. Le fonctionnement du bus, Orca, les interactions
 avec le bureau et les conventions de coordonnées à différentes échelles
 restent à qualifier sur les systèmes ciblés. Ce statut expérimental ne change
 pas la validation en usage courant des contrôles macOS.
+
+
+## Pont Windows expérimental
+
+La même `Source` est raccordée à UI Automation par `Window`, sur le thread UI.
+Les rôles, noms, valeurs, états, relations et actions alimentent les patterns
+Invoke, Value, RangeValue, Toggle, Selection/SelectionItem, ExpandCollapse,
+Grid/GridItem, Table/TableItem, ScrollItem et Text/TextRange selon les capacités
+décrites. Les tableaux indexés réalisent uniquement les lignes et cellules
+demandées ; leurs en-têtes gardent leur identité après déplacement.
+
+Les plages de texte gardent des bornes en graphèmes. Les chaînes natives utilisent
+UTF-16, avec leurs zéros intégrés pour les BSTR ; lecture, recherche Unicode,
+sélection et géométrie sont traduites à la frontière. `ScrollIntoView` utilise
+`reveal_text` et conserve la sélection. Un producteur personnalisé fournit
+`text_geometry` et `reveal_text` pour ces requêtes ; leur absence reste signalée
+comme une capacité indisponible. Les plages conservées sont bornées au contenu
+actuel après édition ; elles ne suivent pas encore les déplacements de texte
+par des ancrages éditoriaux. Les attributs exposés correspondent à du texte simple.
+
+Les dialogues logiques offrent la fermeture annoncée par leur source ; ils
+n’ajoutent pas de maximisation ou minimisation native. Le HWND conserve ses
+comportements de fenêtre système. Les notifications ne réalisent pas les
+éléments inconnus. Les interfaces conservées après détachement deviennent
+indisponibles et ne réactivent pas une ancienne identité.
+
+Les tests CPU et les constructions ARM64/X64 depuis macOS prouvent le modèle,
+les conventions d’appel exercées et la liaison. Ils ne prouvent pas l’exécution
+Windows : Inspect/Narrator, focus réel, coordonnées à plusieurs échelles,
+réveil de la boucle au repos et rappels pendant fermeture restent à qualifier.
+La fixture [Windows](../../Tests/Accessibility/Windows.sx) vérifie sans fenêtre
+les références COM, tableaux natifs, chaînes et requêtes détachées sur l’OS cible.
+La démo publique UIAccessibility sert ensuite au parcours interactif. Ces essais
+exigent un compilateur intégrant les entrées C et records de ce candidat.

@@ -1,0 +1,26 @@
+use GFX.Accessibility.UIA.Registry
+use Interop.C
+use Interop.Boundary
+
+let heap_allocate = C.function<func(uint,uint) uint>(library:Boundary.SDL3,name:"SDL_calloc")
+let heap_free = C.function<func(uint) void>(library:Boundary.SDL3,name:"SDL_free")
+func allocate(count:uint,size:uint) uint { return heap_allocate(count,size) }
+func release(address:uint) { heap_free(address) }
+
+test "UIA raw registry retires identities and rehashes tombstones without managed objects" {
+    let context = allocate(1 as uint,24 as uint)
+    assert(context != 0 as uint)
+    let allocator = C.function_address(allocate); let free = C.function_address(release)
+    var index:uint = 2 as uint
+    while index < 1002 as uint { assert(Registry.add(context,index*16 as uint,allocator,free)); index++ }
+    index = 2 as uint
+    while index < 1002 as uint { assert(Registry.contains(context,index*16 as uint)); index++ }
+    index = 2 as uint
+    while index < 1002 as uint { Registry.remove(context,index*16 as uint); assert(!Registry.contains(context,index*16 as uint)); index += 2 as uint }
+    index = 2 as uint
+    while index < 1002 as uint { assert(Registry.add(context,index*16 as uint,allocator,free)); index += 2 as uint }
+    assert(!Registry.contains(context,0 as uint) && !Registry.contains(context,1 as uint))
+    assert(!Registry.add(context,0 as uint,allocator,free))
+    Registry.destroy(context,free); assert(C.load<uint>(context,0 as uint) == 0 as uint)
+    release(context)
+}

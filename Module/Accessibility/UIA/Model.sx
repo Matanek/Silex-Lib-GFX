@@ -1,0 +1,284 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.UIA.Description
+use GFX.Accessibility.UIA.TextData
+use STD.Collections.Dictionary
+
+package struct Change { let token:uint; let kind:AX.ChangeKind }
+class Header { let table:str; var index:int; init(table:str,index:int) { self.table = table; self.index = index } }
+class Headings { var ids:str[] = []; var columns:int[] = [] }
+
+// Only the window thread owns this model. Native peers carry numeric tokens,
+// never Source IDs or references to Silex objects on a COM worker thread.
+package class Model {
+    private var source:AX.Source
+    private var active:bool = true
+    private var next:uint = 1 as uint
+    private var tokens:Dictionary<str,uint> = Dictionary<str,uint>()
+    private var ids:Dictionary<uint,str> = Dictionary<uint,str>()
+    private var parents:Dictionary<str,str> = Dictionary<str,str>()
+    private var documents:Dictionary<uint,TextData.Data> = Dictionary<uint,TextData.Data>()
+    private var root_id:str? = null
+    private var headings:Dictionary<str,Header> = Dictionary<str,Header>()
+    private var header_lists:Dictionary<str,Headings> = Dictionary<str,Headings>()
+    private var focus_id:str? = null
+    var events:Change[] = []
+    var retired:uint[] = []
+    var root_changed:bool = false
+    var focus_changed:bool = false
+    var dirty:bool = false
+    init(source:AX.Source) { var live = source; self.root_id = live.root(); self.source = live }
+    func window() uint { if self.active { return 1 as uint } return 0 as uint }
+    func peer_count() int { return self.tokens.count() }
+    func peer(id:str) uint {
+        if !self.active { return 0 as uint }
+        if let token = self.tokens.find(id) { return token }
+        self.next++; let token = self.next
+        self.tokens.set(id,token); self.ids.set(token,id); return token
+    }
+    func known(id:str) uint? { return self.tokens.find(id) }
+    func source_id(token:uint) str? { if !self.active { return null } return self.ids.find(token) }
+    func element(token:uint) AX.Element? {
+        if let id = self.source_id(token) { return self.source.read(id) }
+        return null
+    }
+    func focused() uint {
+        if !self.active { return 0 as uint }
+        if let id = self.source.focused() { return self.peer(id) }
+        return 0 as uint
+    }
+    func at(x:float,y:float) uint {
+        if !self.active { return 0 as uint }
+        if let id = self.source.element_at(x,y) { return self.peer(id) }
+        return self.window()
+    }
+    func root() uint {
+        if !self.active { return 0 as uint }
+        if let id = self.source.root() { return self.peer(id) }
+        return 0 as uint
+    }
+    func parent(token:uint) uint {
+        if token == self.window() { return 0 as uint }
+        if let element = self.element(token) {
+            if let owner = self.parents.find(element.id) {
+                // Reparenting can change a row's mounted wrappers. Prefer a
+                // current semantic ancestor, retaining the index binding when
+                // a virtual wrapper has no Source description.
+                var ancestor = element.parent; var seen = Dictionary<str,bool>()
+                while let id = ancestor {
+                    if seen.contains(id) { break } seen.set(id,true)
+                    if let parent = self.source.read(id) {
+                        if parent.role == AX.Role.row || parent.role == AX.Role.table { self.parents.set(element.id,id); return self.peer(id) }
+                        ancestor = parent.parent
+                    } else { break }
+                }
+                if self.source.read(owner) != null { return self.peer(owner) }
+            }
+            if let parent = element.parent { return self.peer(parent) }
+            return self.window()
+        }
+        return 0 as uint
+    }
+    func child_count(token:uint) int {
+        if token == self.window() { if self.root() != 0 as uint { return 1 } return 0 }
+        if let element = self.element(token) {
+            if element.role == AX.Role.table {
+                if var rows = self.source.rows(element.id) { return rows.count()+self.header_count(token) }
+            }
+            return element.child_count
+        }
+        return 0
+    }
+    func child(token:uint,index:int) uint {
+        if index < 0 { return 0 as uint }
+        if token == self.window() { if index == 0 { return self.root() } return 0 as uint }
+        if let element = self.element(token) {
+            if element.role == AX.Role.table {
+                if self.source.rows(element.id) != null {
+                    let headers = self.header_count(token)
+                    if index < headers { if var list = self.header_list(element.id) { return self.peer(list.ids[index]) } return 0 as uint }
+                    return self.row(token,index-headers)
+                }
+            }
+            if index >= element.child_count { return 0 as uint }
+            if let id = self.source.child(element.id,index) { return self.peer(id) }
+        }
+        return 0 as uint
+    }
+    func navigate(token:uint,direction:int32) uint {
+        if direction == 0 { return self.parent(token) }
+        if direction == 3 { return self.child(token,0) }
+        if direction == 4 { return self.child(token,self.child_count(token)-1) }
+        if direction != 1 && direction != 2 { return 0 as uint }
+        let parent = self.parent(token); if parent == 0 as uint { return 0 as uint }
+        if let element = self.element(token) {
+            var index = element.index
+            if element.role == AX.Role.row && element.row_index != null { index = element.row_index! }
+            if element.role == AX.Role.cell && element.column_index != null { index = element.column_index! }
+            if let container = self.element(parent) {
+                if container.role == AX.Role.table && self.source.rows(container.id) != null {
+                    if let heading = self.header_index(token) { index = heading }
+                    else { index += self.header_count(parent) }
+                }
+            }
+            if direction == 1 { index++ } else { index-- }
+            return self.child(parent,index)
+        }
+        return 0 as uint
+    }
+    func cell(token:uint,row:int,column:int) uint {
+        if row < 0 || column < 0 { return 0 as uint }
+        if let table = self.element(token) {
+            if table.role != AX.Role.table || row >= (table.row_count ?? 0) || column >= (table.column_count ?? 0) { return 0 as uint }
+            let parent = self.row(token,row); if parent == 0 as uint { return 0 as uint }
+            if let id = self.source_id(parent) {
+                if let child = self.source.child(id,column) {
+                    self.parents.set(child,id); return self.peer(child)
+                }
+            }
+        }
+        return 0 as uint
+    }
+    func has_rows(token:uint) bool { if let id = self.source_id(token) { return self.source.rows(id) != null } return false }
+    func row(token:uint,index:int) uint {
+        if index < 0 { return 0 as uint }
+        if let id = self.source_id(token) { if var rows = self.source.rows(id) {
+            if index >= rows.count() { return 0 as uint }
+            if let row = rows.row(index) { self.parents.set(row,id); return self.peer(row) }
+        } }
+        return 0 as uint
+    }
+    private func header_list(table:str) Headings? {
+        if var cached = self.header_lists.find(table) { return cached }
+        var result = Headings()
+        if var columns = self.source.columns(table) {
+            let count = columns.count(); var index = 0
+            while index < count {
+                if let id = columns.column(index) { if let column = self.source.read(id) { if let header = column.header {
+                    if self.source.read(header) != null {
+                        self.headings.set(header,Header(table,result.ids.count())); self.parents.set(header,table)
+                        result.ids.append(header); result.columns.append(index)
+                    }
+                } } }
+                index++
+            }
+        }
+        self.header_lists.set(table,result); return result
+    }
+    func header_count(token:uint) int {
+        if let id = self.source_id(token) { if var list = self.header_list(id) { return list.ids.count() } }
+        return 0
+    }
+    func column_header(token:uint,index:int) uint {
+        if index < 0 { return 0 as uint }
+        if let id = self.source_id(token) { if var list = self.header_list(id) {
+            var position = 0
+            while position < list.ids.count() { if list.columns[position] == index { return self.peer(list.ids[position]) } position++ }
+        } }
+        return 0 as uint
+    }
+    func header_index(token:uint) int? {
+        // A retained header can move to another table without changing ID.
+        // Resolve its current semantic parent before consulting the index cache.
+        let parent = self.parent(token)
+        if let id = self.source_id(token) { if let table = self.source_id(parent) {
+            if var list = self.header_list(table) {
+                if var heading = self.headings.find(id) {
+                    if heading.table == table && heading.index < list.ids.count() && list.ids[heading.index] == id { return heading.index }
+                }
+                var index = 0
+                while index < list.ids.count() {
+                    if list.ids[index] == id { self.headings.set(id,Header(table,index)); return index }
+                    index++
+                }
+            }
+            self.headings.remove(id)
+        } }
+        return null
+    }
+    func table(token:uint) uint {
+        var current = token; var seen = Dictionary<uint,bool>()
+        while current != 0 as uint {
+            if seen.contains(current) { break } seen.set(current,true)
+            if let element = self.element(current) { if element.role == AX.Role.table { return current } }
+            current = self.parent(current)
+        }
+        return 0 as uint
+    }
+    func headers(token:uint) uint[] {
+        var result:uint[] = []
+        if let id = self.source_id(token) { if var list = self.header_list(id) {
+            for header in list.ids { result.append(self.peer(header)) }
+        } }
+        return result
+    }
+    func selected(token:uint) uint[] {
+        var result:uint[] = []
+        if let element = self.element(token) {
+            if var rows = self.source.rows(element.id) {
+                for id in rows.selected() { self.parents.set(id,element.id); result.append(self.peer(id)) }
+                return result
+            }
+            // Non-virtual control groups expose their small semantic children.
+            var index = 0
+            while index < element.child_count {
+                let child = self.child(token,index)
+                if let item = self.element(child) { if item.selected == true || (item.role == AX.Role.radio && item.checked == true) { result.append(child) } }
+                index++
+            }
+        }
+        return result
+    }
+    func perform(token:uint,request:AX.Request) bool {
+        if let element = self.element(token) {
+            if !element.enabled || !Description.has(element,request.action) { return false }
+            let accepted = self.source.perform(element.id,request)
+            if accepted && request.action == AX.Action.set_value { self.documents.remove(token) }
+            self.dirty = self.dirty || accepted
+            return accepted
+        }
+        return false
+    }
+    func reveal_text(token:uint,span:AX.TextRange,align_to_start:bool) bool {
+        if let id = self.source_id(token) {
+            let accepted = self.source.reveal_text(id,span,align_to_start)
+            self.dirty = self.dirty || accepted; return accepted
+        }
+        return false
+    }
+    func geometry(token:uint) AX.TextGeometry? {
+        if let id = self.source_id(token) { return self.source.text_geometry(id) }
+        return null
+    }
+    func document(token:uint) TextData.Data? {
+        if self.source_id(token) == null { return null }
+        if var cached = self.documents.find(token) { return cached }
+        if let element = self.element(token) {
+            if !Description.text(element) { return null }
+            var data = TextData.Data(element.value ?? element.name)
+            self.documents.set(token,data); return data
+        }
+        return null
+    }
+    func synchronize() AX.Change[] {
+        if !self.active { return [] }
+        self.events = []; self.retired = []; self.root_changed = false
+        let focused = self.source.focused(); self.focus_changed = focused != self.focus_id; self.focus_id = focused
+        let changes = self.source.changes()
+        let root = self.source.root()
+        if root != self.root_id { self.root_changed = true; self.retired = self.ids.get_keys(); self.root_id = root; self.ids.clear(); self.tokens.clear(); self.parents.clear(); self.documents.clear(); self.headings.clear(); self.header_lists.clear() }
+        for change in changes {
+            if change.kind == AX.ChangeKind.structure || change.kind == AX.ChangeKind.relations || change.kind == AX.ChangeKind.removed { self.header_lists.clear() }
+            if let token = self.tokens.find(change.id) { self.events.append(Change(token:token,kind:change.kind)) }
+            if change.kind == AX.ChangeKind.value || change.kind == AX.ChangeKind.name || change.kind == AX.ChangeKind.removed {
+                if let token = self.tokens.find(change.id) { self.documents.remove(token) }
+            }
+            if change.kind == AX.ChangeKind.removed {
+                if let token = self.tokens.find(change.id) { self.retired.append(token); self.ids.remove(token); self.tokens.remove(change.id) }
+                self.parents.remove(change.id)
+                self.headings.remove(change.id)
+            }
+        }
+        return changes
+    }
+    func remove() { self.active = false; self.ids.clear(); self.tokens.clear(); self.parents.clear(); self.documents.clear(); self.headings.clear(); self.header_lists.clear() }
+}

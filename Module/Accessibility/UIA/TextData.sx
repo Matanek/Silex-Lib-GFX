@@ -1,0 +1,131 @@
+use GFX.Accessibility as AX
+use GFX.Accessibility.TextOffsets.Offsets
+use GFX.Accessibility.TextWords.Words
+use STD.Text as Strings
+use STD.Text.UTF8
+
+// Created only when a text peer is queried. The UI-thread Model invalidates
+// the snapshot on a value change; word/paragraph indices stay lazy.
+package class Data {
+    var offsets:Offsets
+    private var words:Words? = null
+    private var paragraphs:int[]? = null
+    init(text:str) { self.offsets = Offsets(text) }
+    func count() int { return self.offsets.grapheme_count() }
+    func clamp(index:int) int { if index < 0 { return 0 } if index > self.count() { return self.count() } return index }
+    func at(index:int,unit:int32,geometry:AX.TextGeometry? = null) AX.TextRange? {
+        if index < 0 || index > self.count() || unit < 0 as int32 || unit > 6 as int32 { return null }
+        if unit == 0 as int32 { if index == self.count() { return AX.TextRange(index,0) } return AX.TextRange(index,1) }
+        if unit == 2 as int32 {
+            var words = self.word_index(); let scalar = self.offsets.scalar_for_grapheme(index)!
+            if let span = words.at(scalar,false) {
+                let start = self.offsets.grapheme_for_scalar(span.start)!
+                let end = self.offsets.grapheme_for_scalar(span.start+span.length,true)!
+                return AX.TextRange(start,end-start)
+            }
+        }
+        if unit == 3 as int32 {
+            if var layout = geometry { if let line = layout.line_for_index(index) { if let span = layout.range_for_line(line) { return span } } }
+        }
+        if unit == 3 as int32 || unit == 4 as int32 {
+            let points = self.paragraph_index(); return interval(points,index)
+        }
+        // Plain text has one format. A continuous field has no page units;
+        // UIA permits upgrading an unsupported unit to the next larger one.
+        return AX.TextRange(0,self.count())
+    }
+    func advance(index:int,unit:int32,count:int,geometry:AX.TextGeometry? = null) (int,int) {
+        if count == 0 || index < 0 || index > self.count() { return (index,0) }
+        if unit == 0 as int32 { let next = self.clamp(index+count); return (next,next-index) }
+        if unit == 2 as int32 {
+            var words = self.word_index(); let scalar = self.offsets.scalar_for_grapheme(index)!
+            let (next,moved) = words.advance(scalar,count)
+            return (self.offsets.grapheme_for_scalar(next)!,moved)
+        }
+        if unit == 3 as int32 {
+            if var layout = geometry {
+                if let line = layout.line_for_index(index) { if let last = layout.line_for_index(self.count()) {
+                    var anchor = line
+                    if count < 0 { if let current = layout.range_for_line(line) { if current.start != index { anchor++ } } }
+                    var target = anchor+count; if target < 0 { target = 0 } if target > last+1 { target = last+1 }
+                    if target == last+1 { return (self.count(),target-anchor) }
+                    if let span = layout.range_for_line(target) { return (span.start,target-anchor) }
+                } }
+            }
+        }
+        if unit == 3 as int32 || unit == 4 as int32 { return advance_points(self.paragraph_index(),index,count) }
+        if unit == 1 as int32 || unit == 5 as int32 || unit == 6 as int32 {
+            if count > 0 && index != self.count() { return (self.count(),1) }
+            if count < 0 && index != 0 { return (0,-1) }
+        }
+        return (index,0)
+    }
+    func text(start:int,end:int,maximum:int = -1) str {
+        var limit = self.clamp(end); let first = self.clamp(start)
+        if limit < first { return "" }
+        if maximum >= 0 {
+            let begin = self.offsets.utf16_for_grapheme(first)!
+            let available = self.offsets.utf16_for_grapheme(limit)!-begin
+            if maximum < available { limit = self.offsets.grapheme_for_utf16(begin+maximum)! }
+        }
+        return self.offsets.substring(self.offsets.scalar_for_grapheme(first)!,self.offsets.scalar_for_grapheme(limit)!) ?? ""
+    }
+    func find(start:int,end:int,query:str,backward:bool,ignore_case:bool) AX.TextRange? {
+        var needle = query; if ignore_case { needle = Strings.case_fold(needle) }
+        let pattern = UTF8.scalars(needle)
+        if pattern.count() == 0 { if backward { return AX.TextRange(end,0) } return AX.TextRange(start,0) }
+        var prefix:int[] = []; var ring:int[] = []; for _ in pattern { prefix.append(0); ring.append(0) }
+        var index = 1; var matched = 0
+        while index < pattern.count() {
+            while matched > 0 && pattern[index] != pattern[matched] { matched = prefix[matched-1] }
+            if pattern[index] == pattern[matched] { matched++ } prefix[index] = matched; index++
+        }
+        var found:AX.TextRange? = null; matched = 0; var position = 0; var cluster = start
+        while cluster < end {
+            var value = self.text(cluster,cluster+1)
+            if ignore_case { value = Strings.case_fold(value) }
+            for scalar in UTF8.scalars(value) {
+                ring[position%pattern.count()] = cluster
+                while matched > 0 && scalar != pattern[matched] { matched = prefix[matched-1] }
+                if scalar == pattern[matched] { matched++ }
+                if matched == pattern.count() {
+                    let first = ring[(position+1-pattern.count())%pattern.count()]
+                    found = AX.TextRange(first,cluster+1-first)
+                    if !backward { return found }
+                    matched = prefix[matched-1]
+                }
+                position++
+            }
+            cluster++
+        }
+        return found
+    }
+    private func word_index() Words {
+        if self.words == null { self.words = Words(self.offsets) }
+        return self.words!
+    }
+    private func paragraph_index() int[] {
+        if let points = self.paragraphs { return points }
+        var points:int[] = [0]; var index = 0
+        while index < self.count() {
+            let scalar = self.offsets.scalar_at(self.offsets.scalar_for_grapheme(index)!)!
+            if scalar == 10 as uint32 || scalar == 13 as uint32 || scalar == 0x2028 as uint32 || scalar == 0x2029 as uint32 { points.append(index+1) }
+            index++
+        }
+        if points[points.count()-1] != self.count() { points.append(self.count()) }
+        self.paragraphs = points; return points
+    }
+}
+func interval(points:@int[],index:int) AX.TextRange {
+    if index == points[points.count()-1] { return AX.TextRange(index,0) }
+    var low = 0; var high = points.count()
+    while low < high { let middle = low+(high-low)/2; if points[middle] <= index { low = middle+1 } else { high = middle } }
+    return AX.TextRange(points[low-1],points[low]-points[low-1])
+}
+func advance_points(points:@int[],index:int,count:int) (int,int) {
+    var low = 0; var high = points.count()
+    while low < high { let middle = low+(high-low)/2; if points[middle] <= index { low = middle+1 } else { high = middle } }
+    var anchor = low-1; if count < 0 && points[anchor] != index { anchor++ }
+    var target = anchor+count; if target < 0 { target = 0 } if target >= points.count() { target = points.count()-1 }
+    return (points[target],target-anchor)
+}

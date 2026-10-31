@@ -5,7 +5,8 @@ Canvas or GFX.UI. A host can inspect a source supplied by an existing interface,
 or implement `Source` for its own controls. The first macOS adapter presents
 elements to AppKit; the initial button/text-field path has been checked with
 the inspector and VoiceOver. Qualification of other controls continues. A Linux AT-SPI adapter is experimental and still requires qualification on
-Linux. The Windows UI Automation bridge remains in preparation.
+Linux. A Windows UI Automation adapter is also experimental, with native
+qualification still open.
 
 ## Read and act on the same interface
 
@@ -179,6 +180,14 @@ editor or one outside a new modal scope. AppKit converts UTF-16 indices
 and screen coordinates at its boundary. Span, line and position queries do
 not edit the application’s selection.
 
+`Source.reveal_text(id,span,align_to_start)` asks to reveal text without moving
+focus, caret, or selection. `span` is a grapheme-based `TextRange`. `true`
+aligns its first line with the top of the viewport; `false` aligns its last
+line with the bottom, within the available scroll extent. It returns `true`
+for an accepted request, including a range that was already visible. The
+default implementation returns `false`. UI sources provide it for single-line
+and multiline fields, including disabled ones.
+
 ## Other macOS controls
 
 The bridge distinguishes tabs, scrollbars, splitters, help tags and headers.
@@ -258,3 +267,35 @@ Linux. Bus operation, Orca, desktop interactions and coordinate conventions at
 different scale factors still require qualification on the target systems.
 This experimental status does not change ordinary-use acceptance of macOS
 controls.
+
+
+## Experimental Windows bridge
+
+`Window` connects the same `Source` to UI Automation on the UI thread. Roles,
+names, values, states, relations, and actions supply Invoke, Value, RangeValue,
+Toggle, Selection/SelectionItem, ExpandCollapse, Grid/GridItem, Table/TableItem,
+ScrollItem, and Text/TextRange patterns according to the described capabilities.
+Indexed tables realize only requested rows and cells; headers retain their
+identity after reparenting.
+
+Text ranges keep grapheme endpoints. Native strings use UTF-16, including
+embedded zeros in BSTRs; reading, Unicode search, selection, and geometry are
+translated at the boundary. `ScrollIntoView` uses `reveal_text` without changing
+selection. Custom producers supply `text_geometry` and `reveal_text` for these
+queries; missing capabilities remain unavailable. Retained ranges are clamped
+to current content after editing and do not yet track text moves through edit
+anchors. Exposed attributes describe plain text.
+
+Logical dialogs offer the close action described by their source without adding
+native maximize or minimize behavior. The HWND retains its system window
+behavior. Notifications do not realize unknown elements. Interfaces retained
+after detachment become unavailable and cannot revive an old identity.
+
+CPU tests and ARM64/X64 builds from macOS prove the model, exercised calling
+conventions, and linkage. They do not prove Windows execution: Inspect/Narrator,
+actual focus, coordinates at different scales, idle-loop wakeup, and callbacks
+during closure still require native qualification. The [Windows fixture](../../Tests/Accessibility/Windows.sx)
+checks COM references, native arrays, strings, and detached requests without a
+window on the target OS. The public UIAccessibility demo then provides the
+interactive path. These tests require a compiler including this candidate's
+native C entries and records.

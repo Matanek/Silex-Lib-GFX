@@ -1,0 +1,12 @@
+use Interop.C
+use Interop.Boundary
+
+package func register() uint32 { return register_events(1 as int32) }
+package func push(kind:uint32) bool {
+    if kind == 0 as uint32 || kind == 0xffff_ffff as uint32 { return false }
+    var event:uint[16] = [0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint,0 as uint]
+    C.store<uint32>(C.address_bits(C.mutable_pointer(event)),0 as uint,kind)
+    return push_event(C.mutable_pointer(event[0])) != 0 as uint8
+}
+let register_events = C.function<func(int32) uint32>(library:Boundary.SDL3,name:"SDL_RegisterEvents")
+let push_event = C.function<func(C.MutablePointer<uint>) uint8>(library:Boundary.SDL3,name:"SDL_PushEvent")
