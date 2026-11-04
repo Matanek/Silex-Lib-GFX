@@ -12,7 +12,11 @@ silex install GFX
 - [French documentation](Docs/FR/README.md)
 - [English documentation](Docs/EN/README.md)
 
-The package requires Silex 0.44.0 or newer.
+The last released package requires Silex 0.44.0 or newer.
+
+This development revision requires the matching Silex development compiler,
+including protocol default bodies and native C callback support used by the
+desktop accessibility adapters.
 
 The unpublished macOS ARM64 native candidate requires the checksum-matched local
 SDL archive; see [reconstruction](Docs/EN/NativeProvider.md).
