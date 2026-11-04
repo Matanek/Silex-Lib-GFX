@@ -29,6 +29,9 @@ tests) and `zig build test` (42/42 steps, 1,229 internal tests), with 293 Silex
 scenarios in 115 files at each gate. These totals overlap. The CLI is built in
 ReleaseFast; internal tests use Debug.
 
+The source record also pins Font, Scene2D and Scene3D as retained common
+baselines. This adds no new implementation or GPU qualification.
+
 The GFX campaign contains 208 CPU tests across 34 file passages, representing
 33 distinct sources: UIA/AT-SPI models, public UI families, accessibility,
 Canvas, Viewer and Terminal. The 32 earlier passages retain their actual

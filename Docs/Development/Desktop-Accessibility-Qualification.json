@@ -62,7 +62,7 @@
     },
     {
       "repository": "Packages/GFX",
-      "source_head": "3fe7b084534221f78722101a617860f384648fe5",
+      "source_head": "78d28927ce7adb41f01566cac7c9621f5ef24d27",
       "source_tree_sha256": "f8b23919de022676d1be5f3edb5431a5b65a6c258bc156232f85251d9bbd2585",
       "source_files": 127,
       "excludes": [
@@ -115,6 +115,36 @@
       "source_head": "006e67da962658e61665e562ffa34c3ab9276a54",
       "source_tree_sha256": "6f251644b095aa073576939df2ce6ee52f233fe0530772c390bd7164e1965b44",
       "source_files": 80,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.Font",
+      "source_head": "530008ec387e689c9a1985842867289edcea0d19",
+      "source_tree_sha256": "a2d5ebbf9b1d99ec8e8439943ba4208a1f30ee934baf365a7273c3dcddbfc012",
+      "source_files": 80,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.Scene2D",
+      "source_head": "d0fa171712bdd4318ad2d5194fb58b591e1ebdce",
+      "source_tree_sha256": "b4c44bfab0e23100997a2f0ef1b36c93d68e1d29e6501486e6ee996edfa5417e",
+      "source_files": 62,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.Scene3D",
+      "source_head": "3116e496a706a306999b00bf6e24db1dedad753c",
+      "source_tree_sha256": "a615049bc71a5c853c0f0ab5e7c98d1665374379f993d3c37923e43e7cc74ddb",
+      "source_files": 110,
       "excludes": [
         "*.md",
         "Docs/**"
@@ -1608,6 +1638,11 @@
     "success": true
   },
   "proof_scope": "Current builds use one compilation worker. The 32 earlier CPU sources retain their actual CLI97 identity; unchanged checks and code generation are reassessed explicitly. No complete 103-source UI suite or foreign native-reader execution is claimed.",
+  "retained_common_baselines": [
+    "Packages/GFX.Font",
+    "Packages/GFX.Scene2D",
+    "Packages/GFX.Scene3D"
+  ],
   "source_head_scope": "Source anchors may precede documentation-only descendants; source_tree_sha256 excludes Markdown and Docs to avoid a circular proof.",
   "success": true
 }
