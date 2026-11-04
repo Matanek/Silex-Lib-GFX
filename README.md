@@ -11,6 +11,7 @@ silex install GFX
 
 - [French documentation](Docs/FR/README.md)
 - [English documentation](Docs/EN/README.md)
+- [Desktop accessibility qualification](Docs/Development/Desktop-Accessibility-Qualification.md): current evidence and remaining native checks.
 
 The last released package requires Silex 0.44.0 or newer.
 

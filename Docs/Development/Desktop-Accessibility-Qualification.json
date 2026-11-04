@@ -1,0 +1,1613 @@
+{
+  "date": "2026-11-04",
+  "host": {
+    "os": "macOS",
+    "version": "26.6.2",
+    "build": "25G83",
+    "architecture": "arm64"
+  },
+  "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+  "compiler_source_commit": "d2bbe7b439e8ea08b92ef446c9afd13a4ef34b07",
+  "compiler_mode": "ReleaseFast",
+  "internal_test_mode": "Debug",
+  "cpu_passages": 34,
+  "unique_cpu_sources": 33,
+  "cpu_tests": 208,
+  "appkit_runs": 4,
+  "demo_cpu_runs": 2,
+  "foreign_builds": 6,
+  "native_linux_execution": false,
+  "native_windows_execution": false,
+  "window_opened": false,
+  "sources": [
+    {
+      "repository": "Silex",
+      "source_head": "dbd711d2d09cf8c967a1a8a63fb27f22730ba300",
+      "source_tree_sha256": "7dab2b7319c532f45d7b2505458eb811387cbc198afba667abcd728f3eb1f8d2",
+      "source_files": 3207,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Silex-Documentation",
+      "source_head": "816830c66ba156b91f3a6b25c666b7c1d7dc4d62",
+      "source_tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_files": 0,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Silex-Examples",
+      "source_head": "10f3612a70ae91c017d4dc52cef88cf7f2239bcf",
+      "source_tree_sha256": "b04ff42bd26fc36dd8760deffd464ec99ec31f28cd579772ff30dff825b4fc92",
+      "source_files": 605,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/STD",
+      "source_head": "b63ca237a42f5c2a34f0a24d41cf7e3eabf8f6a7",
+      "source_tree_sha256": "e3b68521fbbdf4e1dacb0367a0b46d63677c41b3c84d2577f41a0cfab4a98a41",
+      "source_files": 221,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX",
+      "source_head": "3fe7b084534221f78722101a617860f384648fe5",
+      "source_tree_sha256": "f8b23919de022676d1be5f3edb5431a5b65a6c258bc156232f85251d9bbd2585",
+      "source_files": 127,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.Canvas",
+      "source_head": "3fade6dfca1bfdaeea7b55029c19a9c31d1fb595",
+      "source_tree_sha256": "577f2545849c9458447cc28737a95a48cf563cb72dc10023554ae0280705bd27",
+      "source_files": 35,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.UI",
+      "source_head": "346c0e24c6d545b00b761bf1e2aa3a5ffd4885a8",
+      "source_tree_sha256": "a1c4091193d76fe910425412853684af86e8b3e3187cf01f3f2b19d58f0651db",
+      "source_files": 277,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.UI.Terminal",
+      "source_head": "20fc485cef8a2ceffda458f9bebd3d4cc0fa13a0",
+      "source_tree_sha256": "59c80335e25ab1d99d234fc97c4d4a53a5b6c42b993780bdc299c7e6524cf5cf",
+      "source_files": 8,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Packages/GFX.Viewer",
+      "source_head": "98b03130dbf6419f641b16e615fa6250571b1b1b",
+      "source_tree_sha256": "10a2dfb6b8fe321f6c0ab58e4b95b24514d87ce0e98da241783a2eb318f012cb",
+      "source_files": 21,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    },
+    {
+      "repository": "Silex-Extension-Zed",
+      "source_head": "006e67da962658e61665e562ffa34c3ab9276a54",
+      "source_tree_sha256": "6f251644b095aa073576939df2ce6ee52f233fe0530772c390bd7164e1965b44",
+      "source_files": 80,
+      "excludes": [
+        "*.md",
+        "Docs/**"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "name": "UIADescription",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/UIADescription.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 61360,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "d9ecf649fd6c4cac434fdd1c08f2c79d3f0740dc97840fc62e0f6fecbb6685d9"
+    },
+    {
+      "name": "UIAModel",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/UIAModel.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 351600,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "41785bf4f10e5b64a38fa1d2e54ff23459208460b21a59515ad3c0c9fb851b65"
+    },
+    {
+      "name": "UIAText",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/UIAText.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 162112,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "e79f2cf499b2bccdb840aaf4f89df4a15ea51353903b849a3ad72f9b3ce0b5f8"
+    },
+    {
+      "name": "UIARegistry",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/UIARegistry.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 31312,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "62362b2b21012faa120b15ce28a1f877090a15b563a8b836788b1e7a5afcb9f6"
+    },
+    {
+      "name": "ATSPIText",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/ATSPIText.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 1119808,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "650df49bb35b120fd6bd9bccb6f9b7e7548bc7c2a00449d85015620f9f48bd3a"
+    },
+    {
+      "name": "ATSPIModel",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/ATSPIModel.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 1479552,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "35c534e00e708869674b408758c3d0c5e7079e01b690e4395c5c69f265600c58"
+    },
+    {
+      "name": "ATSPICollections",
+      "operation": "test",
+      "entry": "Packages/GFX/Tests/Accessibility/ATSPICollections.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 1550752,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "11954e02564b24eec39d5c910c1cc3a4f4c6e0b963833efde33717d5836ee75b"
+    },
+    {
+      "name": "UI-AccessibilityTextGeometry",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTextGeometry.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3432208,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "5379019d1da7e4dc3e78bdd97abbeb8c44808bdf08d622e27e374fc35e03228c"
+    },
+    {
+      "name": "UI-TextViewport",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/TextViewport.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3557376,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "0998255261ab929e021b1534a94e3bd4ae9096485a8fe864e2cf4baaeba9417c"
+    },
+    {
+      "name": "UI-AccessibilityControls",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityControls.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3701744,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "c5e86c1cd13621690fef6fa2599cbf2601d34f08c62c9be7975e0631d739e19e"
+    },
+    {
+      "name": "UI-AccessibilityTables",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTables.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3395136,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "69d354be6b07c2949ac049b2cff274511d809140376d9f229e60a8da58b114e7"
+    },
+    {
+      "name": "UI-AccessibilityInteraction",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityInteraction.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3404736,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "84dc0e98fa07675557371482eaa83a122dee086648ea3f6b1998093b19890dc0"
+    },
+    {
+      "name": "UI-AccessibilityCollectionSelection",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityCollectionSelection.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3456336,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "e1690805e18e5e6723d16b4e899452ed7e4cb9edc32ad15c5264c1915d2c5a6c"
+    },
+    {
+      "name": "UI-Flow",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Flow.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3370416,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "d59a800806da806d84cb420f0953acc34ad37d0be34a5a1c688c8a4f540ad28a"
+    },
+    {
+      "name": "UI-ScrollView",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/ScrollView.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3697680,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "a0add087c5d79a51b5375e43c4f58ce3d5651d51ac93188ebdd3c5f7a857c1fe"
+    },
+    {
+      "name": "UI-Tabs",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Tabs.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3501248,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "6e6f966ef4fd08b2a61d3fbbc82d225228d49088614466088e203742361d167e"
+    },
+    {
+      "name": "UI-Panels",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Panels.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3457856,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "29da6c744b1dbb13684b800e230f36f97ef09a8be434410166c2efbb07cadade"
+    },
+    {
+      "name": "UI-Overlays",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Overlays.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3455600,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "93599101be15682df062906b1d7c5cd67c17e2a4a5e4e9a99aa2b4b1ceec0b65"
+    },
+    {
+      "name": "UI-Themes",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Themes.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3399264,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "d081cd7ca599df9b9f6a4cce5d0b96e1c9f2d9076b2117f2e49abae6f94aec50"
+    },
+    {
+      "name": "UI-Visuals",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Visuals.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3736960,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "39b5c209ec9e40306f79f17e9401e21d2551e794e638ebc37b0831a49e74dd35"
+    },
+    {
+      "name": "UI-TextEditing",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/TextEditing.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3353680,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "ae9dd1e345fb7bb0e778d124f33665d1097bf359bc297506f9b69bd7745eee70"
+    },
+    {
+      "name": "UI-TreeNavigation",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/TreeNavigation.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3458480,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "6c880591fdd72bc55d04708f5308abc31b87acd5a0c2209ab56d13b8f25298a5"
+    },
+    {
+      "name": "UI-TableNavigation",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/TableNavigation.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3367232,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "226700a4dcc7c7b4dbb20a15c99a3a35e196c5d4f2fd832cc1d5938e14a71a7e"
+    },
+    {
+      "name": "UI-Select",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/SelectPopupInteraction.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3647184,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "62b0fc378fcab38e473a7b66236d53ec3a2f338d6dec323e142333e16c1d5790"
+    },
+    {
+      "name": "UI-Reactive",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Reactive.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3415504,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "7c861dc6f4614d2617e1f16891d92b44de240ca606aa4fe5c5c75cc0b9a6b82c"
+    },
+    {
+      "name": "UI-Custom",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/CustomView.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3432288,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "8411573f86d1f8ce8358dc9a81183b4c7ebd3b35b8e74c912fde59eefbb74c70"
+    },
+    {
+      "name": "Viewer-Placement",
+      "operation": "test",
+      "entry": "Packages/GFX.Viewer/Tests/CanvasPlacement.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 1384640,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "6c13cec9c2fdf4e9b7e9ada113426543a8f181947938a0f9d0bd5babce221708"
+    },
+    {
+      "name": "Viewer-Trace",
+      "operation": "test",
+      "entry": "Packages/GFX.Viewer/Tests/FrameTrace.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 37504,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "66c1d13b0cdb867ad405b1800ebb740dc5f2f7b872df90ab94be058ba4286336"
+    },
+    {
+      "name": "Viewer-FPS",
+      "operation": "test",
+      "entry": "Packages/GFX.Viewer/Tests/FrameRateTitle.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 1236736,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "3265880441b8795af1c111fc90c91b2652143a7be94e03596ff3d0b9d6f6833d"
+    },
+    {
+      "name": "Canvas",
+      "operation": "test",
+      "entry": "Packages/GFX.Canvas/Tests/Consumer/Tests/Canvas.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 2462912,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "0e6eb5a47f6f560b10ad1e05af2fc15f081a86badf816a86e16c06c9545e243e"
+    },
+    {
+      "name": "Terminal",
+      "operation": "test",
+      "entry": "Packages/GFX.UI.Terminal/Tests/Terminal.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3727856,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "7b9f97d338315e598100d5b0d3cc24d5e3d1bf7e1bdae12fe906ff2289ba9774"
+    },
+    {
+      "name": "Terminal-Public",
+      "operation": "test",
+      "entry": "Packages/GFX.UI.Terminal/Tests/Consumer/Tests/PublicAPI.sx",
+      "compiler_sha256": "97c3af9225605e8acbb16aa16ecaf3dd1c698416a6b3101bf899268eab9ccf24",
+      "workers_override": null,
+      "max_observed_group_rss_kib": 3630704,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "962f1dde677693b2112744f387a7412ea1e6eff66077934a5d23686c3e279b39"
+    },
+    {
+      "name": "Demo-CPU",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2826528,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "mode": "debug",
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "5a759c52a2cfae1a0638ed21a6eb5be7c40e6268261b4f7e25c9335be7b8840d",
+      "binary_sha256": "4c623531226eab6d0c6e0ab206964069af8b033aae704d8cd10ebd5b84bd586b"
+    },
+    {
+      "name": "Current-Menus",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/Menus.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2307040,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "0dad6faff556452f7354f029dc34e3daa8f9c28f81fe607f39c33f4c18452ab2"
+    },
+    {
+      "name": "Current-Geometry",
+      "operation": "test",
+      "entry": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTextGeometry.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2120304,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "5379019d1da7e4dc3e78bdd97abbeb8c44808bdf08d622e27e374fc35e03228c"
+    },
+    {
+      "name": "AppKit-macos-arm64-debug",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/MacOS.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 636928,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "target": "macos-arm64",
+      "mode": "debug",
+      "cache_disabled": true,
+      "execution_engine": "native host",
+      "log_sha256": "01334170281f58c2e9a9c76f81293313b833157bd5b0414d0a6a1bc9e3ce11a6",
+      "binary_sha256": "0abb19d91f6bfd466f3fac7ef65fd5c8d71c467701a5f0c5eafd8f96d91318bf"
+    },
+    {
+      "name": "AppKit-macos-arm64-release",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/MacOS.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 667744,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "target": "macos-arm64",
+      "mode": "release",
+      "cache_disabled": true,
+      "execution_engine": "native host",
+      "log_sha256": "4952ec11e4660448fe25d47d587d879a5fcd1e2bcf3669eca4148d3c097c5c66",
+      "binary_sha256": "56242a708248ea80af8d5f6eb29afd4b231dcd7028b46fc9b081f37e0073d654"
+    },
+    {
+      "name": "AppKit-macos-x64-debug",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/MacOS.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 582016,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "target": "macos-x64",
+      "mode": "debug",
+      "cache_disabled": true,
+      "execution_engine": "Rosetta 2",
+      "log_sha256": "494619c635a0e88b34e972973ff9437366c37d76189a8e059b71806fcb710439",
+      "binary_sha256": "75a8ec5465114740233dafdec78edc05187a0e597278a9a2a13e27f5de249259"
+    },
+    {
+      "name": "AppKit-macos-x64-release",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/MacOS.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 676512,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "target": "macos-x64",
+      "mode": "release",
+      "cache_disabled": true,
+      "execution_engine": "Rosetta 2",
+      "log_sha256": "5855d8776f17872628ce1e32c21e578c8d02f70499f5527d3a8b9afb6b550c88",
+      "binary_sha256": "a150e1fcdaccce3b6b84b816eaf2d8529b0510579791b3a07894260f7930101e"
+    },
+    {
+      "name": "Demo-Release-CPU",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2951744,
+      "exit_code": 0,
+      "executed": true,
+      "emitted_only": false,
+      "mode": "release",
+      "cache_disabled": false,
+      "execution_engine": "native host",
+      "log_sha256": "2c0bc174891025dd0f80cff86c64c45d088c03120db4d547cceb184153d26381",
+      "binary_sha256": "ea3703136cadefd634d353ccff7d0defef2ca8cb1e159ade3e3501d3f28cb3fe"
+    },
+    {
+      "name": "Fixture-windows-arm64",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/Windows.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 1944192,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "windows-arm64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "aa06c1316d2b10b3f455d875ed14b1e601267ddbaeb39787bb6ce82119eb32ee",
+      "binary_sha256": "4c1343216241378d1345f3b0fd89dc031658494172536cbc44ccee4c346f1757"
+    },
+    {
+      "name": "Demo-windows-arm64",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2965952,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "windows-arm64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "8040f93404f96964a48ef0635c309b7d11b1c721455f941cfac22d12c1373cc1",
+      "binary_sha256": "142179894d45f48f81b0c4c29febed41d81dbebaa7ebb7dfcdc0e8176968a9fa"
+    },
+    {
+      "name": "Fixture-windows-x64",
+      "operation": "compile",
+      "entry": "Packages/GFX/Tests/Accessibility/Windows.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2110528,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "windows-x64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "bdfa9728bfef7bf2e9d3862c6dcdac0ef4cdeabc00864bdeac61154dc2dff90c",
+      "binary_sha256": "44872cbf070a7a180d3912dfff62f2c68aca2f7ba96d57a51908c0839656c73b"
+    },
+    {
+      "name": "Demo-windows-x64",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2944832,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "windows-x64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "341b10b34ac0e47c5b5effc1cabd9471aee8b1ace87c8c61c18371291fac5bd2",
+      "binary_sha256": "e914cc830cd503eecee4cb20b1d437d78432f50123bf53764e3968e78aac1116"
+    },
+    {
+      "name": "Demo-linux-arm64",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 2811472,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "linux-arm64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "5a2bcf78bceb1da1f14b86952d8a81e7eebc1e82dcd4a92d49fde2d1ec7e9e8f",
+      "binary_sha256": "f55073caf8dddac3ca074313d2ff87f22ba9f5677a5400f0685cfe98e7e7dfc2"
+    },
+    {
+      "name": "Demo-linux-x64",
+      "operation": "compile",
+      "entry": "Silex-Examples/Sources/UIAccessibility/Main.sx",
+      "compiler_sha256": "1e1277a2596b4f12f8a3227c93be237fc0bbeb9c586f156fc9a6a06faa521644",
+      "workers_override": 1,
+      "max_observed_group_rss_kib": 3135744,
+      "exit_code": 0,
+      "executed": false,
+      "emitted_only": true,
+      "target": "linux-x64",
+      "mode": "debug",
+      "cache_disabled": false,
+      "log_sha256": "c0c1bba908c8db1afdd6173323cc6ee58945ac40ac3bba0fc90420b62f7bd4d7",
+      "binary_sha256": "02b78837467dc8cccfc0d5f644192700c1fd581140bdbbe9c841368aa57cf414"
+    }
+  ],
+  "binaries": [
+    {
+      "target": "windows-arm64",
+      "kind": "Fixture",
+      "sha256": "4c1343216241378d1345f3b0fd89dc031658494172536cbc44ccee4c346f1757",
+      "executed": false,
+      "format": "PE32+",
+      "machine": 43620,
+      "imports": [
+        "COMCTL32.dll",
+        "KERNEL32.dll",
+        "ole32.dll",
+        "OLEAUT32.dll",
+        "ucrtbase.dll",
+        "USER32.dll",
+        "SHELL32.dll",
+        "WINMM.dll",
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "SETUPAPI.dll",
+        "IMM32.dll"
+      ],
+      "observed_artifact_name": "Final-WindowsUIA-CPU-arm64.exe"
+    },
+    {
+      "target": "windows-arm64",
+      "kind": "Demo",
+      "sha256": "142179894d45f48f81b0c4c29febed41d81dbebaa7ebb7dfcdc0e8176968a9fa",
+      "executed": false,
+      "format": "PE32+",
+      "machine": 43620,
+      "imports": [
+        "COMCTL32.dll",
+        "KERNEL32.dll",
+        "ole32.dll",
+        "OLEAUT32.dll",
+        "SHELL32.dll",
+        "ucrtbase.dll",
+        "USER32.dll",
+        "WINMM.dll",
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "SETUPAPI.dll",
+        "IMM32.dll"
+      ],
+      "observed_artifact_name": "Final-UIAccessibility-Windows-arm64.exe"
+    },
+    {
+      "target": "windows-x64",
+      "kind": "Fixture",
+      "sha256": "44872cbf070a7a180d3912dfff62f2c68aca2f7ba96d57a51908c0839656c73b",
+      "executed": false,
+      "format": "PE32+",
+      "machine": 34404,
+      "imports": [
+        "COMCTL32.dll",
+        "KERNEL32.dll",
+        "ole32.dll",
+        "OLEAUT32.dll",
+        "ucrtbase.dll",
+        "USER32.dll",
+        "SHELL32.dll",
+        "WINMM.dll",
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "SETUPAPI.dll",
+        "IMM32.dll"
+      ],
+      "observed_artifact_name": "Final-WindowsUIA-CPU-x64.exe"
+    },
+    {
+      "target": "windows-x64",
+      "kind": "Demo",
+      "sha256": "e914cc830cd503eecee4cb20b1d437d78432f50123bf53764e3968e78aac1116",
+      "executed": false,
+      "format": "PE32+",
+      "machine": 34404,
+      "imports": [
+        "COMCTL32.dll",
+        "KERNEL32.dll",
+        "ole32.dll",
+        "OLEAUT32.dll",
+        "SHELL32.dll",
+        "ucrtbase.dll",
+        "USER32.dll",
+        "WINMM.dll",
+        "ADVAPI32.dll",
+        "GDI32.dll",
+        "SETUPAPI.dll",
+        "IMM32.dll"
+      ],
+      "observed_artifact_name": "Final-UIAccessibility-Windows-x64.exe"
+    },
+    {
+      "target": "linux-arm64",
+      "kind": "Demo",
+      "sha256": "f55073caf8dddac3ca074313d2ff87f22ba9f5677a5400f0685cfe98e7e7dfc2",
+      "executed": false,
+      "format": "ELF64",
+      "machine": 183,
+      "interpreter": "/lib/ld-linux-aarch64.so.1",
+      "needed": [
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-aarch64.so.1",
+        "libpthread.so.0",
+        "libdl.so.2"
+      ],
+      "observed_artifact_name": "Final-UIAccessibility-Linux-arm64"
+    },
+    {
+      "target": "linux-x64",
+      "kind": "Demo",
+      "sha256": "02b78837467dc8cccfc0d5f644192700c1fd581140bdbbe9c841368aa57cf414",
+      "executed": false,
+      "format": "ELF64",
+      "machine": 62,
+      "interpreter": "/lib64/ld-linux-x86-64.so.2",
+      "needed": [
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-x86-64.so.2",
+        "libpthread.so.0",
+        "libdl.so.2"
+      ],
+      "observed_artifact_name": "Final-UIAccessibility-Linux-x64"
+    }
+  ],
+  "compiler_gates": {
+    "check": {
+      "steps": 50,
+      "internal_tests": 1764,
+      "scenarios": 293,
+      "files": 115
+    },
+    "test": {
+      "steps": 42,
+      "internal_tests": 1229,
+      "scenarios": 293,
+      "files": 115
+    },
+    "ir_verification": {
+      "tests": 27,
+      "functions_per_bounded_case": 8192,
+      "caller_scratch_bytes": 32768
+    }
+  },
+  "guard": {
+    "nice": 10,
+    "rss_limit_kib": 4194304,
+    "start_free_percent": 45,
+    "stop_free_percent": 35
+  },
+  "retained_ui_evidence": {
+    "unique_sources": 39,
+    "complete_ui_suite": false,
+    "overlap_with_final_campaign": true,
+    "runs": 40,
+    "sources": [
+      {
+        "source": "Packages/GFX.UI/Tests/AccessibilityLocations.sx",
+        "source_sha256": "3be92bc520b5ba2ccb67fa5d307af4e99650a4e013110b02bf6535d1db752363",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-001.json",
+        "log_sha256": "ace30a132c941f8a9e4f0ee838fdaa3fb96a0a70b85b0946f6148cfc26039013"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/AccessibilityMountedRows.sx",
+        "source_sha256": "ddf33ffa11958ac66df033132339dc918b7ffccc4ee77f681d34a3c1afbba17d",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-002.json",
+        "log_sha256": "bb0aa898be5786ed15c7bd3f55c221817ea03393f896024a0830c842927825a3"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/AccessibilityObservations.sx",
+        "source_sha256": "68a90370ee2f4ce66126dce55d52f5f616b97ae4ae20965ba8b7062d2f208a48",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-003.json",
+        "log_sha256": "b49d45f61bc34f5be533484cff41c9e384a1b993a7c8484bf6c3c46e902e8964"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/BoxShadow.sx",
+        "source_sha256": "e3b64c00c9d65937b1f362ccf0c1a1ca516e38ccd22ed32510289a5f50e37ada",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-004.json",
+        "log_sha256": "e712120fbf436797ae4594249f5d97964533bdba69ef7498049f7282c0114193"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ChoiceHeight.sx",
+        "source_sha256": "ecfad6c40a62a297a31129f53711694a5f81510e356a4cfe4bd2a9ff81285cc7",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 5,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-005.json",
+        "log_sha256": "1cdf2ea6aa586f0d8243b3d8425b714ca88d69771850ec37aef9d2f85ef73033"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ChoicePopup.sx",
+        "source_sha256": "eaa7ce52562f8e1576ec43a53d17106153607a703d9966ea337afa5e9a060534",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 6,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-006.json",
+        "log_sha256": "8b4bc502eb4a33d9e3fe67acc113624db9240f6bf37def93d697f7c19ce59796"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ClipboardEditing.sx",
+        "source_sha256": "18036fa4abf2f69172aea0c2be88c718914546a8d485b853b1b52fd8bf32551a",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-007.json",
+        "log_sha256": "454baff83b355789e5b6638569e5b7ec18a89b9f60dc38d7a46d83c73f8a1344"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ClippedText.sx",
+        "source_sha256": "99e521b9c99c39163a7c5796f14be70b269d761c614ed7edc00e3dc7f1c752a1",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-008.json",
+        "log_sha256": "4c83bff53faf0df6d67fb793679c2e11d209faba1bad2d96111915b41dddac3b"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ClippedTraversal.sx",
+        "source_sha256": "d92e37eded45a903b16095c02066e9cc859ed1f394f057f95ded192659c6de60",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-009.json",
+        "log_sha256": "7c325b1628f4b7caca68c3af2672475e14861fdd3f58e32fc92a610929afe78d"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/ComboBox.sx",
+        "source_sha256": "f48809343960d71a05aa46483485913538e7efd2c0fc43b6f7be99371002026b",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-010.json",
+        "log_sha256": "677f7bbdfa29bec64f0986af86be0b695988b9f2b01510f7320f88aaf51e3e64"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Composition.sx",
+        "source_sha256": "4f81c3b5407f891ebfa4043abbe028c055516b61d77f817016f8dd358f11f2fd",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-011.json",
+        "log_sha256": "0211a644558b46f39007bcf306de9126cfda718828b5d0432b78ccf727c364ea"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/Accessibility.sx",
+        "source_sha256": "96a6f334c07f6498953ef2de1f44ae1b254b7c5b5dd4b12df8bb78d74fbe855a",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 9,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-012.json",
+        "log_sha256": "169e4390b41bded459fd7ed453b23c9a996162dc2322479b4acc3644a924ad1a"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityCollectionSelection.sx",
+        "source_sha256": "1d74b7843ed875b632e7ff996288f128fabc229a536c0742f46567e44cf4b75c",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-013.json",
+        "log_sha256": "e1690805e18e5e6723d16b4e899452ed7e4cb9edc32ad15c5264c1915d2c5a6c"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityCollections.sx",
+        "source_sha256": "d02d735a624417d0ec86f47784e3311afc1852986eb0fe37dc879e6238623b4a",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-014.json",
+        "log_sha256": "e3e1125e7c3d47d4ac9481e73ba9c1313db97c93aaaf0b77b59cb63b4c7e5494"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityControls.sx",
+        "source_sha256": "0665f14c3f65a0fb6a768bc47fe8a5593c0010d69de62991837919c016d92625",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 6,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-015.json",
+        "log_sha256": "c5e86c1cd13621690fef6fa2599cbf2601d34f08c62c9be7975e0631d739e19e"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityInteraction.sx",
+        "source_sha256": "52b1b49b03371feb85c15e9ee95d61c5dc458b907bd2dd77ffa901f09045321e",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-016.json",
+        "log_sha256": "84dc0e98fa07675557371482eaa83a122dee086648ea3f6b1998093b19890dc0"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityMenus.sx",
+        "source_sha256": "3d297d0379d0de24e7e6260e45e1b1f090e3e7c1e439789629fa37d7a60ac533",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-017.json",
+        "log_sha256": "48fb0651509d69a288e00ab6ea1c66c04da53d351ae6decf282140a0e2567dfd"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityMutation.sx",
+        "source_sha256": "aab57c6c513f774aecb57424d1d8ee476429af05c57f03ade8533ddf5b5e8e26",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-018.json",
+        "log_sha256": "7145f3a38f70ad6ae7228c66ad8e6219c0f52eda9b22947412c098bb4fdf5ba5"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityPopups.sx",
+        "source_sha256": "ef2eab6106529d1730cf41fee43d14cf46a48d3b0256594d83e988459f92e10a",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-019.json",
+        "log_sha256": "1bf65f75de083fec94b4a5a95c482e1d9176ff7564eebac8dd24c9145e775e6b"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityRadios.sx",
+        "source_sha256": "378193af7bd3e6064cbd4f8e7871846997e3d011e12efa19c27c200548503854",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-020.json",
+        "log_sha256": "1aa8b27310e0d38383b5c0d57ffbad6fc9012a39b6388e998fa72e55aed64afa"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityReconstruction.sx",
+        "source_sha256": "4abcb6a5e4608f2fb8c8cda15836f4eb02de2539237c01e302c5f8598ddc3625",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-021.json",
+        "log_sha256": "3ce98c6e34a081baa0b80ecc65ecc1b27d09c31d58f2e499ea7e9cb3b28a5250"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityRows.sx",
+        "source_sha256": "5426326ce7ca4e5647608fb00d6b9d67b1694e4e477daf40b3bc4e7df4a0dbb0",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 7,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-022.json",
+        "log_sha256": "c827a6d5dbed1dcfd3c62320bfad29d53b89899a371d9d848e1d5a780633b74f"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilitySession.sx",
+        "source_sha256": "e66fd8af2c1dfb908c00483f894eededcc40ef6f4e3f4b44b1cb366193077852",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-023.json",
+        "log_sha256": "aa1bea4be7ced217dac6c2e647703266e4b48983300b0ddbb16f3ff164af01d3"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilitySpatial.sx",
+        "source_sha256": "7167dd56d576a795ca308c7f46ec17919c5e0f8e0df3ee889d61b28dbe9100b4",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 5,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-024.json",
+        "log_sha256": "026da886925807996c99c4bca1167e43ef4cab051e9f9817884612eb05554222"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTables.sx",
+        "source_sha256": "a313052043dbe6dee0ee39cd52173ed5bcc301bd3f6dd0ac01be8454531dd973",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-025.json",
+        "log_sha256": "69d354be6b07c2949ac049b2cff274511d809140376d9f229e60a8da58b114e7"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTextGeometry.sx",
+        "source_sha256": "160c924df6a74f3b0fe84479de1c4eb8a0ee36e709cc646b0b29f06f2e50246b",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 5,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-026.json",
+        "log_sha256": "5379019d1da7e4dc3e78bdd97abbeb8c44808bdf08d622e27e374fc35e03228c"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/CheckboxAlignment.sx",
+        "source_sha256": "a3524bbf51a86a8ac6ba96ef9b49014a0726bda1d76e11aa51c2ba5e82f2aca5",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 1,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-027.json",
+        "log_sha256": "cdbd7087df53372a2d3b6a720bf2e812faed3d35846d9dcacd0869fd413e1f51"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/ChoiceAppearance.sx",
+        "source_sha256": "2a38fe919399e73e77bd4d61e668666cb8cc3264c8851aefaa0cfa3d4c46dedc",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-028.json",
+        "log_sha256": "8b84ae2e8da9f8de23f6d01a113cf8269d606bd86fdd37a6648ac78d8ef6739f"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/ChoiceHeight.sx",
+        "source_sha256": "746270045d0493b4f779b91bb77a9773ec51dc8ad5262d564d93bb9084e8eb3e",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-029.json",
+        "log_sha256": "0e7514f7d8f9e22ef80a64ba8e9b7e9a086a1b0884dc9582d3891eba9d443ce2"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/ComboBox.sx",
+        "source_sha256": "218f99fbcca224e5559a3288e88fd2054385bd7679be2aa3750604304928dd3a",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 7,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-030.json",
+        "log_sha256": "6813d2f9c7edac8ece8d7672345f5fbf3ca8a0df27186c83c91c72db901062b8"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/CustomView.sx",
+        "source_sha256": "4d9ca978739562345141647da633a6c31b7337f39548322d11a4cb7c6331f997",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-031.json",
+        "log_sha256": "8411573f86d1f8ce8358dc9a81183b4c7ebd3b35b8e74c912fde59eefbb74c70"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/Flow.sx",
+        "source_sha256": "802dbcf70795798878e583472c2f175e8f3a40dea3c3aa5ae0a2d4390d519718",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 2,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-032.json",
+        "log_sha256": "d59a800806da806d84cb420f0953acc34ad37d0be34a5a1c688c8a4f540ad28a"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/Focus.sx",
+        "source_sha256": "3920e4e14bdec8d96e9bc348a2fb4500a7a125a441431059354bb8de0872f4df",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 7,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-033.json",
+        "log_sha256": "b03c5ef533d528c0aafad6e33d99ca52c32aa93e986590acdbed00fed71568d4"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/FocusAppearance.sx",
+        "source_sha256": "5e3b1856de45d79ab7045064714d1b2f8bee4e6cd216daace92c3b2eed2d0cf7",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 11,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-034.json",
+        "log_sha256": "f710b7a4388ca2bf19255d2ebee1d3ea78aebe1cf82974146ebd775e85d01acd"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/Grid.sx",
+        "source_sha256": "8d6c3f0ecab61c6370b3d475afc0056e1a43ac0c1a52f99e9733f7f8012c2504",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 4,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-035.json",
+        "log_sha256": "e7faabba3fa6f42912d29002c6effb36ee61bcfede44dc2fbb9078a6f534b0dd"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/IME.sx",
+        "source_sha256": "d284190307f8535c1d1b2ac3f0ee49d2a72a0dd8ef16187af5bd937492afaef2",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 8,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-036.json",
+        "log_sha256": "fd23e1d577204e286c0679fa3f9f8260157374c1d2e940411d5135c02aa555c0"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/IMECancel.sx",
+        "source_sha256": "76806f54ed3c19b5c1d50eaa1675e1d111cd95c8aa80ddb62bc9a7bf7b84196c",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-037.json",
+        "log_sha256": "62aa73634999b53c6a59c8ab1f170cde4e76b8efc21658bdce0a60e2d98ede20"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/Input.sx",
+        "source_sha256": "cb92d234635d21f37719c6c5abdb1ca5f669e04a307e77ac26abf29b78043aa7",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 3,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-038.json",
+        "log_sha256": "c8fc990d88a17705d083f22cd6e04173e8556151d1706f7fd6bf070f23a9ed3b"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/ListView.sx",
+        "source_sha256": "c1773c5113e076a81fde360cd3e56ea6e834f749db1502d1599a7fc0acd1922d",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 15,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-File-039.json",
+        "log_sha256": "0d4060736fce2ef4df30787dfa0e55628a9b2cc881d92224c6ac10228e1d53c3"
+      },
+      {
+        "source": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTextGeometry.sx",
+        "source_sha256": "160c924df6a74f3b0fe84479de1c4eb8a0ee36e709cc646b0b29f06f2e50246b",
+        "compiler_sha256": "e060c367acbb458457bdb546c0512de60f8f6b2bd1f2104a910ee8d78a96db82",
+        "tests": 5,
+        "report": "Frame-Presentation-Consolidation-Nov04-UI-Geometry-Single.json",
+        "log_sha256": "5379019d1da7e4dc3e78bdd97abbeb8c44808bdf08d622e27e374fc35e03228c"
+      }
+    ]
+  },
+  "source_reassessment": {
+    "unchanged_source_files": 4573,
+    "changed_compiler_files": [
+      "Toolchain/Sources/Ir.zig",
+      "Toolchain/Sources/NativeTestRunner.zig",
+      "Toolchain/Sources/Optimize/Release.zig",
+      "Toolchain/Sources/Optimize/Verifier.zig",
+      "Toolchain/build.zig"
+    ],
+    "unexpected_changes": [],
+    "dependencies": [
+      {
+        "repository": "Packages/GFX.Assets",
+        "head": "a1b10c57eb0009450623d0009cfb1630c000c30e",
+        "expected": "a1b10c57eb0009450623d0009cfb1630c000c30e",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.Font",
+        "head": "530008ec387e689c9a1985842867289edcea0d19",
+        "expected": "530008ec387e689c9a1985842867289edcea0d19",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.ECS",
+        "head": "ca1caa1713d87ae7a9802d6d5a631a175f9d0700",
+        "expected": "ca1caa1713d87ae7a9802d6d5a631a175f9d0700",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.Application",
+        "head": "1bc1e73472dc8b6a42c79a885c80829b59382bd6",
+        "expected": "1bc1e73472dc8b6a42c79a885c80829b59382bd6",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.GPU",
+        "head": "fb17a0c5ae08545f8e4aa07f42988c49607e0743",
+        "expected": "fb17a0c5ae08545f8e4aa07f42988c49607e0743",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.Rendering",
+        "head": "542b366ca071a8a0bd9451ea6a500e60b4e290f8",
+        "expected": "542b366ca071a8a0bd9451ea6a500e60b4e290f8",
+        "clean": true
+      },
+      {
+        "repository": "Packages/GFX.Scene2D",
+        "head": "d0fa171712bdd4318ad2d5194fb58b591e1ebdce",
+        "expected": "d0fa171712bdd4318ad2d5194fb58b591e1ebdce",
+        "clean": true
+      },
+      {
+        "repository": "Packages/JSON",
+        "head": "5c96969747bb5c0903615667bf071507cf074694",
+        "expected": "5c96969747bb5c0903615667bf071507cf074694",
+        "clean": true
+      }
+    ],
+    "test_path": {
+      "Main_entire_file_identical": true,
+      "NativeTestRunner.zig": {
+        "identical": true,
+        "sha256": "f643adc71a3dffda81f2472d668f8a3b8d6d9aa7ca8c652e03513df77270f559"
+      },
+      "Optimize/Debug.zig": {
+        "identical": true,
+        "sha256": "f271563d6950189c60be007fcd748e95f7d4b27dd2415fb97ae533651dfc05e8"
+      },
+      "ProgramScope.zig": {
+        "identical": true,
+        "sha256": "f369d879d7829f9d8710f91fadfd4439d6ac804a5d4f84c05b7c59c73c663f60"
+      },
+      "BackendTransfer.zig": {
+        "identical": true,
+        "sha256": "b0a71d675463d10c8748131ad24e5ad46ea0cbc64adab77ac943012a30a56a4c"
+      },
+      "Release_outside_verification_identical": true,
+      "IR_serialization_helpers_identical": true,
+      "Verifier_checks_identical": true,
+      "baseline": "f23c67dedab47740a6be8eab83b5301c2dc9ffd6"
+    },
+    "added_source_files": [
+      {
+        "path": "Silex/Toolchain/Fixtures/TestCases/Lifetimes.sx",
+        "sha256": "813179a913d5a75cd54844739323cb7c1632bcbc1d68d1b7b7a60ff46521fb98"
+      },
+      {
+        "path": "Silex/Toolchain/Fixtures/TestCases/Package.json",
+        "sha256": "86b45d6da2c63e98fcaee7a6ed87503e245c736aea2633526d18906bb70d16b5"
+      },
+      {
+        "path": "Silex/Toolchain/Tools/VerifyTestCaseLifetime.py",
+        "sha256": "267ea2ec293074e1022b6ac6ed54b89c972c72b51a0a2353ab0a7d05be1d5f10"
+      }
+    ],
+    "success": true
+  },
+  "prior_bridge_source_identity": {
+    "source_checks": [
+      {
+        "proof": "ATSPI-Ready-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/DBus/Library.sx",
+        "expected": "189ac67a0221875f16438b1f6377266beb7df8a5a6e01c9afcefc30e6ac73673",
+        "actual": "189ac67a0221875f16438b1f6377266beb7df8a5a6e01c9afcefc30e6ac73673",
+        "identical": true
+      },
+      {
+        "proof": "ATSPI-Ready-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/DBusCodec.sx",
+        "expected": "7b155e4af88a4de307749cd3db6d183241c7fdb77a9f2e1a18ff45237cc09bf6",
+        "actual": "7b155e4af88a4de307749cd3db6d183241c7fdb77a9f2e1a18ff45237cc09bf6",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX.UI/Module/AccessibilityModel.sx",
+        "expected": "dd5d861028ce7e8f4c8224c0450e02f814260c5961b8a7ad0c114d705a5910fc",
+        "actual": "dd5d861028ce7e8f4c8224c0450e02f814260c5961b8a7ad0c114d705a5910fc",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX.UI/Module/Node.sx",
+        "expected": "99806b0b23478938a38529b10dd6071799afa0de47c7a35cb57a5ecef3ba8040",
+        "actual": "99806b0b23478938a38529b10dd6071799afa0de47c7a35cb57a5ecef3ba8040",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX.UI/Module/Runtime.sx",
+        "expected": "0452ad07d8c2dac5871bf0fa560de966f1f9c660ef031cef140502ef40b297d1",
+        "actual": "0452ad07d8c2dac5871bf0fa560de966f1f9c660ef031cef140502ef40b297d1",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX.UI/Module/TextViewport.sx",
+        "expected": "a3cf9a0a5dc7ea124384da472073059aa73adbacd151eb274a572cf901dd6d33",
+        "actual": "a3cf9a0a5dc7ea124384da472073059aa73adbacd151eb274a572cf901dd6d33",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX.UI/Tests/Consumer/Tests/AccessibilityTextGeometry.sx",
+        "expected": "160c924df6a74f3b0fe84479de1c4eb8a0ee36e709cc646b0b29f06f2e50246b",
+        "actual": "160c924df6a74f3b0fe84479de1c4eb8a0ee36e709cc646b0b29f06f2e50246b",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/@Module.sx",
+        "expected": "700e3f007d8c62a423fa73b75734a05bf9e68ddd1d0afa82d7393948b602d3de",
+        "actual": "700e3f007d8c62a423fa73b75734a05bf9e68ddd1d0afa82d7393948b602d3de",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/ATSPI/Model.sx",
+        "expected": "c94ec41c797b8d4ceb46f3f01ca2b4d373abd7530b744d76dad1af83d2519508",
+        "actual": "c94ec41c797b8d4ceb46f3f01ca2b4d373abd7530b744d76dad1af83d2519508",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/TextWords.sx",
+        "expected": "b596d77c4b017fa29a27fe37958c4abacdb8cb8ee6d0a86e62e192255be15287",
+        "actual": "b596d77c4b017fa29a27fe37958c4abacdb8cb8ee6d0a86e62e192255be15287",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/Description.sx",
+        "expected": "6a6e02344d8b36ad216b6bfcf1f11bcfad15dbfddd4a634d43158d2f8ad8d996",
+        "actual": "6a6e02344d8b36ad216b6bfcf1f11bcfad15dbfddd4a634d43158d2f8ad8d996",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/Model.sx",
+        "expected": "fc58a70bac0a5521510e92949cf4ee9d0e8690910b3228635c8656a6d42199ce",
+        "actual": "fc58a70bac0a5521510e92949cf4ee9d0e8690910b3228635c8656a6d42199ce",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/Registry.sx",
+        "expected": "e274976ef801ddf71951b6e71ad3a8517202abcf23f59f0d43ac35f94abc797d",
+        "actual": "e274976ef801ddf71951b6e71ad3a8517202abcf23f59f0d43ac35f94abc797d",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/TextData.sx",
+        "expected": "20bf0f69db9f1ad2b3a78c2298c9c3fb5386a73e10dda5b83b7c167eb18ba8d8",
+        "actual": "20bf0f69db9f1ad2b3a78c2298c9c3fb5386a73e10dda5b83b7c167eb18ba8d8",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/TextRange.sx",
+        "expected": "1779fd7474f62df0346fe3c25afad92187d38e45260a7561a3dc57e5cdecaa04",
+        "actual": "1779fd7474f62df0346fe3c25afad92187d38e45260a7561a3dc57e5cdecaa04",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UIA/Types.sx",
+        "expected": "72d8807e388aae45532a0b9220f1cf93adad6022465a817b82d092fa194832a9",
+        "actual": "72d8807e388aae45532a0b9220f1cf93adad6022465a817b82d092fa194832a9",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Module/Accessibility/UTF16.sx",
+        "expected": "f2ce96127085b5998123408ae5ea98051d7318c57cdb78fbc76a02744730b5f6",
+        "actual": "f2ce96127085b5998123408ae5ea98051d7318c57cdb78fbc76a02744730b5f6",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Platform/Windows/Module/Accessibility/Presentation.sx",
+        "expected": "1692c67fdfa42a99b0b58ed4d7012b5daaf8279cba9407ebad21ccdb5c9e2a93",
+        "actual": "1692c67fdfa42a99b0b58ed4d7012b5daaf8279cba9407ebad21ccdb5c9e2a93",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Platform/Windows/Module/Accessibility/Windows/Identifiers.sx",
+        "expected": "46a76f3374be1c8db0e7753414d35fb138c7acd1344cc17f4b99855067bb3fd4",
+        "actual": "46a76f3374be1c8db0e7753414d35fb138c7acd1344cc17f4b99855067bb3fd4",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Platform/Windows/Module/Accessibility/Windows/Native.sx",
+        "expected": "2124ed803e7d64afc0199bae57b962c3bc88e242464343d28eca6175196eb14e",
+        "actual": "2124ed803e7d64afc0199bae57b962c3bc88e242464343d28eca6175196eb14e",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Platform/Windows/Module/Accessibility/Windows/Request.sx",
+        "expected": "670cadcfbf71459c1d2f1bb7c89215a88404c35410fc3b746a2b24310cecb8cf",
+        "actual": "670cadcfbf71459c1d2f1bb7c89215a88404c35410fc3b746a2b24310cecb8cf",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Platform/Windows/Module/Accessibility/Windows/Wake.sx",
+        "expected": "bb2809328ebfd02a8106c2fbe83f2dde074daa41816ce259749996199829307e",
+        "actual": "bb2809328ebfd02a8106c2fbe83f2dde074daa41816ce259749996199829307e",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/UIADescription.sx",
+        "expected": "8a3e4263faa7b0ac0857ba25d62afb597ef92148d9f376e47688fe1833b57060",
+        "actual": "8a3e4263faa7b0ac0857ba25d62afb597ef92148d9f376e47688fe1833b57060",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/UIAModel.sx",
+        "expected": "b4c88194e0decb88ec5e50e507e34433d5203784eaf51da9596a81309d18fe1a",
+        "actual": "b4c88194e0decb88ec5e50e507e34433d5203784eaf51da9596a81309d18fe1a",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/UIARegistry.sx",
+        "expected": "d048dbf801a805d7309384b3a72b7ac5045e7e62093bc2b16a8fc97ed308d9b8",
+        "actual": "d048dbf801a805d7309384b3a72b7ac5045e7e62093bc2b16a8fc97ed308d9b8",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/UIAText.sx",
+        "expected": "54b43858250bdfb916a8c1a88a976fb7323b578fe4c370a2edbaad0277fe55c9",
+        "actual": "54b43858250bdfb916a8c1a88a976fb7323b578fe4c370a2edbaad0277fe55c9",
+        "identical": true
+      },
+      {
+        "proof": "Windows-Final-Qualification.json",
+        "path": "Packages/GFX/Tests/Accessibility/Windows.sx",
+        "expected": "4677c7178b7f3eeb800f8f87d2f3757c7759bef560967f3a15aedffe176965bc",
+        "actual": "4677c7178b7f3eeb800f8f87d2f3757c7759bef560967f3a15aedffe176965bc",
+        "identical": true
+      }
+    ],
+    "abi_checks": [
+      {
+        "path": "Silex/Toolchain/Sources/Arm64/CAbi.zig",
+        "expected": "14eb4362a3f7f697ba923b9d58a56f1d6cd5f4bafffccfb319a1430fb1019775",
+        "actual": "14eb4362a3f7f697ba923b9d58a56f1d6cd5f4bafffccfb319a1430fb1019775",
+        "identical": true
+      },
+      {
+        "path": "Silex/Toolchain/Sources/Arm64/CallbackAbi.zig",
+        "expected": "4a34cfc8764e351a7af31b5e2e7c0e108fc5318abc22f9272ac53e4e7ce8f865",
+        "actual": "4a34cfc8764e351a7af31b5e2e7c0e108fc5318abc22f9272ac53e4e7ce8f865",
+        "identical": true
+      },
+      {
+        "path": "Silex/Toolchain/Sources/CallbackAbiTests.zig",
+        "expected": "07141636495d37db2a5bbdf2a6fe3f21c4fc898b7af7f7f0d9aea3ff4eabadc9",
+        "actual": "07141636495d37db2a5bbdf2a6fe3f21c4fc898b7af7f7f0d9aea3ff4eabadc9",
+        "identical": true
+      },
+      {
+        "path": "Silex/Toolchain/Sources/Lsp/Tests/NativeCallbacks.zig",
+        "expected": "173819c5d26b2dcfa0469f9fb0c67613767f327dbd5c7e0cafd2d26acbc60d5a",
+        "actual": "173819c5d26b2dcfa0469f9fb0c67613767f327dbd5c7e0cafd2d26acbc60d5a",
+        "identical": true
+      },
+      {
+        "path": "Silex/Toolchain/Sources/Semantic/Callbacks.zig",
+        "expected": "cdd3b86f7ab762b5d7a977a0f2532c80b9c4117e0c1413c4ef70a334896e113e",
+        "actual": "cdd3b86f7ab762b5d7a977a0f2532c80b9c4117e0c1413c4ef70a334896e113e",
+        "identical": true
+      },
+      {
+        "path": "Silex/Toolchain/Sources/X64/CallbackAbi.zig",
+        "expected": "1de2b75ea2956b7ae04521622b0fe8e1e9ac98ae4ff3e20bcc77a0d1fb2212b0",
+        "actual": "1de2b75ea2956b7ae04521622b0fe8e1e9ac98ae4ff3e20bcc77a0d1fb2212b0",
+        "identical": true
+      }
+    ],
+    "success": true
+  },
+  "proof_scope": "Current builds use one compilation worker. The 32 earlier CPU sources retain their actual CLI97 identity; unchanged checks and code generation are reassessed explicitly. No complete 103-source UI suite or foreign native-reader execution is claimed.",
+  "source_head_scope": "Source anchors may precede documentation-only descendants; source_tree_sha256 excludes Markdown and Docs to avoid a circular proof.",
+  "success": true
+}
