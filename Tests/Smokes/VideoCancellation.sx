@@ -1,0 +1,58 @@
+use GFX.Application
+use GFX.Rendering
+use GFX.Window.Plugin as WindowPlugin
+use STD.Process
+use STD.File
+use STD.Threading
+use STD.Time.Clock
+use STD.Text
+use Interop.C
+use Interop.Boundary
+
+let push_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PushEvent")
+
+// This owned test job asks the native event loop to close only after the
+// fixture encoder announces its PID. No borrowed callback crosses threads.
+struct WaitAndQuit:Threading.Job {
+    let path:str
+    var saw_encoder:bool = false
+    func execute() {
+        var clock = Clock()
+        let first = clock.tick()
+        while clock.get_total_seconds() < 8.0 {
+            match (try File.read_text(self.path, 100)) {
+                success(text) => { if Text.ends_with(text, "\n") { self.saw_encoder = true; break } }
+                failure(error) => {}
+            }
+        }
+        var storage:uint[16]
+        let stored = C.store<uint32>(C.address_bits(C.mutable_pointer(storage)), 0 as uint, 0x100 as uint32)
+        assert(push_event(C.mutable_pointer(storage)) != 0)
+    }
+}
+
+class Fixture {
+    let path:str
+    var executor:Threading.Executor = Threading.Executor(1)
+    var watcher:Threading.JobHandle<WaitAndQuit>? = null
+}
+func configure(fixture:&Fixture) {
+    fixture.watcher = fixture.executor.submit(WaitAndQuit(path:fixture.path))
+}
+func main() {
+    let arguments = Process.arguments()
+    assert(arguments.count() == 3)
+    var fixture = Fixture(path:arguments[1] + ".pid")
+    var application = Application(1)
+        ..add_resource(fixture)
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()..width = 64..height = 64..hidden = true..high_pixel_density = false))
+        ..add_plugin(Rendering.Plugin(Rendering.Plugin.Settings(presentation:false)))
+        ..add_system(Application.Schedule.startup, configure)
+    let result = (try Rendering.export_mp4(application, arguments[2], 1, ffmpeg:arguments[1]))
+    if var watcher = fixture.watcher { assert(watcher.complete().saw_encoder, "encoder never started") }
+    else { panic("watcher was not started") }
+    match result {
+        success(count) => { panic("cancelled video succeeded") }
+        failure(error) => { assert(error == "MP4 export cancelled during encoding"); print(error) }
+    }
+}
