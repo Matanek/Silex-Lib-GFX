@@ -129,3 +129,40 @@ la reprise utilise le delta courant, sans accumuler la durée de la pause.
 `FrameTime` reste le temps réel de l’application pour l’UI et les services.
 Un plugin doit soit laisser ses systèmes suspendus par défaut, soit les déclarer
 `always` et filtrer ses objets, comme le font Nodes et Animation.
+
+## Piloter une simulation à pas imposé
+
+`Application.Session` possède un intervalle d’exécution contrôlé. Elle installe
+l’horloge, prépare les plugins et exécute `initialize` puis `startup`. Ce programme
+sans fenêtre effectue trois pas, puis ferme l’application :
+
+```sx
+use GFX.Application
+use GFX.Application.Session
+
+func main() {
+    var application = Application(1)
+    var session = Session(application)
+    for index in 0...3 { session.step(1.0 / 60.0) }
+    session.close()
+}
+```
+
+`step(delta)` accepte un delta fini et positif ou nul ; les valeurs invalides,
+une session arrêtée ou fermée donnent un `Result<void, str>` en échec. Le pas
+exécute `pre_update`, `update`, `post_update` puis `render`. `poll()` pompe les
+événements et traite la fermeture automatique des fenêtres, même sans pas.
+`render()` redessine sans avancer la simulation ; une exposition
+native ne rejoue pas non plus les phases de simulation dans cette session.
+Un callback de rendu doit donc dessiner l’état courant, sans y avancer son animation.
+
+`FrameTime.is_controlled()` indique que le delta provient de ce pilote ; les
+scopes enfants héritent du même pas, avec leur propre état de pause Simulation.
+Les domaines de temps mural restent indépendants. Les consommateurs à pas fixe
+peuvent terminer tous les pas dus au lieu de limiter le rattrapage temps réel.
+
+`close()` exécute `shutdown` puis `finalize` une seule fois et la destruction de
+la session ferme également l’intervalle. Une Application ne s’exécute qu’une fois,
+par `run()` ou par une Session. Cette session pilote le cycle directement et
+n’appelle pas le runner configuré par `with_runner`. Les opérations graphiques
+conservent leurs contraintes de thread et de session de plateforme.

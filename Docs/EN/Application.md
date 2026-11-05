@@ -137,3 +137,38 @@ resuming uses the current delta without accumulating the pause duration.
 `FrameTime` remains the application's real time for UI and services. A plugin
 can either leave its systems paused by default or declare them `always` and
 filter its objects, as Nodes and Animation do.
+
+## Drive a simulation with explicit time steps
+
+`Application.Session` owns a controlled run interval. It installs the clock,
+prepares plugins and runs `initialize` then `startup`. This windowless program
+performs three steps and closes the application:
+
+```sx
+use GFX.Application
+use GFX.Application.Session
+
+func main() {
+    var application = Application(1)
+    var session = Session(application)
+    for index in 0...3 { session.step(1.0 / 60.0) }
+    session.close()
+}
+```
+
+`step(delta)` accepts a finite non-negative delta; invalid values, a stopped
+session or a closed session return a failed `Result<void, str>`. Each step runs
+`pre_update`, `update`, `post_update` then `render`. `poll()` pumps events and handles automatic window closure even without a step.
+`render()` redraws without advancing simulation; native exposure does not repeat
+simulation phases in this session either. Render callbacks must therefore draw
+the current state without advancing animation themselves.
+
+`FrameTime.is_controlled()` indicates that the driver supplies the delta; child
+scopes inherit that same step with their own Simulation pause state. Wall-clock
+domains remain independent. Fixed-step consumers may finish all due steps rather
+than limiting realtime catch-up work.
+
+`close()` runs `shutdown` then `finalize` once; destroying the session also closes
+the interval. An Application can run only once, through `run()` or a Session.
+The session drives the lifecycle directly and does not invoke a runner configured
+with `with_runner`. Graphics retain their platform thread and session constraints.

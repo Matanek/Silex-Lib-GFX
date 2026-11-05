@@ -4,6 +4,7 @@ use GFX.Application.Plugin
 use GFX.Application
 use GFX.Application.Controller
 use GFX.Application.Schedule
+use GFX.Application.Session
 use GFX.Window
 use GFX.Input
 use GFX.Input.State as InputState
@@ -74,3 +75,29 @@ test "observe a close request manually" {
         ..add_plugin(CloseProbePlugin(id_value:"ManualProbe", manual:true))
         ..run()
 }
+
+func controlled_automatic() {
+    var application = Application(1)
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()..hidden = true))
+        ..add_plugin(CloseProbePlugin(id_value:"ControlledAutomatic", manual:false))
+    var session = Session(application)
+    session.poll()
+    assert(!session.is_running())
+    session.close()
+}
+
+func controlled_manual() {
+    var application = Application(1)
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()..hidden = true..close_behavior = WindowPlugin.CloseBehavior.manual))
+        ..add_plugin(CloseProbePlugin(id_value:"ControlledManual", manual:true))
+    var session = Session(application)
+    session.poll()
+    assert(session.is_running())
+    session.step(0.0)
+    assert(!session.is_running())
+    session.close()
+}
+
+test "controlled polling closes a window before any simulation step" { controlled_automatic() }
+test "controlled polling retains a manual close event for the next step" { controlled_manual() }
+func main() { controlled_automatic(); controlled_manual(); print("controlled window lifecycle: ok") }

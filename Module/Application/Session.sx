@@ -1,0 +1,67 @@
+use GFX.Application
+use GFX.Application.ClockControl.ClockControl
+use GFX.Application.FrameTime
+use GFX.Application.NativeLoop.FrameLoop
+use GFX.Application.Time as TimePlugin
+use STD.Math
+
+// An owned run interval for a caller that controls simulation progress.
+public nocopy class Session {
+    private var application:Application
+    private var loop:FrameLoop
+    private var closed:bool = false
+
+    init(application:Application) {
+        application.add_plugin(TimePlugin())
+        application.add_resource(ClockControl())
+        application.seal()
+        var loop = FrameLoop(application, controlled:true)
+        self.application = application
+        self.loop = loop
+        var resources = application.resources()
+        resources.insert(loop)
+        application.run_schedule(Application.Schedule.initialize)
+        application.run_schedule(Application.Schedule.startup)
+    }
+
+    func is_running() bool { return !self.closed && self.application.is_running() }
+
+    func poll() {
+        if !self.closed { self.loop.poll() }
+    }
+
+    func step(delta:float) Result<void, str> {
+        if self.closed { return Result<void, str>.failure("application session is closed") }
+        if !Math.is_finite(delta) || delta < 0.0 {
+            return Result<void, str>.failure("controlled frame delta must be finite and non-negative")
+        }
+        if !self.application.is_running() {
+            return Result<void, str>.failure("application session has stopped")
+        }
+        {
+            var resources = self.application.resources()
+            var control = resources.get_mut<ClockControl>()
+            control.delta = delta
+        }
+        self.loop.frame()
+        return Result<void, str>.success()
+    }
+
+    // Redrawing an unchanged sample must not re-run simulation or animation.
+    func render() {
+        if !self.closed { self.application.run_schedule(Application.Schedule.render) }
+    }
+
+    func close() {
+        if self.closed { return }
+        self.closed = true
+        self.loop.close()
+        self.application.run_schedule(Application.Schedule.shutdown)
+        self.application.run_schedule(Application.Schedule.finalize)
+        var resources = self.application.resources()
+        var removed = resources.remove<ClockControl>()
+        assert(removed != null)
+    }
+
+    drop { self.close() }
+}

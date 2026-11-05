@@ -1,0 +1,23 @@
+use GFX.Application
+use GFX.Application.Session
+use GFX.Application.FrameTime
+
+class Samples { var count:int = 0; var elapsed:float = 0.0 }
+func sample(samples:&Samples, time:@FrameTime, simulation:@Application.Simulation) {
+    assert(time.is_controlled())
+    samples.count++
+    samples.elapsed = simulation.elapsed()
+}
+
+test "consume an owned controlled application session through the public boundary" {
+    var samples = Samples()
+    var application = Application(1)
+        ..add_resource(samples)
+        ..add_system(Application.Schedule.update, sample)
+    var session = Session(application)
+    for index in 0...3 { session.step(1.0 / 60.0) }
+    session.render()
+    assert(samples.count == 3)
+    assert(samples.elapsed > 0.04999 && samples.elapsed < 0.05001)
+    session.close()
+}

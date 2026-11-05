@@ -4,17 +4,22 @@ use GFX.Input
 use Interop.C
 use Interop.Boundary
 
+struct PollCallback { let owner:uint32; var callback:func() }
+
 // Only the runner's platform-pump interval is reentrant. All scheduled jobs
 // have joined before it starts; no Input state or schedule is being mutated.
 package class FrameLoop {
     private var application:Application
+    private let controlled:bool
     private var watching:bool = false
     private var pumping:bool = false
     private var drawing:bool = false
     private var inputs:Input[] = []
+    private var poll_callbacks:PollCallback[] = []
 
-    package init(application:Application) {
+    package init(application:Application, controlled:bool = false) {
         self.application = application
+        self.controlled = controlled
         application.start()
     }
 
@@ -25,6 +30,19 @@ package class FrameLoop {
                 input.__silex_pump_events()
             })
         }
+        for item in self.poll_callbacks { item.callback() }
+    }
+
+    package func is_controlled() bool { return self.controlled }
+
+    package func on_poll(owner:uint32, callback:func()) {
+        self.poll_callbacks.append(PollCallback(owner:owner, callback:callback))
+    }
+
+    package func remove_poll(owner:uint32) {
+        var kept:PollCallback[] = []
+        for item in self.poll_callbacks { if item.owner != owner { kept.append(item) } }
+        self.poll_callbacks = kept
     }
 
     // Child Application scopes inherit this driver. Pump SDL once for all
@@ -68,7 +86,8 @@ package class FrameLoop {
         var application = self.application
         if !application.is_running() { return }
         self.drawing = true
-        self.frame()
+        if self.controlled { application.run_schedule(Schedule.render) }
+        else { self.frame() }
         self.drawing = false
     }
 
@@ -82,6 +101,7 @@ package class FrameLoop {
     }
 
     module func close() {
+        self.poll_callbacks.clear()
         self.stop_watching()
         for retained in self.inputs {
             var input = retained

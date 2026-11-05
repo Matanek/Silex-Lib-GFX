@@ -4,13 +4,18 @@ use STD.Time.Clock
 public struct FrameTime {
     var delta:float
     private var clock:Clock
+    private var controlled:bool = false
 
     module init() {
         self.delta = 0.0
         self.clock = Clock()
     }
 
-    module func advance() {
+    func is_controlled() bool { return self.controlled }
+
+    module func advance(controlled_delta:float? = null) {
+        self.controlled = controlled_delta != null
+        if let delta = controlled_delta { self.delta = delta; return }
         var clock = self.clock
         self.delta = Math.clamp(clock.tick(), 0.0, 0.1)
         self.clock = clock

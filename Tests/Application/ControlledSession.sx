@@ -1,0 +1,86 @@
+use GFX.Application
+use GFX.Application.FrameTime
+use GFX.Application.Session
+use GFX.Application.NativeLoop.FrameLoop
+use GFX.Application.Time as TimePlugin
+
+class Probe {
+    var started:int = 0
+    var updates:int = 0
+    var renders:int = 0
+    var stopped:int = 0
+    var finalized:int = 0
+    var delta:float = -1.0
+    var elapsed:float = -1.0
+}
+
+func start(probe:&Probe) { probe.started++ }
+func update(probe:&Probe, time:@FrameTime, simulation:@Application.Simulation) {
+    probe.updates++
+    probe.delta = time.delta
+    probe.elapsed = simulation.elapsed()
+}
+func draw(probe:&Probe) { probe.renders++ }
+func shutdown(probe:&Probe) { probe.stopped++ }
+func finalize(probe:&Probe) { probe.finalized++ }
+
+test "controlled sessions separate simulation steps from redraws and close once" {
+    var probe = Probe()
+    var application = Application(1)
+        ..add_resource(probe)
+        ..add_system(Application.Schedule.startup, start)
+        ..add_system(Application.Schedule.update, update, process_mode:Application.ProcessMode.always)
+        ..add_system(Application.Schedule.render, draw)
+        ..add_system(Application.Schedule.shutdown, shutdown)
+        ..add_system(Application.Schedule.finalize, finalize)
+    var session = Session(application)
+    assert(probe.started == 1)
+    session.step(0.0)
+    assert(probe.delta == 0.0 && probe.elapsed == 0.0)
+    session.step(0.25)
+    assert(probe.delta == 0.25 && probe.elapsed == 0.25)
+    for _ in 0...5 { session.poll(); session.render() }
+    assert(probe.updates == 2 && probe.renders == 7)
+    assert(probe.elapsed == 0.25)
+    {
+        var resources = application.resources()
+        resources.get_mut<Application.Simulation>().pause()
+    }
+    session.step(0.25)
+    assert(probe.delta == 0.25 && probe.elapsed == 0.25)
+    {
+        var resources = application.resources()
+        resources.get_mut<Application.Simulation>().resume()
+    }
+    session.step(0.25)
+    assert(probe.elapsed == 0.5)
+    match (try session.step(-1.0)) {
+        failure(error) => {}
+        success => { panic("negative deltas must be rejected") }
+    }
+    assert(probe.updates == 4)
+    session.close()
+    session.close()
+    assert(probe.stopped == 1 && probe.finalized == 1)
+    assert(!session.is_running())
+    match (try session.step(0.1)) {
+        failure(error) => {}
+        success => { panic("closed sessions must reject steps") }
+    }
+}
+
+test "native exposure redraws a controlled sample without another update" {
+    var probe = Probe()
+    var application = Application(1)
+        ..add_resource(probe)
+        ..add_plugin(TimePlugin())
+        ..add_system(Application.Schedule.update, update)
+        ..add_system(Application.Schedule.render, draw)
+    application.prepare()
+    {
+        var loop = FrameLoop(application, controlled:true)
+        loop.pump(func() { loop.expose(true) })
+        assert(probe.updates == 0 && probe.renders == 1)
+    }
+    application.run_schedule(Application.Schedule.shutdown)
+}

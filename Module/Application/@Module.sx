@@ -651,6 +651,7 @@ public class Application {
     }
 
     module func seal() {
+        if self.configuration_locked { panic("Application can only run once") }
         self.prepare_plugins()
         self.configuration_locked = true
         self.build_schedule_plans()

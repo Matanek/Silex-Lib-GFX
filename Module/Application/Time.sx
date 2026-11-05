@@ -2,6 +2,7 @@ use GFX.Application
 use GFX.Application.Plugin as PluginProtocol
 use GFX.Application.Schedule
 use GFX.Application.FrameTime
+use GFX.Application.ClockControl.ClockControl
 
 public struct Time:PluginProtocol {
     func id() str { return "GFX.Application.Time" }
@@ -14,8 +15,14 @@ public struct Time:PluginProtocol {
     }
 }
 
-func advance_time(time:&FrameTime) {
-    time.advance()
+func advance_time(application:Application) {
+    var resources = application.resources()
+    var delta:float? = null
+    {
+        if let control = resources.try_get<ClockControl>() { delta = control.delta }
+    }
+    var time = resources.get_mut<FrameTime>()
+    time.advance(delta)
 }
 
 func stop_time(application:Application) {

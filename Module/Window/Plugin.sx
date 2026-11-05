@@ -3,6 +3,8 @@ use GFX.Application
 use GFX.Application.Schedule
 use GFX.Input.Plugin as InputPlugin
 use GFX.Input.State as InputState
+use GFX.Input.Native
+use GFX.Application.NativeLoop.FrameLoop
 use GFX.Window as WindowApi
 
 public enum CloseBehavior {
@@ -121,9 +123,52 @@ func start_window(application:Application) {
         var window = WindowApi(configuration.settings)
         resources.insert(Presentation(configuration.visible_on_ready))
         resources.insert(window)
+        observe_controlled_close(application)
         return
     }
     panic("GFX.Window.Plugin has no window settings")
+}
+
+// Idle controlled loops must honor automatic close without running pre_update.
+// A separate watcher leaves the Input event stream intact for the next step.
+class CloseObserver {
+    private var application:Application
+    private let identifier:WindowApi.Id
+    private var watcher:Native.Watcher = Native.Watcher()
+
+    init(application:Application, identifier:WindowApi.Id) {
+        self.application = application
+        self.identifier = identifier
+    }
+
+    func poll() {
+        for event in self.watcher.take() {
+            match event {
+                quit(meta) => { self.application.stop(); return }
+                window_close_requested(request) => {
+                    if request.window == self.identifier { self.application.stop(); return }
+                }
+                else => {}
+            }
+        }
+    }
+}
+
+func observe_controlled_close(application:Application) {
+    var resources = application.resources()
+    {
+        let policy = resources.get<ClosePolicy>()
+        if policy.behavior != CloseBehavior.automatic { return }
+    }
+    var controlled = false
+    {
+        if let loop = resources.try_get<FrameLoop>() { controlled = loop.is_controlled() }
+    }
+    if !controlled { return }
+    let identifier = resources.get<WindowApi>().id()
+    var observer = CloseObserver(application, identifier)
+    var loop = resources.get_mut<FrameLoop>()
+    loop.on_poll(identifier.value, observer.poll)
 }
 
 func present_without_renderer(application:Application) {
@@ -168,6 +213,10 @@ func handle_close_request(application:Application) {
 
 func stop_window(application:Application) {
     var resources = application.resources()
+    let identifier = resources.get<WindowApi>().id()
+    {
+        if var loop = resources.try_get_mut<FrameLoop>() { loop.remove_poll(identifier.value) }
+    }
     var removed = resources.remove<WindowApi>()
     assert(removed != null)
     var presentation = resources.remove<Presentation>()

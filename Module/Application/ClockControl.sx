@@ -1,0 +1,3 @@
+// Shared through Resources.scope so every application context uses the same
+// driver step. Wall-clock services remain independent of this simulation clock.
+module class ClockControl { var delta:float = 0.0 }

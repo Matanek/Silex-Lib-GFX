@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Application.Session` drives explicit time steps, shares their clock with scopes and separates redraws from simulation while preserving the application lifecycle.
+
 - Experimental Windows UI Automation bridge: controls, Unicode text and ranges, lazy collections, UI-thread requests, and detachment of retained interfaces. Windows/Inspect/Narrator qualification remains open; cross-linking is not native execution.
 
 - Source can reveal a text range without changing focus, caret, or selection, aligned with the start or end of the viewport.

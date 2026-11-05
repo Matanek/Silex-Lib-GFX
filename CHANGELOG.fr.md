@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `Application.Session` pilote des pas imposés, partage leur horloge avec les scopes et sépare les redessins de la simulation ; sa fermeture conserve le cycle de vie.
+
 - Pont Windows UI Automation expérimental : contrôles, texte Unicode et plages, collections paresseuses, requêtes sur le thread UI et détachement des interfaces conservées. La qualification Windows/Inspect/Narrator reste ouverte ; une liaison croisée ne vaut pas exécution native.
 
 - Source peut révéler une plage textuelle sans modifier focus, caret ou sélection, avec alignement au début ou à la fin du viewport.
