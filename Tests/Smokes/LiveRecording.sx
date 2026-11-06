@@ -1,0 +1,155 @@
+use GFX.Application
+use GFX.GPU
+use GFX.Input
+use GFX.Rendering
+use GFX.Window
+use GFX.Window.Plugin as WindowPlugin
+use STD.FileSystem
+use STD.Math
+use STD.Process
+use STD.Time.Clock
+use Interop.C
+use Interop.Boundary
+
+let push_event = C.function<func(C.MutablePointer<uint>) int32>(library:Boundary.SDL3, name:"SDL_PushEvent")
+let delay = C.function<func(uint) void>(library:Boundary.SDL3, name:"SDL_DelayPrecise")
+let thread_id = C.function<func() uint>(library:Boundary.SDL3, name:"SDL_GetCurrentThreadID")
+
+func push_key(window:uint32, down:bool) {
+    var storage:uint[16]
+    let address = C.address_bits(C.mutable_pointer(storage))
+    var kind:uint32 = 0x301
+    if down { kind = 0x300 }
+    let a = C.store<uint32>(address, 0 as uint, kind)
+    let b = C.store<uint32>(address, 16 as uint, window)
+    let c = C.store<int32>(address, 24 as uint, 7)
+    assert(push_event(C.mutable_pointer(storage)) != 0)
+}
+class Heartbeat { var count:int = 0 }
+func pulse(heartbeat:&Heartbeat) { heartbeat.count++ }
+
+class Fixture {
+    let mode:str
+    let ffmpeg:str
+    let output:str
+    let marker:str
+    var recording:Rendering.Recording? = null
+    var pipeline:GPU.GraphicsPipeline? = null
+    var frames:int = 0
+    var pressed:int = 0
+    var waiting:int = 0
+    var terminal:int = 0
+    var clock:Clock = Clock()
+    var last:float = 0.0
+    var started:float = 0.0
+    var owner:uint = 0 as uint
+}
+func configure(fixture:&Fixture, renderer:&Rendering.Renderer, device:@GPU.Device, surface:@GPU.Surface) {
+    fixture.pipeline = device.graphics_pipeline(
+        GPU.ShaderProgram.hlsl(file:"../Shaders/Recording.hlsl", fragment:"overlay_main"),
+        GPU.GraphicsPipelineSettings(color_targets:[GPU.ColorTargetFormat(format:surface.format())]))
+    renderer.add_pass("Recording.NativeInput", draw)
+    if fixture.mode != "idle" { fixture.recording = renderer.record_mp4(fixture.output, ffmpeg:fixture.ffmpeg) }
+    let first = fixture.clock.tick()
+}
+func begin(application:Application) {
+    var resources = application.resources()
+    var fixture = resources.get_mut<Fixture>()
+    fixture.started = fixture.clock.get_total_seconds()
+    if fixture.owner == 0 as uint { fixture.owner = thread_id(); print("OWNER $(fixture.owner)") }
+    assert(fixture.owner == thread_id())
+}
+func observe(fixture:&Fixture, input:@Input, window:@Window, controller:&Application.Controller, heartbeat:@Heartbeat) {
+    fixture.frames++
+    assert(heartbeat.count == fixture.frames, "Application work starved during recording")
+    if input.is_pressed(Input.Key.d) { fixture.pressed++ }
+    // Native delivery is next-frame input, independent of recording progress.
+    var inject = fixture.mode != "blocked" && fixture.mode != "shutdown" && fixture.mode != "probe-cancel"
+    if !inject {
+        match (try FileSystem.metadata(fixture.marker)) {
+            success(info) => { inject = true; fixture.waiting++ }
+            failure(error) => {}
+        }
+    }
+    if inject { push_key(window.id().value, fixture.frames % 2 == 0) }
+    if var recording = fixture.recording {
+        let stats = recording.statistics()
+        assert(stats.pending_images <= 1 && stats.peak_pending_images <= 1)
+        if fixture.mode == "blocked" || fixture.mode == "shutdown" {
+            if fixture.waiting > 0 { assert(stats.pending_images == 1 || recording.state() != Rendering.Recording.State.recording) }
+            if fixture.waiting == 90 {
+                assert(fixture.pressed >= 35)
+                if fixture.mode == "shutdown" { controller.stop() }
+                else { recording.cancel() }
+            }
+        } elif fixture.mode == "probe-cancel" {
+            if fixture.waiting == 5 { recording.cancel() }
+        } elif recording.state() == Rendering.Recording.State.recording && stats.duration_seconds >= 2.0 { recording.stop() }
+        if recording.state() == Rendering.Recording.State.completed || recording.state() == Rendering.Recording.State.cancelled {
+            fixture.terminal++
+            if fixture.terminal >= 3 {
+                print("RESULT frames=$(fixture.frames) inputs=$(fixture.pressed) waiting=$(fixture.waiting) encoded=$(stats.frames) captured=$(stats.captured) duplicated=$(stats.duplicates) dropped=$(stats.dropped) peak=$(stats.peak_pending_images) seconds=$(stats.duration_seconds)")
+                controller.stop()
+            }
+        }
+        if let error = recording.error() { print(error); panic("native recording fixture failed") }
+    } elif fixture.frames == 125 { assert(fixture.pressed >= 55); controller.stop() }
+    assert(fixture.clock.get_total_seconds() < 35.0)
+}
+func end(application:Application) {
+    var resources = application.resources()
+    let downloads = resources.get<GPU.Device>().command_stats().downloads
+    var fixture = resources.get_mut<Fixture>()
+    let now = fixture.clock.get_total_seconds()
+    assert(fixture.owner == thread_id())
+    if fixture.mode == "idle" { assert(downloads == 0) }
+    var pending = 0
+    var captured = 0
+    var encoded = 0
+    if let recording = fixture.recording {
+        let stats = recording.statistics()
+        pending = stats.pending_images
+        captured = stats.captured
+        encoded = stats.frames
+    }
+    print("SAMPLE $(fixture.frames) $(now - fixture.last) $(now - fixture.started) $(downloads) $(pending) $(captured) $(encoded)")
+    fixture.last = now
+}
+// Pacing follows measurement explicitly; plugin systems otherwise precede
+// these test callbacks when Application orders the schedule.
+func pace(application:Application) {
+    var resources = application.resources()
+    let fixture = resources.get<Fixture>()
+    var period = 1.0 / 60.0
+    if fixture.mode == "variable" {
+        period = 1.0 / 90.0
+        if fixture.frames % 9 == 0 { period = 1.0 / 12.0 }
+    }
+    let remaining = period - (fixture.clock.get_total_seconds() - fixture.started)
+    if remaining > 0.0 { delay(Math.floor(remaining * 1_000_000_000.0) as uint) }
+}
+func draw(pass:@GPU.RenderPass, application:@Application) {
+    var resources = application.resources()
+    let fixture = resources.get<Fixture>()
+    if let pipeline = fixture.pipeline {
+        pass.scissor(8 + fixture.frames % 280, 32, 16, 16)
+        pass.bind(pipeline)
+        pass.draw(3)
+    }
+}
+func main() {
+    let arguments = Process.arguments()
+    assert(arguments.count() == 5)
+    var application = Application(1)
+        ..add_resource(Heartbeat())
+        ..add_resource(Fixture(mode:arguments[1], ffmpeg:arguments[2], output:arguments[3], marker:arguments[4]))
+        ..add_plugin(WindowPlugin(WindowPlugin.Settings()..width = 320..height = 96..hidden = true..high_pixel_density = false))
+        ..add_plugin(Rendering.Plugin(Rendering.Plugin.Settings(antialiasing:Rendering.Antialiasing.none, presentation:false)))
+        ..add_system(Application.Schedule.pre_update, begin)
+        ..add_system(Application.Schedule.startup, configure)
+        ..add_system(Application.Schedule.update, pulse)
+        ..add_system(Application.Schedule.update, observe)
+        ..add_after_system(Application.Schedule.render, end)
+        ..add_after_system(Application.Schedule.render, pace)
+    application.run()
+}
