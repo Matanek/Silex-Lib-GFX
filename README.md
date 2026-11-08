@@ -13,11 +13,8 @@ silex install GFX
 - [English documentation](Docs/EN/README.md)
 - [Desktop accessibility qualification](Docs/Development/Desktop-Accessibility-Qualification.md): current evidence and remaining native checks.
 
-The last released package requires Silex 0.44.0 or newer.
+This release requires Silex 0.48.0 or newer, including protocol default bodies
+and native C callback support used by the desktop accessibility adapters.
 
-This development revision requires the matching Silex development compiler,
-including protocol default bodies and native C callback support used by the
-desktop accessibility adapters.
-
-The unpublished macOS ARM64 native candidate requires the checksum-matched local
-SDL archive; see [reconstruction](Docs/EN/NativeProvider.md).
+Native archives are included in the registry snapshot. A source checkout needs
+the checksum-matched local SDL archive; see [reconstruction](Docs/EN/NativeProvider.md).

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.41.0] - 2026-11-08
 
 - `Application.Session` drives explicit time steps, shares their clock with scopes and separates redraws from simulation while preserving the application lifecycle.
 
@@ -36,9 +36,8 @@
 
 - Adopts one `Result` declaration: an ordinary call returns the value or
   stops the program on failure; `try call()` keeps the `Result`. Existing calls
-  storing results and propagating failures are made explicit. This revision
-  requires the development toolchain with these `try` semantics; publication
-  must coordinate compiler and package versions.
+  storing results and propagating failures are made explicit. This version
+  requires Silex 0.48.0 or newer and the coordinated dependency versions.
   Recoverable `try_*` variants and direct wrappers with the same signature
   converge under the ordinary name. Boolean, optional, and native variants
   retain their contracts.
@@ -47,7 +46,7 @@
 
 - Add window-owned system resize cursors with lazy allocation, reuse and cleanup; only the mouse-focused window applies its preference.
 
-- The local macOS ARM64 Metal provider synchronizes presentation with the window’s Core Animation transaction, preventing the previous image from stretching during resize. The patched SDL build recipe and checksum are recorded; publication and macOS Intel qualification remain pending. Linux/Windows archives are unchanged.
+- The local macOS ARM64 Metal provider synchronizes presentation with the window’s Core Animation transaction, preventing the previous image from stretching during resize. The patched SDL build recipe and checksum are recorded; the archive is distributed through the registry. macOS Intel retains its previous archive without claiming this fix; Linux/Windows archives are unchanged.
 
 - During native event pumping, the Application runner redraws when the drawable's pixel size changes, after the early native watchers. It no longer waits for the next periodic expose to adapt a frame; main-thread, reentrancy, and shutdown guards remain active.
 

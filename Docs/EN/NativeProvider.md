@@ -5,9 +5,10 @@ that updates window geometry. The previous image keeps its proportions during
 resize. Synchronization applies to every window presentation; offscreen
 submissions remain asynchronous.
 
-This local archive has not been published yet. The manifest records its checksum
-without a download URL to prevent silent replacement by the previous archive.
-From the workspace root, with CMake and Apple Clang installed:
+GFX 0.41.0 distributes this archive in its immutable registry snapshot. The
+manifest records its checksum without a legacy GitHub URL to prevent replacement
+by the previous archive. For a source checkout, rebuild it from the workspace
+root with CMake and Apple Clang installed:
 
 ```sh
 git clone --depth 1 --branch release-3.4.10 https://github.com/libsdl-org/SDL.git /tmp/silex-sdl3
@@ -31,8 +32,8 @@ Submission retains SDL thread constraints. No performance improvement is claimed
 
 `macos-x64` accepts this recipe on a native Intel host to prepare qualification,
 but the Intel manifest still selects the previous archive. Other platforms retain
-their archives. Before publication, qualify the Intel variant, produce corrected
-immutable assets, and add their URLs and checksums to the manifest. Never reuse an
+their archives. This fix is limited to macOS ARM64. Adopting it on Intel later
+requires native qualification and a new immutable artifact. Never reuse an
 already published archive URL.
 
 [Native provenance](../../Boundary/SDL3.PROVENANCE.md) records the SDL revision,

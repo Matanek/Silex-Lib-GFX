@@ -5,9 +5,10 @@ Animation qui actualise la géométrie de la fenêtre. La dernière image conser
 ses proportions pendant le redimensionnement. La synchronisation s’applique
 à chaque présentation de fenêtre ; les soumissions hors écran restent asynchrones.
 
-Cette archive locale n’est pas encore publiée. Le manifeste conserve son
-empreinte sans URL de téléchargement pour empêcher le remplacement silencieux
-par l’ancienne archive. Depuis la racine du workspace, avec CMake et Apple Clang :
+GFX 0.41.0 distribue cette archive dans son instantané immuable du registre.
+Le manifeste conserve son empreinte sans URL GitHub héritée pour empêcher son
+remplacement par l’ancienne archive. Pour un checkout source, la reconstruire
+depuis la racine du workspace, avec CMake et Apple Clang :
 
 ```sh
 git clone --depth 1 --branch release-3.4.10 https://github.com/libsdl-org/SDL.git /tmp/silex-sdl3
@@ -32,9 +33,9 @@ Aucun gain de performance n’est revendiqué.
 
 `macos-x64` accepte cette recette sur un hôte Intel natif pour préparer sa
 qualification, mais le manifeste Intel sélectionne encore l’archive antérieure.
-Les autres plateformes conservent leurs archives. Avant publication, qualifier
-la variante Intel, produire les assets immuables corrigés et ajouter leurs URL
-et empreintes au manifeste. Ne pas réutiliser une URL d’archive déjà publiée.
+Cette correction est limitée à macOS ARM64 ; les autres plateformes conservent
+leurs archives. Une adoption ultérieure sur Intel exige sa qualification native
+et un nouvel artefact immuable. Ne pas réutiliser une URL déjà publiée.
 
 La [provenance native](../../Boundary/SDL3.PROVENANCE.md) conserve la révision
 SDL, le patch et les limites de qualification.

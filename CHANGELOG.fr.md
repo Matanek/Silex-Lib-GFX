@@ -1,6 +1,6 @@
 # Historique
 
-## [Unreleased]
+## [0.41.0] - 2026-11-08
 
 - `Application.Session` pilote des pas imposés, partage leur horloge avec les scopes et sépare les redessins de la simulation ; sa fermeture conserve le cycle de vie.
 
@@ -37,16 +37,15 @@
 - Adopte la déclaration `Result` unique : l’appel ordinaire rend la valeur
   ou arrête le programme sur erreur ; `try appel()` conserve le `Result`. Les
   anciens appels stockant un résultat et propagations deviennent explicites.
-  Cette révision requiert la toolchain de développement avec cette sémantique
-  de `try` ; sa publication doit coordonner les versions du compilateur et des
-  packages.
+  Cette version requiert Silex 0.48.0 ou supérieur et les versions coordonnées
+  de ses dépendances.
   Les variantes récupérables `try_*` et wrappers directs de même signature
   sont réunis sous le nom ordinaire. Les variantes booléennes, optionnelles ou
   natives gardent leur contrat.
 
 - MenuBar ajoute une barre système macOS optionnelle, des commandes différées à l’hôte, sous-menus, disponibilité et raccourcis ; les menus système préexistants sont conservés. Linux/Windows refusent l’installation, sans effet graphique.
 
-- Le provider Metal local macOS ARM64 synchronise la présentation avec la transaction Core Animation de la fenêtre, ce qui évite l’étirement de la dernière image pendant le redimensionnement. La recette SDL corrigée et son empreinte sont conservées ; sa publication et la qualification macOS Intel restent à effectuer. Les archives Linux/Windows sont inchangées.
+- Le provider Metal local macOS ARM64 synchronise la présentation avec la transaction Core Animation de la fenêtre, ce qui évite l’étirement de la dernière image pendant le redimensionnement. La recette SDL corrigée et son empreinte sont conservées ; l’archive est distribuée par le registre. La variante macOS Intel conserve son archive antérieure, sans revendiquer cette correction ; Linux/Windows sont inchangés.
 
 - Pendant le pompage natif, le runner Application redessine dès que la taille en pixels de la surface change, après les observateurs natifs précoces. Il n’attend plus le prochain expose périodique pour adapter une frame ; les gardes de thread principal, réentrée et arrêt restent actives.
 
