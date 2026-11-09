@@ -31,6 +31,8 @@ env:
   STD_CHECKPOINT: e1525ef354a2e1c9018aa147635293842692459d
   JSON_CHECKPOINT: 5b8d464d121b6933b2680938b0a862f519ef23cb
   ASSETS_CHECKPOINT: c29f18645b35cb25c214de1d1964954e36cb34e7
+  APPLICATION_CHECKPOINT: 3470986319e1b4b9d8f36215f03427f06aaf3809
+  ECS_CHECKPOINT: 2dd29e0efa1bbc38e7bc696ad7fcdd3d4be974ee
   GPU_CHECKPOINT: 83acf9c709ce1355e765b914664dfbd49781b9a8
   TOOLCHAIN_ASSETS_CHECKPOINT: b97e5235974eb7ad7027536e0b327dbbf126640a
   SDL_REVISION: 8e37db5e797b6167f3a00d697d816a684bd259c7
@@ -112,6 +114,22 @@ jobs:
           repository: Matanek/Silex-Lib-GFX.Assets
           ref: ${{ env.ASSETS_CHECKPOINT }}
           path: GFX.Assets
+
+      - name: Check out GFX.Application
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        uses: actions/checkout@v6
+        with:
+          repository: Matanek/Silex-Lib-GFX.Application
+          ref: ${{ env.APPLICATION_CHECKPOINT }}
+          path: GFX.Application
+
+      - name: Check out GFX.ECS
+        if: inputs.target == 'all' || inputs.target == matrix.target
+        uses: actions/checkout@v6
+        with:
+          repository: Matanek/Silex-Lib-GFX.ECS
+          ref: ${{ env.ECS_CHECKPOINT }}
+          path: GFX.ECS
 
       - name: Check out GFX.GPU
         if: inputs.target == 'all' || inputs.target == matrix.target
@@ -288,12 +306,14 @@ jobs:
               "$silex" "${{ matrix.target }}" \
               "$GITHUB_WORKSPACE/STD" "$GITHUB_WORKSPACE/JSON" \
               "$GITHUB_WORKSPACE/GFX.Assets" "$GITHUB_WORKSPACE/GFX.GPU" \
+              "$GITHUB_WORKSPACE/GFX.Application" "$GITHUB_WORKSPACE/GFX.ECS" \
               "$RUNNER_TEMP/gfx-smoke"
           else
             GFX/Tools/run-portability-smoke.sh \
               "$silex" "${{ matrix.target }}" \
               "$GITHUB_WORKSPACE/STD" "$GITHUB_WORKSPACE/JSON" \
               "$GITHUB_WORKSPACE/GFX.Assets" "$GITHUB_WORKSPACE/GFX.GPU" \
+              "$GITHUB_WORKSPACE/GFX.Application" "$GITHUB_WORKSPACE/GFX.ECS" \
               "$RUNNER_TEMP/gfx-smoke"
           fi
 
@@ -369,6 +389,20 @@ jobs:
           ref: ${{ env.ASSETS_CHECKPOINT }}
           path: GFX.Assets
 
+      - name: Check out GFX.Application
+        uses: actions/checkout@v6
+        with:
+          repository: Matanek/Silex-Lib-GFX.Application
+          ref: ${{ env.APPLICATION_CHECKPOINT }}
+          path: GFX.Application
+
+      - name: Check out GFX.ECS
+        uses: actions/checkout@v6
+        with:
+          repository: Matanek/Silex-Lib-GFX.ECS
+          ref: ${{ env.ECS_CHECKPOINT }}
+          path: GFX.ECS
+
       - name: Check out GFX.GPU
         uses: actions/checkout@v6
         with:
@@ -407,4 +441,5 @@ jobs:
             "$RUNNER_TEMP/silex-prefix/bin/silex.exe" windows-arm64 \
             "$GITHUB_WORKSPACE/STD" "$GITHUB_WORKSPACE/JSON" \
             "$GITHUB_WORKSPACE/GFX.Assets" "$GITHUB_WORKSPACE/GFX.GPU" \
+            "$GITHUB_WORKSPACE/GFX.Application" "$GITHUB_WORKSPACE/GFX.ECS" \
             "$RUNNER_TEMP/gfx-smoke"

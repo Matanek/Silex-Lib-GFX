@@ -102,6 +102,7 @@ cp "$archive" "$output"
 
 if [[ "$target" == macos-* ]]; then
     architecture="${target#macos-}"
+    if [[ "$architecture" == x64 ]]; then architecture=x86_64; fi
     lipo -info "$output" | grep -Fq "architecture: $architecture"
 else
     header="$build_dir/archive-header.txt"

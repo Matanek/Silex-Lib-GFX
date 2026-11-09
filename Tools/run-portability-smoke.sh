@@ -2,8 +2,8 @@
 
 set -euo pipefail
 
-if [[ $# -ne 7 ]]; then
-    echo "usage: $0 <silex> <target> <STD> <JSON> <GFX.Assets> <GFX.GPU> <temporary-directory>" >&2
+if [[ $# -ne 9 ]]; then
+    echo "usage: $0 <silex> <target> <STD> <JSON> <GFX.Assets> <GFX.GPU> <GFX.Application> <GFX.ECS> <temporary-directory>" >&2
     exit 2
 fi
 
@@ -13,7 +13,9 @@ std_dir="$(cd -- "$3" && pwd)"
 json_dir="$(cd -- "$4" && pwd)"
 assets_dir="$(cd -- "$5" && pwd)"
 gpu_dir="$(cd -- "$6" && pwd)"
-temporary_dir="$7"
+application_dir="$(cd -- "$7" && pwd)"
+ecs_dir="$(cd -- "$8" && pwd)"
+temporary_dir="$9"
 script_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
 gfx_dir="$(cd -- "$script_dir/.." && pwd)"
 workspace_dir="$(pwd)"
@@ -31,6 +33,8 @@ mkdir -p "$temporary_dir"
 "$silex" link "$gfx_dir" --workspace "$workspace_dir" --target "$target"
 "$silex" link "$assets_dir" --workspace "$workspace_dir" --target "$target"
 "$silex" link "$gpu_dir" --workspace "$workspace_dir" --target "$target"
+"$silex" link "$ecs_dir" --workspace "$workspace_dir" --target "$target"
+"$silex" link "$application_dir" --workspace "$workspace_dir" --target "$target"
 "$silex" packages resolve "$workspace_dir"
 
 gfx_consumer="$gfx_dir/Tests/Consumer"
@@ -44,6 +48,8 @@ gpu_consumer="$gpu_dir/Tests/Consumer"
 "$silex" link "$json_dir" --workspace "$assets_consumer" --target "$target"
 "$silex" link "$gfx_dir" --workspace "$assets_consumer" --target "$target"
 "$silex" link "$assets_dir" --workspace "$assets_consumer" --target "$target"
+"$silex" link "$ecs_dir" --workspace "$assets_consumer" --target "$target"
+"$silex" link "$application_dir" --workspace "$assets_consumer" --target "$target"
 
 "$silex" link "$std_dir" --workspace "$gpu_consumer" --target "$target"
 "$silex" link "$gfx_dir" --workspace "$gpu_consumer" --target "$target"
