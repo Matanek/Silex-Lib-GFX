@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.41.0] - 2026-11-08
+## [0.41.0] - 2026-11-09
 
 - `Application.Session` drives explicit time steps, shares their clock with scopes and separates redraws from simulation while preserving the application lifecycle.
 

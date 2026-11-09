@@ -1,6 +1,8 @@
 # Historique
 
-## [0.41.0] - 2026-11-08
+## [0.41.0] - 2026-11-09
+
+- Ajouter les curseurs système de redimensionnement appartenant à la fenêtre, avec allocation paresseuse, réutilisation et libération. Seule la fenêtre ayant le focus souris applique sa préférence.
 
 - `Application.Session` pilote des pas imposés, partage leur horloge avec les scopes et sépare les redessins de la simulation ; sa fermeture conserve le cycle de vie.
 
