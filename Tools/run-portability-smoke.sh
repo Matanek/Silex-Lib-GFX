@@ -27,6 +27,22 @@ fi
 
 mkdir -p "$temporary_dir"
 
+run_native() {
+    local label="$1"
+    local limit="$2"
+    shift 2
+    echo "BEGIN $target $label"
+    if [[ -n "${SILEX_NATIVE_COMMAND_WATCHER:-}" ]]; then
+        python "$SILEX_NATIVE_COMMAND_WATCHER" --label "$target $label" \
+            --timeout "$limit" --output "$temporary_dir/$label-diagnostics" \
+            --artifact-glob '.silex/test/*' \
+            --artifact-glob "$temporary_dir/*.exe*" --artifact-glob "$temporary_dir/*.o*" \
+            -- "$@"
+    else
+        "$@"
+    fi
+}
+
 "$silex" setup
 "$silex" link "$std_dir" --workspace "$workspace_dir" --target "$target"
 "$silex" link "$json_dir" --workspace "$workspace_dir" --target "$target"
@@ -58,12 +74,14 @@ gpu_consumer="$gpu_dir/Tests/Consumer"
 for consumer in "$gfx_consumer" "$assets_consumer" "$gpu_consumer"; do
     "$silex" packages resolve "$consumer"
     output_file="$temporary_dir/$(basename "$(dirname "$(dirname "$consumer")")")-consumer.log"
-    if "$silex" test "$consumer/Tests" --nocache >"$output_file" 2>&1; then
-        cat "$output_file"
+    set +e
+    run_native "$(basename "$(dirname "$(dirname "$consumer")")")-consumer" 1200 \
+        "$silex" test "$consumer/Tests" --nocache 2>&1 | tee "$output_file"
+    status=${PIPESTATUS[0]}
+    set -e
+    if [[ "$status" == 0 ]]; then
         grep -Eq '[1-9][0-9]* passed; 0 failed in [1-9][0-9]* files' "$output_file"
     else
-        status=$?
-        cat "$output_file" >&2
         # GFX and Assets still execute fully. The portable GPU package already
         # executes on macOS ARM64; hosted Intel Macs may expose no Metal GPU.
         # Accept only the two known device-creation failures, with the catalog
@@ -92,9 +110,9 @@ compile_and_run() {
     local source="$2"
     local executable="$temporary_dir/$name$extension"
 
-    "$silex" compile "$source" \
+    run_native "$name-compile" 600 "$silex" compile "$source" \
         --target "$target" --release --nocache -o "$executable"
-    "$executable"
+    run_native "$name-run" 60 "$executable"
     echo "PASS $target $name"
 }
 
@@ -102,9 +120,9 @@ compile_and_run_surface() {
     local executable="$temporary_dir/surface$extension"
     local output="$temporary_dir/surface.log"
 
-    "$silex" compile "$gpu_dir/Smokes/Surface.sx" \
+    run_native surface-compile 600 "$silex" compile "$gpu_dir/Smokes/Surface.sx" \
         --target "$target" --release --nocache -o "$executable"
-    if "$executable" >"$output" 2>&1; then
+    if run_native surface-run 60 "$executable" >"$output" 2>&1; then
         cat "$output"
         echo "PASS $target surface"
         return

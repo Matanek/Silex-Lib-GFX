@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SILEX_CHECKPOINT: 658a1841949b35949fcd2b4435a7c098175a3639
+  SILEX_CHECKPOINT: 1f15721635b1730e8ad394dfe3b935ebeee70a4f
   STD_CHECKPOINT: 40f463e504d390d1877e9e82bb1a2a60fb46f2e8
   JSON_CHECKPOINT: f854f26bb43ec335e7b2a847bd9bbd609c8088c9
   ASSETS_CHECKPOINT: b0f34a8d56f6f4db7b907f08a7fa3c81ac8a4d43
@@ -347,6 +347,9 @@ jobs:
           zig build -Dtarget=aarch64-windows -Doptimize=ReleaseFast -Dcpu=baseline \
             --prefix "$RUNNER_TEMP/silex-prefix" \
             --build-file _silex/Toolchain/build.zig
+          mkdir -p "$RUNNER_TEMP/silex-prefix/native-checks"
+          cp _silex/.github/scripts/watch-native-command.py \
+            "$RUNNER_TEMP/silex-prefix/native-checks/"
 
       - name: Transfer the Windows ARM64 compiler
         uses: actions/upload-artifact@v4
@@ -436,6 +439,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export SILEX_NATIVE_COMMAND_WATCHER="$RUNNER_TEMP/silex-prefix/native-checks/watch-native-command.py"
           cp GFX/Tests/PortabilityWorkspace.json Package.json
           GFX/Tools/run-portability-smoke.sh \
             "$RUNNER_TEMP/silex-prefix/bin/silex.exe" windows-arm64 \
@@ -443,3 +447,12 @@ jobs:
             "$GITHUB_WORKSPACE/GFX.Assets" "$GITHUB_WORKSPACE/GFX.GPU" \
             "$GITHUB_WORKSPACE/GFX.Application" "$GITHUB_WORKSPACE/GFX.ECS" \
             "$RUNNER_TEMP/gfx-smoke"
+
+      - name: Preserve Windows ARM64 consumer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gfx-windows-arm64-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/gfx-smoke
+          retention-days: 7
+          if-no-files-found: warn
