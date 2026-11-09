@@ -71,7 +71,7 @@ for consumer in "$gfx_consumer" "$assets_consumer" "$gpu_consumer"; do
         if [[ "$target" == "macos-x64" && "$consumer" == "$gpu_consumer" ]] &&
             [[ "$(grep -c 'runtime error:' "$output_file")" == 2 ]] &&
             [[ "$(grep -c 'Device does not meet the hardware requirements for SDL_GPU Metal' "$output_file")" == 2 ]] &&
-            grep -Eq '^1 passed; 2 failed in 3 files$' "$output_file"; then
+            grep -Eq '^1 passed; 2 failed in 2 files$' "$output_file"; then
             echo "SKIP $target GPU transfers/readback runtime: GitHub runner exposes no compatible Metal device"
         else
             exit "$status"
