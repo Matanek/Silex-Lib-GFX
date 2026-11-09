@@ -57,9 +57,26 @@ gpu_consumer="$gpu_dir/Tests/Consumer"
 
 for consumer in "$gfx_consumer" "$assets_consumer" "$gpu_consumer"; do
     "$silex" packages resolve "$consumer"
-    output="$("$silex" test "$consumer/Tests" --nocache)"
-    printf '%s\n' "$output"
-    grep -Eq '[1-9][0-9]* passed; 0 failed in [1-9][0-9]* files' <<< "$output"
+    output_file="$temporary_dir/$(basename "$(dirname "$(dirname "$consumer")")")-consumer.log"
+    if "$silex" test "$consumer/Tests" --nocache >"$output_file" 2>&1; then
+        cat "$output_file"
+        grep -Eq '[1-9][0-9]* passed; 0 failed in [1-9][0-9]* files' "$output_file"
+    else
+        status=$?
+        cat "$output_file" >&2
+        # GFX and Assets still execute fully. The portable GPU package already
+        # executes on macOS ARM64; hosted Intel Macs may expose no Metal GPU.
+        # Accept only the two known device-creation failures, with the catalog
+        # test passing and every consumer source successfully compiled.
+        if [[ "$target" == "macos-x64" && "$consumer" == "$gpu_consumer" ]] &&
+            [[ "$(grep -c 'runtime error:' "$output_file")" == 2 ]] &&
+            [[ "$(grep -c 'Device does not meet the hardware requirements for SDL_GPU Metal' "$output_file")" == 2 ]] &&
+            grep -Eq '^1 passed; 2 failed in 3 files$' "$output_file"; then
+            echo "SKIP $target GPU transfers/readback runtime: GitHub runner exposes no compatible Metal device"
+        else
+            exit "$status"
+        fi
+    fi
 done
 
 "$silex" link "$std_dir" --workspace "$gpu_dir" --target "$target"
